@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-setup(name='methmotif',
+setup(name='nanomotif',
       version='0.1',
       description='Identifying methlyation motifs in nanopore data',
       author='AAU_DarkScience',
