@@ -22,9 +22,9 @@ class MotifCandidates():
         return f"MotifCandidates with {len(self.motif)} candidates"
     
     def add_candidates(self, motif: list, mod_position: list, mod_type: list):
-        self.motif.append(motif)
-        self.mod_position.append(mod_position)
-        self.mod_type.append(mod_type) 
+        self.motif += motif
+        self.mod_position += mod_position
+        self.mod_type += mod_type
 
 
 def generate_random_candidates(k, modtype):
@@ -43,11 +43,13 @@ def generate_random_candidates(k, modtype):
     - The indices for each kmer represent positions in the kmer string. Therefore, for a kmer of length 'k', 
       there will be 'k' indices, resulting in each kmer being repeated 'k' times in the candidate_kmers list.
     """
+    canonical = modtype_canonical = {"a": "A", "m": "C"}
     kmers = generate_kmers(k, alphabet=["A", "C", "G", "T"])
 
     candidate_index = [i for motif in kmers for i in range(len(motif))]
     candidate_kmers = [motif for motif in kmers for i in range(len(motif))]
-    
-    for i in 
 
     return MotifCandidates(candidate_kmers, candidate_index, [modtype]*len(candidate_kmers))
+
+
+
