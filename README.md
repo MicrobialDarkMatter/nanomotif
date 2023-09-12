@@ -11,8 +11,8 @@ To install Nanomotif in your local Python environment, follow these steps:
 ```shell
 python3 -m venv myenv
 source myenv/bin/activate
-git clone https://github.com/SorenHeidelbach/nanomotif.git
-cd nanomotif
+git clone https://github.com/MicrobialDarkMatter/motif-finder.git
+cd motif-finder
 pip install -r requirements.txt
 pip install .
 ```
@@ -24,7 +24,7 @@ If you prefer using Conda for managing your Python environments, you can create 
 ```shell
 conda create -n nanomotif-env python=3.9
 conda activate nanomotif-env
-git clone https://github.com/your-username/nanomotif.git
+git clone [https://github.com/your-username/nanomotif.git](https://github.com/MicrobialDarkMatter/motif-finder.git)
 cd nanomotif
 conda install --file requirements.txt
 python -m pip install .
