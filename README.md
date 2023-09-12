@@ -41,7 +41,6 @@ samtools fastq -T MM,ML {basecalls} > {fastq}
 # Your prefered assembeler > assembly
 
 minimap2 -ax map-ont -y {assembly} {fastq} |
-        sed -e 's/;C+?,/;C+C?,/g' |
         samtools view -bS |
         samtools sort > {alignment}
         samtools index {alignment}
