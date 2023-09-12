@@ -219,7 +219,7 @@ class DNAsequence:
 
     def reverse_complement(self):
         """Return the reverse complement of the sequence."""
-        return "".join([self.complement[base] for base in reversed(self.sequence)])
+        return DNAsequence("".join([self.complement[base] for base in reversed(self.sequence)]))
 
     def count(self, subsequence):
         """Count the number of occurrences of a subsequence in the sequence."""
@@ -260,6 +260,13 @@ class EqualLengthDNASet:
         self._check_sequences(value)
         self._sequences = value
     
+    def __add__(self, other):
+        if isinstance(other, EqualLengthDNASet):
+            return EqualLengthDNASet(self.sequences + other.sequences)
+        elif isinstance(other, list):
+            return EqualLengthDNASet(self.sequences + other)
+        else:
+            return NotImplemented
 
     def _check_sequences(self, sequences):
         assert isinstance(sequences, list), "DNA sequences must be a list"

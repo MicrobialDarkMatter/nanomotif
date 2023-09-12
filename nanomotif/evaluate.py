@@ -1,8 +1,10 @@
 import numpy as np
 import polars as pl
+import logging as log
 from .model import BetaBernoulliModel
 from .utils import subseq_indices, calculate_match_length
-from .seq import reverse_complement
+from .seq import reverse_complement, EqualLengthDNASet, DNAsequence
+log.basicConfig(encoding='utf-8', level=log.DEBUG, format='%(levelname)s: %(message)s')
 
 def methylated_motif_occourances(motif: str, motif_meth_index: int, seq: str, contig_meth_positions) -> tuple:
     """
@@ -60,16 +62,9 @@ def score_candidates(pileup, contig: str, candidates):
         score_canidates["posterior"].append(model)
     return pl.DataFrame(score_canidates)
 
-
-if __name__ == "__main__":
-    from .candidate import generate_random_candidates
-    assembly = nm.load_assembly("../data/ecoli/assembly.polished.fasta")
-    ecoli = nm.load_pileup("../data/ecoli/modkit.pileup.bed")
-    ecoli_6mA_80p = ecoli.pileup.filter(pl.col("mod_type") == "a").filter(pl.col("fraction_mod") > 0.8)
-    motif_candidates = generate_random_candidates(4, "a")
-    scored_candidates = score_candidates(ecoli_6mA_80p, assembly["contig_3"], motif_candidates)
-
-def identify_motifs(methylation_sequences, contig, pileup, min_sequences = 100, min_cdf_score = 0.1, cdf_limit = 0.6, n_contig_samples = 10000, canonical_base = "A", min_kl_divergence = 0.05):
+def identify_motifs(methylation_sequences, contig, pileup, 
+                    min_sequences = 50, min_cdf_score = 0.5, cdf_limit = 0.55, 
+                    n_contig_samples = 10000, canonical_base = "A", min_kl_divergence = 0.1):
     padding = methylation_sequences.sequence_length // 2
     contig_sequences = contig.sample_n_at_subsequence(padding, canonical_base, n_contig_samples)
     candidate_motifs = []
@@ -103,7 +98,7 @@ def identify_motifs(methylation_sequences, contig, pileup, min_sequences = 100, 
             score = 1 - model.cdf(cdf_limit)
 
             evaluated_positions.append(new_base_index)
-            print(f"{active_candidate} | cdf score: {score:.3f} | n seqs: {len(active_methylation_sequences.sequences):8} | max kl: {kl_divergence[new_base_index]:.3f}")
+            log.debug(f"{active_candidate} | cdf score: {score:.3f} | n seqs: {len(active_methylation_sequences.sequences):8} | max kl: {kl_divergence[new_base_index]:.3f}")
             active_methylation_sequences = active_methylation_sequences.get_sequences_with_match(active_candidate)
 
             # Success criteria
@@ -114,23 +109,135 @@ def identify_motifs(methylation_sequences, contig, pileup, min_sequences = 100, 
             # Failure criteria
             if len(active_methylation_sequences.sequences) < min_sequences:
                 failed = True
-                print("Too few sequences left")
+                log.debug("Too few sequences left")
                 break
             if len(evaluated_positions) >= padding * 2 + 1:
                 failed = True
-                print("Too many positions evaluated")
+                log.debug("Too many positions evaluated")
                 break
             if kl_divergence[new_base_index] < min_kl_divergence:
                 failed = True
-                print("Low KL divergence")
+                log.debug("Low KL divergence")
                 break
 
         if failed:
             failed_canidates.append(active_candidate)
         else:
-            print("Saving candidate")
+            log.debug("Saving candidate")
             candidate_motifs.append(active_candidate)
             candidate_models.append(model)
             candidate_scores.append(score)
     return candidate_motifs, candidate_models, candidate_scores
 
+
+def process_sample(assembly, pileup, 
+                   max_candidate_size = 40,
+                   min_read_methylation_fraction = 0.8,
+                   min_valid_coverage = 5,
+                   min_kl_divergence = 0.1,
+                   min_cdf_score = 0.8,
+                   cdf_position = 0.55,
+                   min_motif_frequency = 10000
+                   ):
+    """
+    Process a single sample
+    
+    Parameters:
+    - assembly (Assembly): The assembly to be processed.
+    - pileup (Pileup): The pileup to be processed.
+    - max_candidate_size (int): The maximum size of the candidate motifs.
+    - min_read_methylation_fraction (float): The minimum fraction of reads that must be methylated for a position to be considered methylated.
+    - min_valid_coverage (int): The minimum number of reads that must cover a position for it to be considered valid.
+    - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
+    - min_cdf_score (float): Minimum score of 1 - cdf(cdf_position) for a motif to be considered valid.
+    - cdf_position (float): The position to evaluate the cdf at.
+    - min_motif_frequency (int): Used to get minimum number of sequences to evaluate motif at.
+    """
+    padding = max_candidate_size // 2
+    methylation_types = pileup["mod_type"].unique()
+    result = []
+    for modtype in methylation_types:
+        for contig, sequence in assembly.assembly.items():
+            pileup_meth = pileup \
+                .filter(pl.col("contig") == contig) \
+                .filter(pl.col("mod_type") == modtype) \
+                .filter(pl.col("fraction_mod") > min_read_methylation_fraction) 
+
+            methylation_index_fwd = pileup_meth \
+                .filter(pl.col("strand") == "+") \
+                .filter(pl.col("Nvalid_cov") > min_valid_coverage) \
+                .get_column("position").to_list()
+            if len(methylation_index_fwd) == 0:
+                continue
+            methylation_index_rev = pileup_meth \
+                .filter(pl.col("strand") == "-") \
+                .filter(pl.col("Nvalid_cov") > min_valid_coverage) \
+                .get_column("position").to_list()
+            if len(methylation_index_rev) == 0:
+                continue
+
+            methylation_sequences_fwd = EqualLengthDNASet(
+                [DNAsequence(sequence[(i - padding):(i + padding + 1)]) for i in methylation_index_fwd if (i > padding) and (i < (len(sequence) - padding))]
+            )
+            methylation_sequences_rev = EqualLengthDNASet(
+                [DNAsequence(sequence[(i - padding):(i + padding + 1)]).reverse_complement() for i in methylation_index_rev if (i > padding) and (i < (len(sequence) - padding))]
+            )
+            methylation_sequences = methylation_sequences_fwd + methylation_sequences_rev
+            
+            min_sequences = min(len(sequence) // min_motif_frequency, 200)
+
+            identified_motifs = pl.DataFrame(identify_motifs(
+                methylation_sequences, 
+                sequence, 
+                pileup_meth, 
+                min_kl_divergence = min_kl_divergence, 
+                min_sequences = min_sequences, 
+                cdf_limit = cdf_position,
+                min_cdf_score = min_cdf_score
+            ))
+            if len(identified_motifs) == 0:
+                continue
+            else:
+                result.append(identified_motifs.with_columns(
+                    pl.lit(contig).alias("contig"),
+                    pl.lit(modtype).alias("mod_type")
+                ))
+    def count_periods_at_start(s):
+        count = 0
+        for char in s:
+            if char == '.':
+                count += 1
+            else:
+                break
+        return count
+    def count_periods_at_end(s):
+        s = s[::-1]
+        count = 0
+        for char in s:
+            if char == '.':
+                count += 1
+            else:
+                break
+        return count
+    if len(result) == 0:
+        return pl.DataFrame({
+            "motif": [],
+            "mod_position": [],
+            "mod_type": [],
+            "cdf_score": []
+        })
+    motifs = pl.concat(result) \
+        .rename({"column_0": "padded_motif", "column_1": "model", "column_2":"cdf_score"}) \
+        .with_columns([
+        pl.col("padded_motif").apply(lambda motif: motif[count_periods_at_start(motif):-max(count_periods_at_end(motif), 1)]).alias("motif"),
+            pl.col("padded_motif").apply(lambda motif: padding - count_periods_at_start(motif)).alias("mod_position")
+        ])
+    return motifs
+
+if __name__ == "__main__":
+    from .candidate import generate_random_candidates
+    assembly = nm.load_assembly("../data/ecoli/assembly.polished.fasta")
+    ecoli = nm.load_pileup("../data/ecoli/modkit.pileup.bed")
+    ecoli_6mA_80p = ecoli.pileup.filter(pl.col("mod_type") == "a").filter(pl.col("fraction_mod") > 0.8)
+    motif_candidates = generate_random_candidates(4, "a")
+    scored_candidates = score_candidates(ecoli_6mA_80p, assembly["contig_3"], motif_candidates)
