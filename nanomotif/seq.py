@@ -161,8 +161,19 @@ class DNAsequence:
         """
         Find all occourances of subseqeunce in DNAsequence
         """
-        index = [match.start() for match in re.finditer(subsequence, self.sequence)]
-        return np.array(index)
+        p = len(subsequence)
+        t = len(self.sequence)
+        subsequence_hash = hash(subsequence)
+        sequence_hash = hash(self.sequence[:p])
+        indices = []
+        for i in range(t - p + 1):
+            if subsequence_hash == sequence_hash:
+                if subsequence == self.sequence[i:i+p]:
+                    indices.append(i)
+            if i < t - p:
+                sequence_hash = hash(self.sequence[i+1:i+p+1])
+        
+        return np.array(indices)
 
     def sample_at_subsequence(self, padding: int, subsequence: str):
         """
@@ -211,11 +222,11 @@ class DNAsequence:
         subsequence_index = subsequence_index[subsequence_index >= padding]
         subsequence_index = subsequence_index[subsequence_index < (len(self.sequence) - padding)]
         if subsequence_index.shape[0] < n:
-            warnings.warn("Not enough occourances of " + subsequence + " found (n: " + str(n) + ")")
-        else:
-            sample_index = np.random.choice(subsequence_index, n)
-            sampled_sequences = [DNAsequence(self.sequence[(i - padding):(i + padding + len(subsequence))]) for i in sample_index]
-            return EqualLengthDNASet(sampled_sequences)
+            warnings.warn("Only found " + str(subsequence_index.shape[0]) + " occourances, sampling " + str(subsequence_index.shape[0]) + " sequences")
+            n = subsequence_index.shape[0]
+        sample_index = np.random.choice(subsequence_index, n, replace=False)
+        sampled_sequences = [DNAsequence(self.sequence[(i - padding):(i + padding + len(subsequence))]) for i in sample_index]
+        return EqualLengthDNASet(sampled_sequences)
 
     def reverse_complement(self):
         """Return the reverse complement of the sequence."""
@@ -382,6 +393,7 @@ class EqualLengthDNASet:
         EqualLengthDNASet with sequences containing pattern
         """
         return EqualLengthDNASet([seq for seq in self.sequences if not bool(re.match(pattern, seq.sequence))])
+
     def plot_pssm(self, ax=None, center_x_axis=True):
         """
         Method to plot the positional conservation of DNA sequences in the object.

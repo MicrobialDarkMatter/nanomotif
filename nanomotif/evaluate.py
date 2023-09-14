@@ -1,9 +1,10 @@
 import numpy as np
 import polars as pl
 import logging as log
-from .model import BetaBernoulliModel
-from .utils import subseq_indices, calculate_match_length
-from .seq import reverse_complement, EqualLengthDNASet, DNAsequence
+from scipy.stats import entropy
+from nanomotif.model import BetaBernoulliModel
+from nanomotif.utils import subseq_indices, calculate_match_length
+from nanomotif.seq import reverse_complement, EqualLengthDNASet, DNAsequence
 log.basicConfig(encoding='utf-8', level=log.DEBUG, format='%(levelname)s: %(message)s')
 
 def methylated_motif_occourances(motif: str, motif_meth_index: int, seq: str, contig_meth_positions) -> tuple:
@@ -67,47 +68,67 @@ def identify_motifs(methylation_sequences, contig, pileup,
                     n_contig_samples = 10000, canonical_base = "A", min_kl_divergence = 0.1):
     padding = methylation_sequences.sequence_length // 2
     contig_sequences = contig.sample_n_at_subsequence(padding, canonical_base, n_contig_samples)
+    contig_pssm = contig_sequences.pssm()
     candidate_motifs = []
     failed_canidates = []
     candidate_models = []
     candidate_scores = []
     bases = methylation_sequences.sequences[0].bases
+
+    # Convert DNA sequences to numpy array
+    methylation_sequences = convert_seqeunce_to_numpy(methylation_sequences.sequences)
+
     while True:
-        active_methylation_sequences = methylation_sequences
+        active_methylation_sequences = methylation_sequences.copy()
         if len(candidate_motifs) > 0:
             for motif in candidate_motifs:
-                active_methylation_sequences = active_methylation_sequences.get_sequences_without_match(motif)
+                active_methylation_sequences = subset_DNA_array(active_methylation_sequences, motif, remove_matches = True)
         if len(failed_canidates) > 0:
             for motif in failed_canidates:
-                active_methylation_sequences = active_methylation_sequences.get_sequences_without_match(motif)
-        if len(active_methylation_sequences.sequences) < min_sequences:
+                active_methylation_sequences = subset_DNA_array(active_methylation_sequences, motif, remove_matches = True)
+        if active_methylation_sequences.shape[0] < min_sequences:
             break
+
         active_candidate = "." * (padding * 2 + 1)
         evaluated_positions = []
-
+        previous_score = 0
+        candidates = []
         while True:
-            kl_divergence = active_methylation_sequences.kl_divergence(contig_sequences.pssm())
+            sequence_pssm = calculate_pssm(active_methylation_sequences)
+            kl_divergence = entropy(sequence_pssm, contig_pssm)
             kl_divergence[evaluated_positions] = -1
 
 
             new_base_index = kl_divergence.argmax()
-            new_base = bases[active_methylation_sequences.pssm()[:, new_base_index].argmax()]
+            new_base = bases[sequence_pssm[:, new_base_index].argmax()]
             active_candidate = active_candidate[:new_base_index] + new_base + active_candidate[new_base_index + 1:]
 
             model = score_candidate(pileup, contig.sequence, active_candidate, padding)
             score = 1 - model.cdf(cdf_limit)
 
+            # n = 10
+            # score_weighted_cdf = 0
+            # previous_cdf = 0
+            # for i in range(n):
+            #     current_cdf = model.cdf((i + 1)/ n) 
+            #     score_weighted_cdf += ((i + 1)/ n) * (current_cdf - previous_cdf)
+            #     previous_cdf = current_cdf
+
             evaluated_positions.append(new_base_index)
-            log.debug(f"{active_candidate} | cdf score: {score:.3f} | n seqs: {len(active_methylation_sequences.sequences):8} | max kl: {kl_divergence[new_base_index]:.3f}")
-            active_methylation_sequences = active_methylation_sequences.get_sequences_with_match(active_candidate)
+            log.debug(f"{active_candidate} | cdf score: {score:.3f} | mean: {model.mean():.3f} | n seqs: {active_methylation_sequences.shape[0]:8} | max kl: {kl_divergence[new_base_index]:.3f}")
+            
+            active_methylation_sequences = subset_DNA_array(active_methylation_sequences, active_candidate, remove_matches = False)
+
+            candidates.append((active_candidate, model, score))
 
             # Success criteria
             if score >= min_cdf_score:
                 failed = False
+                best_candidate = len(candidates) - 1
                 break
 
             # Failure criteria
-            if len(active_methylation_sequences.sequences) < min_sequences:
+            if active_methylation_sequences.shape[0] < min_sequences:
                 failed = True
                 log.debug("Too few sequences left")
                 break
@@ -124,9 +145,9 @@ def identify_motifs(methylation_sequences, contig, pileup,
             failed_canidates.append(active_candidate)
         else:
             log.debug("Saving candidate")
-            candidate_motifs.append(active_candidate)
-            candidate_models.append(model)
-            candidate_scores.append(score)
+            candidate_motifs.append(candidates[best_candidate][0])
+            candidate_models.append(candidates[best_candidate][1])
+            candidate_scores.append(candidates[best_candidate][2])
     return candidate_motifs, candidate_models, candidate_scores
 
 
@@ -137,7 +158,7 @@ def process_sample(assembly, pileup,
                    min_kl_divergence = 0.1,
                    min_cdf_score = 0.8,
                    cdf_position = 0.55,
-                   min_motif_frequency = 10000
+                   min_motif_frequency = 20000
                    ):
     """
     Process a single sample
@@ -157,7 +178,9 @@ def process_sample(assembly, pileup,
     methylation_types = pileup["mod_type"].unique()
     result = []
     for modtype in methylation_types:
+        log.info(f"Processing {modtype}")
         for contig, sequence in assembly.assembly.items():
+            log.info(f"Processing {contig}")
             pileup_meth = pileup \
                 .filter(pl.col("contig") == contig) \
                 .filter(pl.col("mod_type") == modtype) \
@@ -167,13 +190,13 @@ def process_sample(assembly, pileup,
                 .filter(pl.col("strand") == "+") \
                 .filter(pl.col("Nvalid_cov") > min_valid_coverage) \
                 .get_column("position").to_list()
-            if len(methylation_index_fwd) == 0:
+            if len(methylation_index_fwd) <= 1:
                 continue
             methylation_index_rev = pileup_meth \
                 .filter(pl.col("strand") == "-") \
                 .filter(pl.col("Nvalid_cov") > min_valid_coverage) \
                 .get_column("position").to_list()
-            if len(methylation_index_rev) == 0:
+            if len(methylation_index_rev) <= 1:
                 continue
 
             methylation_sequences_fwd = EqualLengthDNASet(
@@ -184,7 +207,7 @@ def process_sample(assembly, pileup,
             )
             methylation_sequences = methylation_sequences_fwd + methylation_sequences_rev
             
-            min_sequences = min(len(sequence) // min_motif_frequency, 200)
+            min_sequences = max(min(len(sequence) // min_motif_frequency, 200), 5)
 
             identified_motifs = pl.DataFrame(identify_motifs(
                 methylation_sequences, 
@@ -234,10 +257,35 @@ def process_sample(assembly, pileup,
         ])
     return motifs
 
+
+
+def convert_seqeunce_to_numpy(sequences):
+    # Mapping the characters to indices for easy lookup
+    base_to_int = {'A': 0, 'T': 1, 'G': 2, 'C': 3}
+    array = np.array([[base_to_int[base] for base in sequence] for sequence in sequences])
+    return array
+
+def calculate_pssm(DNAarray):
+    # Get the number of sequences
+    return np.array([
+        (DNAarray == 0).sum(axis=0),
+        (DNAarray == 1).sum(axis=0),
+        (DNAarray == 2).sum(axis=0),
+        (DNAarray == 3).sum(axis=0)
+    ]) / DNAarray.shape[0]
+
+def subset_DNA_array(DNAarray, sequence, remove_matches = True):
+    # Convert the query sequence into a numpy array, with NaN wherever there's a dot
+    pattern = np.array([{'A': 0, 'T': 1, 'G': 2, 'C': 3, '.': np.nan}[base] for base in sequence])
+    mask = np.logical_not(np.isnan(pattern))
+    if remove_matches:
+        return DNAarray[np.any(DNAarray[:, mask] != pattern[mask], axis=1), :]
+    else:
+        return DNAarray[np.all(DNAarray[:, mask] == pattern[mask], axis=1), :]
+
+
 if __name__ == "__main__":
-    from .candidate import generate_random_candidates
-    assembly = nm.load_assembly("../data/ecoli/assembly.polished.fasta")
-    ecoli = nm.load_pileup("../data/ecoli/modkit.pileup.bed")
-    ecoli_6mA_80p = ecoli.pileup.filter(pl.col("mod_type") == "a").filter(pl.col("fraction_mod") > 0.8)
-    motif_candidates = generate_random_candidates(4, "a")
-    scored_candidates = score_candidates(ecoli_6mA_80p, assembly["contig_3"], motif_candidates)
+    from nanomotif.dataload import load_assembly, load_pileup
+    assembly = load_assembly("../data/ecoli/assembly.polished.fasta")
+    ecoli = load_pileup("../data/ecoli/modkit.pileup.bed")
+    result = process_sample(assembly, ecoli.pileup, min_cdf_score = 0.6, min_read_methylation_fraction = 0.85)
