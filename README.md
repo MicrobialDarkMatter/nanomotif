@@ -9,12 +9,9 @@ Nanomotif is a Python package that provides functionality for identifying methyl
 To install Nanomotif in your local Python environment, follow these steps:
 
 ```shell
-python3 -m venv myenv
-source myenv/bin/activate
-git clone https://github.com/MicrobialDarkMatter/motif-finder.git
-cd motif-finder
-pip install -r requirements.txt
-pip install .
+python3 -m venv nanomitf
+source nanomitf/bin/activate
+pip install nanomotif
 ```
 
 ### Conda Environment
@@ -22,12 +19,9 @@ pip install .
 If you prefer using Conda for managing your Python environments, you can create a new environment and install Nanomotif as follows:
 
 ```shell
-conda create -n nanomotif-env python=3.9
-conda activate nanomotif-env
-git clone [https://github.com/your-username/nanomotif.git](https://github.com/MicrobialDarkMatter/motif-finder.git)
-cd nanomotif
-conda install --file requirements.txt
-python -m pip install .
+conda create -n nanomotif python=3.9
+conda activate nanomotif
+python -m pip install nanomotif
 ```
 
 ## Required files
@@ -49,7 +43,9 @@ modkit pileup {alignment} --only-tabs
 ```
 ## Example Usage
 
-
+```shell
+nanomotif [assembly] [modkit pileup] [output]
+```
 
 
 ## Documentation [Not yet implemented]
