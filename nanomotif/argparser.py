@@ -7,7 +7,7 @@ def  create_parser():
     parser.add_argument("assembly", type=str, help="Path to the assembly file.")
     
     # Argument for pileup file
-    parser.add_argument("pileup", type=str, help="Path to the pileup file.")
+    parser.add_argument("pileup", type=str, help="Path to the modkit pileup file.")
 
     # Argument for output file
     parser.add_argument("output", type=str, help="Path to the output file.")

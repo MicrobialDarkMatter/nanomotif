@@ -52,3 +52,4 @@ class BetaBernoulliModel():
         ax.set_xlabel('Values of Random Variable X (0, 1)', fontsize='15')
         ax.set_ylabel('Probability', fontsize='15')
         return ax
+

@@ -6,6 +6,8 @@ from scipy.stats import entropy
 from nanomotif.model import BetaBernoulliModel
 from nanomotif.utils import subseq_indices, calculate_match_length
 from nanomotif.seq import reverse_complement, EqualLengthDNASet, DNAsequence
+import heapq as hq
+import networkx as nx
 log.basicConfig(encoding='utf-8', level=log.DEBUG, format='%(levelname)s: %(message)s')
 
 def methylated_motif_occourances(motif: str, motif_meth_index: int, seq: str, contig_meth_positions: int) -> tuple:
@@ -64,6 +66,8 @@ def score_candidate(pileup, contig: str, motif: str, motif_meth_index: int):
 
     return model
 
+
+
 def identify_motifs(methylation_sequences, contig, pileup, 
                     min_sequences = 50, min_cdf_score = 0.5, cdf_limit = 0.55, 
                     n_contig_samples = 10000, canonical_base = "A", min_kl_divergence = 0.1):
@@ -114,12 +118,12 @@ def identify_motifs(methylation_sequences, contig, pileup,
             # Remove all previously failed candidates from sequence set
             for motif in failed_canidates:
                 active_methylation_sequences = subset_DNA_array(active_methylation_sequences, motif, remove_matches = True)
-        
+
         if active_methylation_sequences.shape[0] < min_sequences:
             break
         
         # Initialize the active candidate as blank sequence
-        active_candidate = ["."] * (padding * 2 + 1)
+        active_candidate = ["."] * padding + [canonical_base] + ["."] * padding
         evaluated_positions = []
         candidates = []
         best_candidate = None
@@ -211,57 +215,57 @@ def process_sample(assembly, pileup,
     - min_motif_frequency (int): Used to get minimum number of sequences to evaluate motif at.
     """
     padding = max_candidate_size // 2
-    methylation_types = pileup["mod_type"].unique()
     result = []
     mod_dict = {"a":"A", "m":"C", "h":"C", "c":"C"}
-    for modtype in methylation_types:
+    pileup = pileup \
+            .filter(pl.col("Nvalid_cov") > min_valid_coverage) \
+            .filter(pl.col("fraction_mod") > min_read_methylation_fraction) \
+            .sort("contig") \
+            .groupby(["contig", "mod_type"])
+    for (contig, modtype), subpileup in pileup:
+        log.info(f"Processing {contig}")
         log.info(f"Processing {modtype}")
-        for contig, sequence in assembly.assembly.items():
-            log.info(f"Processing {contig}")
-            pileup_meth = pileup \
-                .filter(pl.col("contig") == contig) \
-                .filter(pl.col("mod_type") == modtype) \
-                .filter(pl.col("Nvalid_cov") > min_valid_coverage) \
-                .filter(pl.col("fraction_mod") > min_read_methylation_fraction) 
 
-            methylation_index_fwd = pileup_meth \
-                .filter(pl.col("strand") == "+")  \
-                .get_column("position").to_list()
-            if len(methylation_index_fwd) <= 1:
-                continue
-            methylation_index_rev = pileup_meth \
-                .filter(pl.col("strand") == "-") \
-                .get_column("position").to_list()
-            if len(methylation_index_rev) <= 1:
-                continue
+        sequence = assembly.assembly[contig]
 
-            methylation_sequences_fwd = EqualLengthDNASet(
-                [DNAsequence(sequence[(i - padding):(i + padding + 1)]) for i in methylation_index_fwd if (i > padding) and (i < (len(sequence) - padding))]
-            )
-            methylation_sequences_rev = EqualLengthDNASet(
-                [DNAsequence(sequence[(i - padding):(i + padding + 1)]).reverse_complement() for i in methylation_index_rev if (i > padding) and (i < (len(sequence) - padding))]
-            )
-            methylation_sequences = methylation_sequences_fwd + methylation_sequences_rev
-            
-            min_sequences = max(min(len(sequence) // min_motif_frequency, 200), 20)
+        methylation_index_fwd = subpileup \
+            .filter(pl.col("strand") == "+")  \
+            .get_column("position").to_list()
+        if len(methylation_index_fwd) <= 1:
+            continue
+        methylation_index_rev = subpileup \
+            .filter(pl.col("strand") == "-") \
+            .get_column("position").to_list()
+        if len(methylation_index_rev) <= 1:
+            continue
 
-            identified_motifs = pl.DataFrame(identify_motifs(
-                methylation_sequences, 
-                sequence, 
-                pileup_meth, 
-                min_kl_divergence = min_kl_divergence, 
-                min_sequences = min_sequences, 
-                cdf_limit = cdf_position,
-                min_cdf_score = min_cdf_score,
-                canonical_base = mod_dict[modtype]
+        methylation_sequences_fwd = EqualLengthDNASet(
+            [DNAsequence(sequence[(i - padding):(i + padding + 1)]) for i in methylation_index_fwd if (i > padding) and (i < (len(sequence) - padding))]
+        )
+        methylation_sequences_rev = EqualLengthDNASet(
+            [DNAsequence(sequence[(i - padding):(i + padding + 1)]).reverse_complement() for i in methylation_index_rev if (i > padding) and (i < (len(sequence) - padding))]
+        )
+        methylation_sequences = methylation_sequences_fwd + methylation_sequences_rev
+        
+        min_sequences = max(min(len(sequence) // min_motif_frequency, 200), 20)
+
+        identified_motifs = pl.DataFrame(identify_motifs(
+            methylation_sequences, 
+            sequence, 
+            subpileup, 
+            min_kl_divergence = min_kl_divergence, 
+            min_sequences = min_sequences, 
+            cdf_limit = cdf_position,
+            min_cdf_score = min_cdf_score,
+            canonical_base = mod_dict[modtype]
+        ))
+        if len(identified_motifs) == 0:
+            continue
+        else:
+            result.append(identified_motifs.with_columns(
+                pl.lit(contig).alias("contig"),
+                pl.lit(modtype).alias("mod_type")
             ))
-            if len(identified_motifs) == 0:
-                continue
-            else:
-                result.append(identified_motifs.with_columns(
-                    pl.lit(contig).alias("contig"),
-                    pl.lit(modtype).alias("mod_type")
-                ))
     def count_periods_at_start(s):
         count = 0
         for char in s:
@@ -306,6 +310,11 @@ def convert_seqeunces_to_numpy(sequences):
 def calculate_pssm(DNAarray):
     return DNAarray.sum(axis = 0).transpose() / DNAarray.shape[0]
 
+def convert_nucletotide_string_to_numpy(sequence):
+    base_to_int = {'A': [1,0,0,0], 'T': [0,1,0,0], 'G': [0,0,1,0], 'C': [0,0,0,1], ".": [1,1,1,1]}
+    DNAarray = np.array([[base_to_int[base] for base in sequence]])
+    return DNAarray
+
 def convert_regex_to_numpy(regex):
     base_to_int = {'A': [1,0,0,0], 'T': [0,1,0,0], 'G': [0,0,1,0], 'C': [0,0,0,1], ".": [1,1,1,1]}
     DNAarray = np.zeros((1, len(regex), 4), dtype = np.int32)
@@ -324,6 +333,85 @@ def subset_DNA_array(DNAarray, sequence: list, remove_matches = True):
     else:
         return DNAarray[np.all(DNAarray <= pattern, axis=(1,2)), :]
 
+
+
+def find_motif_neighbors_kl_distance(motif, meth_pssm, contig_pssm, min_kl=0.05, min_freq=0.3):
+    # Calculate KL-divergence
+    kl_divergence = entropy(meth_pssm, contig_pssm)
+    bases = ["A", "T", "G", "C"]
+    # Update the active candidate
+    for pos in np.where(kl_divergence > min_kl)[0]:
+        for base in [bases[i] for i in np.argwhere(meth_pssm[:, pos] > min_freq)[:, 0]]:
+            if motif[pos] == ".":
+                yield motif[:pos] + base + motif[pos+1:]
+
+    
+def a_star_search(start, contig, pileup, methylation_sequences, min_score = 0.6, extra_rounds = 2, min_kl = 0.1, min_freq=0.3):
+    count_down = extra_rounds
+    initiate_stopping = False
+    padding = methylation_sequences.sequence_length // 2
+    contig_sequences = contig.sample_n_at_subsequence(padding, "A", 10000)
+    contig_pssm = contig_sequences.pssm()
+    methylation_sequences = convert_seqeunces_to_numpy(methylation_sequences.sequences)
+
+    start_model = score_candidate(pileup, contig.sequence, start, padding)
+
+    motif_graph = nx.DiGraph()
+    motif_graph.add_node(start, model=start_model)
+
+    priority_que = []
+    hq.heappush(priority_que, (0, start))
+    
+    best_score = 0
+    while len(priority_que) > 0:
+        current = hq.heappop(priority_que)
+        current = current[1]
+
+        if best_score > min_score:
+            initiate_stopping = True
+        if initiate_stopping:
+            count_down -= 1
+            if count_down == 0:
+                break
+
+        active_methylation_sequences = methylation_sequences.copy()
+        active_methylation_sequences = subset_DNA_array(active_methylation_sequences, [base for base in current], remove_matches = False)
+        meth_pssm = calculate_pssm(active_methylation_sequences)
+        neighbors = list(find_motif_neighbors_kl_distance(current, meth_pssm, contig_pssm, min_kl=min_kl, min_freq=min_freq))
+
+        current_model = motif_graph.nodes[current]["model"]
+        log.debug(f"{''.join(current)} | {current_model} ")
+        
+        for next in neighbors:
+            if next in motif_graph.nodes:
+                motif_graph.add_edge(current, next, d_alpha=motif_graph.nodes[next]["model"]._alpha - current_model._alpha, d_beta=motif_graph.nodes[next]["model"]._beta - current_model._beta)
+                continue
+
+            next_model = score_candidate(pileup, contig.sequence, next, padding)
+
+            # Add neighbor to graph
+            next_cost = start_model._alpha - next_model._alpha
+            motif_graph.add_node(next, model=next_model, cost = next_cost)
+
+            d_alpha = next_model._alpha - current_model._alpha
+            d_beta = next_model._beta - current_model._beta
+            motif_graph.add_edge(current, next, d_alpha=d_alpha, d_beta=d_beta)
+
+            # Add neighbor to priority que
+            priority =  (1 - next_model._alpha / start_model._alpha) + next_model._beta / start_model._beta
+            hq.heappush(priority_que, (priority, next))
+
+            next_score = next_model.mean()
+            if next_score > best_score:
+                best_score = next_score
+                best_motif = next
+
+            
+    
+    return motif_graph
+
+
+            
 
 if __name__ == "__main__":
     from nanomotif.dataload import load_assembly, load_pileup
