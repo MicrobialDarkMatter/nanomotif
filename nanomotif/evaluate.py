@@ -10,6 +10,10 @@ import heapq as hq
 import networkx as nx
 log.basicConfig(encoding='utf-8', level=log.DEBUG, format='%(levelname)s: %(message)s')
 
+##########################################
+# Motif candidate scoring
+##########################################
+
 def methylated_motif_occourances(motif: str, motif_meth_index: int, seq: str, contig_meth_positions: int) -> tuple:
     """
     Get occourances of a motif in a contig
@@ -66,6 +70,11 @@ def score_candidate(pileup, contig: str, motif: str, motif_meth_index: int):
 
     return model
 
+
+
+##########################################
+# Motif candidate state space searcg
+##########################################
 
 
 def identify_motifs(methylation_sequences, contig, pileup, 
@@ -335,54 +344,62 @@ def subset_DNA_array(DNAarray, sequence: list, remove_matches = True):
 
 
 
-def find_motif_neighbors_kl_distance(motif, meth_pssm, contig_pssm, min_kl=0.05, min_freq=0.3):
+def find_motif_neighbors_kl_distance(motif, meth_pssm, contig_pssm, min_kl=0.05):
     # Calculate KL-divergence
     kl_divergence = entropy(meth_pssm, contig_pssm)
     bases = ["A", "T", "G", "C"]
     # Update the active candidate
     for pos in np.where(kl_divergence > min_kl)[0]:
-        for base in [bases[i] for i in np.argwhere(meth_pssm[:, pos] > min_freq)[:, 0]]:
+        for base in [bases[i] for i in np.argwhere(np.logical_and(meth_pssm[:, pos] > contig_pssm[:, pos], meth_pssm[:, pos] > 0.35))[:, 0]]:
             if motif[pos] == ".":
                 yield motif[:pos] + base + motif[pos+1:]
 
     
-def a_star_search(start, contig, pileup, methylation_sequences, min_score = 0.6, extra_rounds = 2, min_kl = 0.1, min_freq=0.3):
+def a_star_search(root_motif, contig, pileup, methylation_sequences, min_score = 0.6, extra_rounds = 2, min_kl = 0.1):
+    # Search setup
     count_down = extra_rounds
     initiate_stopping = False
     padding = methylation_sequences.sequence_length // 2
-    contig_sequences = contig.sample_n_at_subsequence(padding, "A", 10000)
-    contig_pssm = contig_sequences.pssm()
-    methylation_sequences = convert_seqeunces_to_numpy(methylation_sequences.sequences)
-
-    start_model = score_candidate(pileup, contig.sequence, start, padding)
-
-    motif_graph = nx.DiGraph()
-    motif_graph.add_node(start, model=start_model)
-
-    priority_que = []
-    hq.heappush(priority_que, (0, start))
-    
     best_score = 0
+
+    # Sample sequence in contig to get background for KL-divergence
+    contig_sequences = contig.sample_n_at_subsequence(padding, "G", 10000)
+    contig_pssm = contig_sequences.pssm()
+
+    # Convert DNA sequences to numpy array
+    methylation_sequences = methylation_sequences.convert_to_DNAarray()
+
+    # Initialize the root motif
+    root_model = score_candidate(pileup, contig.sequence, root_motif, padding)
+    motif_graph = nx.DiGraph()
+    motif_graph.add_node(root_motif, model=root_model)
+
+    # Initialize priority que
+    priority_que = []
+    hq.heappush(priority_que, (0, root_motif))
+    
+    # Search loop
     while len(priority_que) > 0:
+        # Get the next candidate
         current = hq.heappop(priority_que)
         current = current[1]
 
-        if best_score > min_score:
-            initiate_stopping = True
-        if initiate_stopping:
-            count_down -= 1
-            if count_down == 0:
-                break
-
-        active_methylation_sequences = methylation_sequences.copy()
-        active_methylation_sequences = subset_DNA_array(active_methylation_sequences, [base for base in current], remove_matches = False)
-        meth_pssm = calculate_pssm(active_methylation_sequences)
-        neighbors = list(find_motif_neighbors_kl_distance(current, meth_pssm, contig_pssm, min_kl=min_kl, min_freq=min_freq))
-
         current_model = motif_graph.nodes[current]["model"]
         log.debug(f"{''.join(current)} | {current_model} ")
-        
+
+        # Prune the neibhors of the current candidate
+        active_methylation_sequences = methylation_sequences.copy().filter_sequence_matches(current, keep_matches = True)
+        meth_pssm = active_methylation_sequences.pssm()
+        neighbors = list(find_motif_neighbors_kl_distance(
+            current, 
+            active_methylation_sequences.pssm(), 
+            contig_pssm, 
+            min_kl=min_kl
+        ))
+
+        # Add neighbors to graph
         for next in neighbors:
+            # Skip if already in graph, only add new edge
             if next in motif_graph.nodes:
                 motif_graph.add_edge(current, next, d_alpha=motif_graph.nodes[next]["model"]._alpha - current_model._alpha, d_beta=motif_graph.nodes[next]["model"]._beta - current_model._beta)
                 continue
@@ -390,22 +407,26 @@ def a_star_search(start, contig, pileup, methylation_sequences, min_score = 0.6,
             next_model = score_candidate(pileup, contig.sequence, next, padding)
 
             # Add neighbor to graph
-            next_cost = start_model._alpha - next_model._alpha
-            motif_graph.add_node(next, model=next_model, cost = next_cost)
-
-            d_alpha = next_model._alpha - current_model._alpha
-            d_beta = next_model._beta - current_model._beta
-            motif_graph.add_edge(current, next, d_alpha=d_alpha, d_beta=d_beta)
+            motif_graph.add_node(next, model=next_model)
+            motif_graph.add_edge(current, next)
 
             # Add neighbor to priority que
-            priority =  (1 - next_model._alpha / start_model._alpha) + next_model._beta / start_model._beta
+            distance = 1 - (next_model._alpha / root_model._alpha)
+            heuristic = 1 - (next_model._beta / root_model._beta)
+            priority =  distance + heuristic
             hq.heappush(priority_que, (priority, next))
 
-            next_score = next_model.mean()
-            if next_score > best_score:
-                best_score = next_score
-                best_motif = next
+            score = 1 - next_model.cdf(0.55)
+            if score > best_score:
+                best_score = score
 
+        # Early stopping criteria
+        if best_score > min_score:
+            initiate_stopping = True
+        if initiate_stopping:
+            count_down -= 1
+            if count_down == 0:
+                break
             
     
     return motif_graph

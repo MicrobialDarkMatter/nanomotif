@@ -47,6 +47,14 @@ class DNAsequence:
         "W": "W", "K": "M", "M": "K", "B": "V", 
         "D": "H", "H": "D", "V": "B"
     }
+    base_to_vector = {
+        "A": [1, 0, 0, 0],
+        "T": [0, 1, 0, 0],
+        "G": [0, 0, 1, 0],
+        "C": [0, 0, 0, 1],
+        "N": [1, 1, 1, 1],
+        ".": [1, 1, 1, 1]
+    }
 
     base_int = {"A":1, "T":2, "G":3, "C":4, "N":5, "R":6, "Y":7, "S":8, "W":9, "K":10, "M":11, "B":12, "D":13, "H":14, "V":15}
     int_base = {i: n for n, i in base_int.items()}
@@ -394,6 +402,12 @@ class EqualLengthDNASet:
         """
         return EqualLengthDNASet([seq for seq in self.sequences if not bool(re.match(pattern, seq.sequence))])
 
+    def convert_to_DNAarray(self):
+        """
+        Convert EqualLengthDNASet to DNAarray
+        """
+        return DNAarray([[DNAsequence.base_to_vector[base] for base in sequence] for sequence in self.sequences])
+    
     def plot_pssm(self, ax=None, center_x_axis=True):
         """
         Method to plot the positional conservation of DNA sequences in the object.
@@ -436,6 +450,72 @@ class EqualLengthDNASet:
         ax.set_ylabel("Frequency")
 
         return ax
+
+
+class DNAarray(np.ndarray):
+    base_to_vector = {
+        "A": [1, 0, 0, 0],
+        "T": [0, 1, 0, 0],
+        "G": [0, 0, 1, 0],
+        "C": [0, 0, 0, 1],
+        "N": [1, 1, 1, 1],
+        ".": [1, 1, 1, 1]
+    }
+    def __new__(cls, input_array):
+        obj = np.asarray(input_array).view(cls)
+        return obj
+    
+    def __array_finalize__(self, obj):
+        if obj is None: return
+    
+    def filter_sequence_matches(self, sequence, keep_matches=True):
+        """
+        Filter the array based on sequence matches
+
+        Parameters
+        ----------
+        sequence : str
+            The sequence to filter the array by
+        keep_matches : bool, optional
+            Whether to keep matches or non-matches, by default True
+
+        Returns
+        -------
+        DNAarray
+            The filtered array
+        """
+        # Check if sequence is already a numpy array
+        if not isinstance(sequence, np.ndarray):
+            # Convert the query sequence into a numpy array [position, base]
+            sequence = self._sequence_to_array(sequence)
+        assert sequence.shape == self.shape[1:3], "Sequence must have the same length as sequences in the array (use N or . for missing bases))"
+
+        if keep_matches:
+            result = self[np.all(self <= sequence, axis=(1,2)), :]
+        else:
+            result = self[np.any(self > sequence, axis=(1,2)), :]
+
+        return DNAarray(result)
+    
+    def _sequence_to_array(self, sequence):
+        """
+        Converts a sequence of bases into a numpy array
+        """
+        return np.array([self.base_to_vector[base] for base in sequence])
+    
+    def pssm(self):
+        """
+        Calculate the position specific scoring matrix for the array. 
+        The PSSM is the sum of the array along the first axis (sequences) divided by the number of sequences, 
+        e.g. the positional frequency of bases in all of the sequences in the array.
+
+        Returns
+        -------
+        np.ndarray
+            The PSSM
+        """
+        return self.sum(axis = 0).transpose() / self.shape[0]
+
 
 def all_lengths_equal(iterator):
     """
