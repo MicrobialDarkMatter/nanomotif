@@ -1,6 +1,3 @@
-
-
-
 class Pileup():
     """
     Class for loading pileup files
@@ -31,3 +28,4 @@ class Pileup():
         Get methylated positions in pileup
         """
         return self.pileup.filter(pl.col("fraction_mod") >= threshold)
+
