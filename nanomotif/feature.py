@@ -1,3 +1,6 @@
+
+
+
 class Pileup():
     """
     Class for loading pileup files
@@ -23,9 +26,3 @@ class Pileup():
         """
         return self.pileup["strand"].unique()
     
-    def get_methylated_positions(self, threshold = 0.8):
-        """
-        Get methylated positions in pileup
-        """
-        return self.pileup.filter(pl.col("fraction_mod") >= threshold)
-

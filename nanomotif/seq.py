@@ -487,7 +487,7 @@ class DNAarray(np.ndarray):
         # Check if sequence is already a numpy array
         if not isinstance(sequence, np.ndarray):
             # Convert the query sequence into a numpy array [position, base]
-            sequence = self._sequence_to_array(sequence)
+            sequence = sequence_to_array(sequence)
         assert sequence.shape == self.shape[1:3], "Sequence must have the same length as sequences in the array (use N or . for missing bases))"
 
         if keep_matches:
@@ -496,12 +496,6 @@ class DNAarray(np.ndarray):
             result = self[np.any(self > sequence, axis=(1,2)), :]
 
         return DNAarray(result)
-    
-    def _sequence_to_array(self, sequence):
-        """
-        Converts a sequence of bases into a numpy array
-        """
-        return np.array([self.base_to_vector[base] for base in sequence])
     
     def pssm(self):
         """
@@ -515,6 +509,22 @@ class DNAarray(np.ndarray):
             The PSSM
         """
         return self.sum(axis = 0).transpose() / self.shape[0]
+
+def sequence_to_array(sequence):
+    """
+    Converts a sequence of bases into a numpy array
+    """
+    if isinstance(sequence, str):
+        sequence = sequence.upper()
+        return np.array([DNAarray.base_to_vector[base] for base in sequence])
+    
+    elif isinstance(sequence, list):
+        squence_array = np.zeros((len(sequence), 4), dtype=int)
+        for position, bases in enumerate(sequence):
+            for base in bases:
+                if base in DNAarray.base_to_vector.keys():
+                    squence_array[position, :] += DNAarray.base_to_vector[base]
+        return squence_array
 
 
 def all_lengths_equal(iterator):

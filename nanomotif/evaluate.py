@@ -1,6 +1,7 @@
 import numpy as np
 import polars as pl
 import logging as log
+import itertools
 from itertools import takewhile
 from scipy.stats import entropy
 from nanomotif.model import BetaBernoulliModel
@@ -343,22 +344,151 @@ def subset_DNA_array(DNAarray, sequence: list, remove_matches = True):
         return DNAarray[np.all(DNAarray <= pattern, axis=(1,2)), :]
 
 
+#########################################################################
+# Motif candidate state space 
+class MotifCandidateTree(nx.DiGraph):
+    def __init__(self, *args, **kwargs):
+        super(MotifCandidateTree, self).__init__(*args, **kwargs)
 
-def find_motif_neighbors_kl_distance(motif, meth_pssm, contig_pssm, min_kl=0.05):
-    # Calculate KL-divergence
-    kl_divergence = entropy(meth_pssm, contig_pssm)
-    bases = ["A", "T", "G", "C"]
-    # Update the active candidate
-    for pos in np.where(kl_divergence > min_kl)[0]:
-        for base in [bases[i] for i in np.argwhere(np.logical_and(meth_pssm[:, pos] > contig_pssm[:, pos], meth_pssm[:, pos] > 0.35))[:, 0]]:
-            if motif[pos] == ".":
-                yield motif[:pos] + base + motif[pos+1:]
+    def add_motif_child_nodes(self, motif):
+        """
+        Add all possible children of a motif by replacing a single base at a time at variable positions.
 
-    
-def a_star_search(root_motif, contig, pileup, methylation_sequences, min_score = 0.6, extra_rounds = 2, min_kl = 0.1):
+        Parameters:
+        - motif (list): The motif to add children for.
+        """
+        bases = ["A", "T", "G", "C"]
+        # All combination of the four bases
+        combinations = []
+        for i in range(1, len(bases)):
+            combinations += list(itertools.combinations(bases, i))
+        
+        # Iterate over the motif and replace each variable position with all possible combinations
+        for i, old_base in enumerate(motif):
+            if old_base == ".":
+                for base in combinations:
+                    motif = motif[:i] + ["".join(list(base))] + motif[i+1:]
+                    motif_str = self._sequence_list_to_string(motif)
+                    self.add_node(motif_str, motif=motif, methylation_position=len(motif) // 2)
+
+    def add_motif_child_nodes_kl_filter(self, motif, meth_pssm, contig_pssm, min_kl=0.1, freq_threshold=0.45):
+        """
+        Add children of a motif at positions with high KL-divergence and relattively high frequency
+
+        Parameters:
+        - motif (list): The motif to generate children for.
+        - meth_pssm (np.array): The PSSM of the methylation sequences.
+        - contig_pssm (np.array): The PSSM of the contig.
+        - min_kl (float): The minimum KL-divergence to consider a position.
+        - freq_threshold (float): The minimum methylation frequency to consider a position.
+        """
+        bases = ["A", "T", "G", "C"]
+        kl_divergence = entropy(meth_pssm, contig_pssm)
+
+        # mask KL divergence for already evaluated positions
+        for i, base in enumerate(motif):
+            if base != ".":
+                kl_divergence[i] = 0
+
+        
+        for pos in np.where(kl_divergence > min_kl)[0]:
+            # Methylation frequency most be above contig frequency
+            index_meth_frequncies_highest = meth_pssm[:, pos] > contig_pssm[:, pos]
+
+            # Methylation frequency most be above a threshold
+            index_meth_frequncies_above_threshold = meth_pssm[:, pos] > freq_threshold
+
+            # Combine the two filters
+            index_position_filt = np.logical_and(index_meth_frequncies_highest, index_meth_frequncies_above_threshold)
+            bases_index = np.argwhere(index_position_filt).reshape(-1)
+            bases_filt = [bases[int(i)] for i in bases_index]
+            
+            # All combination of the bases
+            combinations = []
+            for i in range(1, min(len(bases_filt)+1, 4)):
+                combinations += list(itertools.combinations(bases_filt, i))
+            
+            for base in combinations:
+                motif = motif[:pos] + ["".join(list(base))] + motif[pos+1:]
+                motif_str = self._sequence_list_to_string(motif)
+                self.add_node(motif_str, motif=motif, methylation_position=len(motif) // 2)
+    def score_node(self, node, methylated_positions, motif_positions):
+        """
+        Get the posterior for a single candidate
+
+        Parameters:
+        - node (str): The node to be scored.
+        - methylated_positions (np.array): The positions of all methylations.
+        - motif_positions (np.array): The positions of the methylation position in the motif.
+
+        """
+        # Methylated motif positions
+        meth_occurences = np.intersect1d(methylated_positions, motif_positions)
+
+        # Non-methylated motif positions
+        nonmeth_occurences =  np.setdiff1d(motif_positions, methylated_positions)
+
+        self.nodes[node]["model"].update(len(meth_occurences), len(nonmeth_occurences))
+
+        return model
+
+    def _sequence_list_to_string(self, sequence_list):
+        sequence_str = ""
+        for i in sequence_list:
+            if len(i) > 1:
+                sequence_str += "[" + "".join(i) + "]"
+            else:
+                sequence_str += i       
+        return sequence_str  
+
+def motif_child_nodes_kl_dist_prune(motif, meth_pssm, contig_pssm, min_kl=0.1, freq_threshold=0.45):
+        bases = ["A", "T", "G", "C"]
+        kl_divergence = entropy(meth_pssm, contig_pssm)
+
+        # mask KL divergence for already evaluated positions
+        for i, base in enumerate(motif):
+            if base != ".":
+                kl_divergence[i] = 0
+
+        
+        for pos in np.where(kl_divergence > min_kl)[0]:
+            # Methylation frequency most be above contig frequency
+            index_meth_frequncies_highest = meth_pssm[:, pos] > contig_pssm[:, pos]
+
+            # Methylation frequency most be above a threshold
+            index_meth_frequncies_above_threshold = meth_pssm[:, pos] > freq_threshold
+
+            # Combine the two filters
+            index_position_filt = np.logical_and(index_meth_frequncies_highest, index_meth_frequncies_above_threshold)
+            bases_index = np.argwhere(index_position_filt).reshape(-1)
+            bases_filt = [bases[int(i)] for i in bases_index]
+            
+            # All combination of the bases
+            combinations = []
+            for i in range(1, min(len(bases_filt)+1, 4)):
+                combinations += list(itertools.combinations(bases_filt, i))
+            
+            for base in combinations:
+                motif = motif[:pos] + ["".join(list(base))] + motif[pos+1:]
+                yield motif
+
+def a_star_search(root_motif: list, contig, pileup, methylation_sequences, 
+                  motif_graph = None,
+                  min_score = 0.6, extra_rounds = 2, min_kl = 0.1, cdf_position = 0.5):
+    """
+    A* search for methylation motifs
+
+    Parameters:
+    - root_motif (list): The root motif to start the search from.
+    - contig (str): The contig to be processed.
+    - pileup (Pileup): The pileup to be processed.
+    - methylation_sequences (EqualLengthDNASet): The methylation sequences to be processed.
+    """
+
     # Search setup
     count_down = extra_rounds
     initiate_stopping = False
+    best_guess = None
     padding = methylation_sequences.sequence_length // 2
     best_score = 0
 
@@ -370,28 +500,29 @@ def a_star_search(root_motif, contig, pileup, methylation_sequences, min_score =
     methylation_sequences = methylation_sequences.convert_to_DNAarray()
 
     # Initialize the root motif
-    root_model = score_candidate(pileup, contig.sequence, root_motif, padding)
-    motif_graph = nx.DiGraph()
-    motif_graph.add_node(root_motif, model=root_model)
+    if motif_graph is None:
+        motif_graph = nx.DiGraph()
+    root_string = sequence_list_to_string(root_motif)
+    root_model = score_candidate(pileup, contig.sequence, root_string, padding)
+    motif_graph.add_node(root_string, model=root_model, motif=root_motif)
 
     # Initialize priority que
     priority_que = []
-    hq.heappush(priority_que, (0, root_motif))
+    hq.heappush(priority_que, (0, root_string))
     
     # Search loop
     while len(priority_que) > 0:
         # Get the next candidate
         current = hq.heappop(priority_que)
-        current = current[1]
-
-        current_model = motif_graph.nodes[current]["model"]
-        log.debug(f"{''.join(current)} | {current_model} ")
+        current_string = current[1]
+        current_motif = motif_graph.nodes[current_string]["motif"]
+        current_model = motif_graph.nodes[current_string]["model"]
+        log.debug(f"{''.join(current_string)} | {current_model} ")
 
         # Prune the neibhors of the current candidate
-        active_methylation_sequences = methylation_sequences.copy().filter_sequence_matches(current, keep_matches = True)
-        meth_pssm = active_methylation_sequences.pssm()
-        neighbors = list(find_motif_neighbors_kl_distance(
-            current, 
+        active_methylation_sequences = methylation_sequences.copy().filter_sequence_matches(current_motif, keep_matches = True)
+        neighbors = list(motif_child_nodes_kl_dist_prune(
+            current_motif, 
             active_methylation_sequences.pssm(), 
             contig_pssm, 
             min_kl=min_kl
@@ -399,26 +530,27 @@ def a_star_search(root_motif, contig, pileup, methylation_sequences, min_score =
 
         # Add neighbors to graph
         for next in neighbors:
-            # Skip if already in graph, only add new edge
-            if next in motif_graph.nodes:
-                motif_graph.add_edge(current, next, d_alpha=motif_graph.nodes[next]["model"]._alpha - current_model._alpha, d_beta=motif_graph.nodes[next]["model"]._beta - current_model._beta)
-                continue
-
-            next_model = score_candidate(pileup, contig.sequence, next, padding)
-
-            # Add neighbor to graph
-            motif_graph.add_node(next, model=next_model)
-            motif_graph.add_edge(current, next)
+            next_string = sequence_list_to_string(next)
+            if next_string in motif_graph.nodes:
+                # Skip if already in graph, only add new edge
+                next_model = motif_graph.nodes[next_string]["model"]
+                motif_graph.add_edge(current_string, next_string)
+            else:
+                next_model = score_candidate(pileup, contig.sequence, next_string, padding)
+                # Add neighbor to graph
+                motif_graph.add_node(next_string, model=next_model, motif=next)
+                motif_graph.add_edge(current_string, next_string)
 
             # Add neighbor to priority que
             distance = 1 - (next_model._alpha / root_model._alpha)
-            heuristic = 1 - (next_model._beta / root_model._beta)
+            heuristic = next_model._beta / root_model._beta
             priority =  distance + heuristic
-            hq.heappush(priority_que, (priority, next))
+            hq.heappush(priority_que, (priority, next_string))
 
-            score = 1 - next_model.cdf(0.55)
+            score = 1 - next_model.cdf(cdf_position)
             if score > best_score:
                 best_score = score
+                best_guess = next_string
 
         # Early stopping criteria
         if best_score > min_score:
@@ -427,12 +559,17 @@ def a_star_search(root_motif, contig, pileup, methylation_sequences, min_score =
             count_down -= 1
             if count_down == 0:
                 break
-            
-    
-    return motif_graph
+    return motif_graph, best_guess
 
 
-            
+def sequence_list_to_string(sequence_list):
+    sequence_str = ""
+    for i in sequence_list:
+        if len(i) > 1:
+            sequence_str += "[" + "".join(i) + "]"
+        else:
+            sequence_str += i       
+    return sequence_str  
 
 if __name__ == "__main__":
     from nanomotif.dataload import load_assembly, load_pileup
