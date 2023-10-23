@@ -2,7 +2,9 @@ from scipy.stats import entropy
 import numpy as np
 import warnings
 import re
-import nanomotif.utils
+import random
+import nanomotif.utils as utils
+from nanomotif.constants import *
 import matplotlib.pyplot as plt
 from matplotlib import cm
 
@@ -15,17 +17,6 @@ class Assembly():
     
     def __repr__(self):
         return f"Assembly with {len(self.assembly)} contigs"
-
-
-
-def reverse_complement(seq):
-    """
-    Reverse complement a sequence
-    """
-    complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', "[":"]", "]":"[", ".": "."} 
-    return ''.join([complement[base] for base in reversed(seq)])
-
-
 
 class DNAsequence:
     bases = ["A", "T", "G", "C"]
@@ -154,16 +145,57 @@ class DNAsequence:
         else:
             return NotImplemented
     
+    def sample_at_index(self, index: int, padding: int):
+        """
+        Randomly sample sequence around index in DNAsequence.
+
+        Parameters
+        ----------
+        index : int
+            Index to sample at.
+        padding : int
+            Number of position to include on each side
+
+        Returns
+        -------
+        sequences : DNAsequence
+            Sequence of length 2 * padding + 1
+        """
+        if index < padding:
+            raise ValueError(f"Index {index} is too small for padding {padding}")
+        if index > len(self) - padding:
+            raise ValueError(f"Index {index} is too large for padding {padding}")
+        return DNAsequence(self.sequence[(index - padding):(index + padding + 1)])
+
+    def sample_at_indices(self, indices: list, padding: int):
+        """
+        Randomly sample sequence around indices in DNAsequence.
+
+        Parameters
+        ----------
+        indices : list
+            Indices to sample at.
+        padding : int
+            Number of position to include on each side
+
+        Returns
+        -------
+        sequences : EqualLengthDNASet
+            Sequences of length 2 * padding + 1
+        """
+        indices_checked = [index for index in indices if index >= padding and index <= (len(self) - padding)]
+        return EqualLengthDNASet([self.sample_at_index(index, padding) for index in indices_checked])
+
     def sample_subsequence(self, length):
         """Randomly sample a subsequence of a given length"""
         if length > len(self):
             raise ValueError(f"Cannot sample a subsequence of length {length} from a sequence of length {len(self)}")
         start_index = random.randint(0, len(self) - length)
-        return self.sequence[start_index:start_index + length]
+        return DNAsequence(self.sequence[start_index:start_index + length])
 
     def sample_n_subsequences(self, length: int, n: int):
         """Randomly sample n sequences of a given length"""
-        return [self.sample_subsequence(length=length) for _ in range(n)]
+        return EqualLengthDNASet([self.sample_subsequence(length=length) for _ in range(n)])
 
     def find_subsequence(self, subsequence: str):
         """
@@ -292,7 +324,10 @@ class EqualLengthDNASet:
         assert len(sequences) > 0, "DNA sequences must not be empty"
         assert all(isinstance(seq, DNAsequence) for seq in sequences), "DNA sequences must be a list of strings"
         assert all(len(seq) > 0 for seq in sequences), "DNA sequences must not contain empty strings"
-        assert all_lengths_equal(sequences), "All sequences must be of equal length"
+        assert utils.all_lengths_equal(sequences), "All sequences must be of equal length"
+
+    def __getitem__(self, key):
+        return EqualLengthDNASet(self.sequences[key])
 
     def levenshtein_distances(self) -> np.ndarray:
         """
@@ -322,6 +357,10 @@ class EqualLengthDNASet:
                 distances[i, j] = d
                 distances[j, i] = d
         return distances
+
+    def reverse_compliment(self):
+        """Return the reverse complement of the sequence."""
+        return EqualLengthDNASet([seq.reverse_complement() for seq in self.sequences])
 
     def pssm(self, pseudocount=0, only_canonical: bool = True):
         """
@@ -400,7 +439,11 @@ class EqualLengthDNASet:
         -------
         EqualLengthDNASet with sequences containing pattern
         """
-        return EqualLengthDNASet([seq for seq in self.sequences if not bool(re.match(pattern, seq.sequence))])
+        sequences = [seq for seq in self.sequences if not bool(re.match(pattern, seq.sequence))]
+        if len(sequences) == 0:
+            warnings.warn("No sequences left after filtering")
+            return None
+        return EqualLengthDNASet(sequences)
 
     def convert_to_DNAarray(self):
         """
@@ -451,8 +494,10 @@ class EqualLengthDNASet:
 
         return ax
 
-
 class DNAarray(np.ndarray):
+    """
+    A numpy array of DNA sequences
+    """
     base_to_vector = {
         "A": [1, 0, 0, 0],
         "T": [0, 1, 0, 0],
@@ -474,8 +519,7 @@ class DNAarray(np.ndarray):
 
         Parameters
         ----------
-        sequence : str
-            The sequence to filter the array by
+        sequence : np.ndarray
         keep_matches : bool, optional
             Whether to keep matches or non-matches, by default True
 
@@ -484,17 +528,16 @@ class DNAarray(np.ndarray):
         DNAarray
             The filtered array
         """
-        # Check if sequence is already a numpy array
-        if not isinstance(sequence, np.ndarray):
-            # Convert the query sequence into a numpy array [position, base]
-            sequence = sequence_to_array(sequence)
-        assert sequence.shape == self.shape[1:3], "Sequence must have the same length as sequences in the array (use N or . for missing bases))"
+        assert isinstance(sequence, np.ndarray), "Sequence must be a numpy array"
+        assert sequence.shape == self.shape[1:3], "Sequence must have the same length as sequences in the array"
 
         if keep_matches:
             result = self[np.all(self <= sequence, axis=(1,2)), :]
         else:
             result = self[np.any(self > sequence, axis=(1,2)), :]
-
+        if result.shape[0] == 0:
+            warnings.warn("No sequences left after filtering")
+            return None
         return DNAarray(result)
     
     def pssm(self):
@@ -509,50 +552,3 @@ class DNAarray(np.ndarray):
             The PSSM
         """
         return self.sum(axis = 0).transpose() / self.shape[0]
-
-def sequence_to_array(sequence):
-    """
-    Converts a sequence of bases into a numpy array
-    """
-    if isinstance(sequence, str):
-        sequence = sequence.upper()
-        return np.array([DNAarray.base_to_vector[base] for base in sequence])
-    
-    elif isinstance(sequence, list):
-        squence_array = np.zeros((len(sequence), 4), dtype=int)
-        for position, bases in enumerate(sequence):
-            for base in bases:
-                if base in DNAarray.base_to_vector.keys():
-                    squence_array[position, :] += DNAarray.base_to_vector[base]
-        return squence_array
-
-
-def all_lengths_equal(iterator):
-    """
-    Checks whether the lengths of all elements in an iterable are equal.
-
-    The function will return True even if the iterable is empty. It requires that the elements of the iterable
-    also be iterable, such as strings, lists, and tuples.
-
-    Args:
-        iterator (Iterable): An iterable object containing other iterable elements.
-
-    Returns:
-        bool: True if all lengths are equal or if iterable is empty, False otherwise.
-
-    Examples:
-    >>> all_lengths_equal(['abc', 'def', 'ghi'])
-    True
-    >>> all_lengths_equal([[1, 2, 3], [4, 5, 6]])
-    True
-    >>> all_lengths_equal([])
-    True
-    >>> all_lengths_equal(['abc', 'de'])
-    False
-    """
-    iterator = iter(iterator)
-    try:
-        first = len(next(iterator))
-    except StopIteration:
-        return True
-    return all(first == len(x) for x in iterator)

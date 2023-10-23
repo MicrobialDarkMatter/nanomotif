@@ -105,7 +105,7 @@ class Motif(str):
         Reverse compliment a motif.
         """
         reversed_motif = "".join([COMPLEMENT[base] for base in reversed(self.string)])
-        new_position = self.length() - self.mod_position
+        new_position = self.length() - self.mod_position - 1
         return Motif(reversed_motif, new_position)
 
 def remove_child_motifs(motifs):

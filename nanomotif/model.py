@@ -6,7 +6,7 @@ from scipy.stats import beta
 import matplotlib.pyplot as plt
 
 class BetaBernoulliModel():
-    def __init__(self, alpha = 1, beta = 1):
+    def __init__(self, alpha = 0, beta = 1):
         self.alpha = alpha
         self.beta = beta
         self._alpha = alpha

@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='nanomotif',
-    version='0.0.7',
+    version='0.0.8',
     description='Identifying methlyation motifs in nanopore data',
     author='AAU_DarkScience',
     author_email='shei@bio.aau.com',
@@ -12,7 +12,7 @@ setup(
     install_requires=[
         "wheel",
         "requests",
-        "numpy==1.24.3",
+        "numpy==1.24.4",
         "pandas==2.0.2",
         "polars==0.18.3",
         "seaborn==0.12.2",

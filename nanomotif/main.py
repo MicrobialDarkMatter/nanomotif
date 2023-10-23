@@ -7,27 +7,35 @@ def main():
 
     log.info("Loading assembly")
     assembly = nm.load_assembly(args.assembly)
+    assm_lengths = pl.DataFrame({
+        "contig": list(assembly.assembly.keys()),
+        "length": [len(contig) for contig in assembly.assembly.values()]
+    })
     log.info("Loading pileup")
     pileup = nm.load_pileup(args.pileup)
 
-    contigs_with_mods = pileup.groupby("contig") \
+    contigs_with_mods = pileup.pileup \
+        .filter(pl.col("fraction_mod") > args.min_fraction) \
+        .groupby(["contig", "mod_type"]) \
         .agg(pl.count()) \
-        .filter(pl.col("count") > 50) \
-        .get_column("contig").to_list()
+        .join(assm_lengths, on = "contig") \
+        .filter(pl.col("count") > pl.col("length")/10000) \
+        .get_column("contig").unique().to_list()
     contigs_to_process = [contig for contig in assembly.assembly.keys() if contig in contigs_with_mods]
-    pileup = pileup.filter(pl.col("contig").is_in(contigs_to_process))
+    pileup = pileup.pileup.filter(pl.col("contig").is_in(contigs_to_process))
 
     log.info("Identifying motifs")
     motifs = nm.evaluate.process_sample(
         assembly,
         pileup,
-        args.max_motif_length,
-        args.min_fraction,
-        args.min_coverage,
-        args.min_kl_divergence,
-        args.min_cdf_score,
-        args.cdf_position
+        max_candidate_size = args.max_motif_length,
+        min_read_methylation_fraction = args.min_fraction,
+        min_valid_coverage = args.min_coverage,
+        min_kl_divergence = args.min_kl_divergence
     )
+    if motifs is None:
+        log.info("No motifs found")
+        return
 
     log.info("Writing motifs")
     motifs.with_columns(

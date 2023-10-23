@@ -29,3 +29,34 @@ def calculate_match_length(regex):
     regex = re.sub(r'\[.*\]', '.', regex)
 
     return len(regex)
+
+
+def all_lengths_equal(iterator):
+    """
+    Checks whether the lengths of all elements in an iterable are equal.
+
+    The function will return True even if the iterable is empty. It requires that the elements of the iterable
+    also be iterable, such as strings, lists, and tuples.
+
+    Args:
+        iterator (Iterable): An iterable object containing other iterable elements.
+
+    Returns:
+        bool: True if all lengths are equal or if iterable is empty, False otherwise.
+
+    Examples:
+    >>> all_lengths_equal(['abc', 'def', 'ghi'])
+    True
+    >>> all_lengths_equal([[1, 2, 3], [4, 5, 6]])
+    True
+    >>> all_lengths_equal([])
+    True
+    >>> all_lengths_equal(['abc', 'de'])
+    False
+    """
+    iterator = iter(iterator)
+    try:
+        first = len(next(iterator))
+    except StopIteration:
+        return True
+    return all(first == len(x) for x in iterator)
