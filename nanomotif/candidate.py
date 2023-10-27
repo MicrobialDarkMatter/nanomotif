@@ -13,7 +13,7 @@ class Motif(str):
         self.mod_position = mod_position
         self.string = self.__str__()
 
-    def child_of(self, other_motif):
+    def sub_motif_of(self, other_motif):
         """
         Check if a motif is in another motif.
         """
@@ -42,6 +42,83 @@ class Motif(str):
             except IndexError:
                 return True
         return True
+
+    def sub_string_of(self, other_motif):
+        """
+        Check if a motif is in another motif.
+        """
+        assert isinstance(other_motif, Motif)
+        # Strip for redundant posititons (flanking .)
+        self_stripped = self.new_stripped_motif()
+        other_stripped = other_motif.new_stripped_motif()
+
+        if self_stripped.length() < other_stripped.length():
+            return False
+        size_difference = self_stripped.length() - other_stripped.length()
+
+        # Split into list of bases
+        self_split = self_stripped.split()
+        other_split = other_stripped.split()
+        
+        for i in range (size_difference+1):
+            match = True
+            for j, base in enumerate(other_split):
+                if not set(self_split[j+i]).issubset(set(base)) and base != ".": 
+                    # Using set to make sure nucleotide order doesn't matter
+                    match = False
+            if match:
+                return True
+        return False 
+    
+    def distance(self, other_motif):
+        assert isinstance(other_motif, Motif)
+        self_split = self.split()
+        other_motif_split = other_motif.split()
+
+        index_offset = self.mod_position - other_motif.mod_position
+
+        start = (-self.mod_position, -other_motif.mod_position)
+        end = (len(self_split) - self.mod_position, len(other_motif_split) - other_motif.mod_position)
+        search_size = range(min(start), max(end))
+    
+        
+        distance = 0
+        for i in search_size:
+            if i < start[0]:
+                if other_motif_split[i - start[1]] != ".":
+                    distance += 1
+            elif i < start[1]:
+                if self_split[i - start[0]] != ".":
+                    distance += 1
+            elif i >= end[0]:
+                if other_motif_split[i - start[1]] != ".":
+                    distance += 1
+            elif i >= end[1]:
+                if self_split[i - start[0]] != ".":
+                    distance += 1
+            else:
+                if set(self_split[i - start[0]]) == set(other_motif_split[i - start[1]]):
+                    continue
+                else:
+                    distance += 1
+        return distance
+
+    def have_isolated_bases(self, isolation_size=2):
+        """
+        Check if a motif has isolated bases.
+        """
+        motif_split = self.split()
+        isolated = False
+        for pos in range(len(motif_split)):
+            if motif_split[pos] == ".":
+                continue
+            index_start = max(pos - isolation_size, 0)
+            index_end = min(pos + isolation_size, len(motif_split) - 1)
+            # If all surrounding positions are ".", it is isolated
+            if set(motif_split[index_start:pos] + motif_split[pos+1:index_end]) == set(["."]):
+                isolated = True
+        return isolated
+        
 
     def length(self) -> int:
         """
@@ -80,6 +157,8 @@ class Motif(str):
         while i < len(self):
             if self[i] == "[":
                 j = self.find("]", i)
+                if j == -1:
+                    raise ValueError("Unmatched bracket")
                 result.append(self[i:j+1])
                 i = j + 1
             else:
@@ -126,4 +205,8 @@ class MotifTree(nx.DiGraph):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    
+
+if __name__ == "__main__":
+    motif1 = Motif("AT.G", 0)
+    motif2 = Motif("ATCG", 0)
+    motif1.sub_string_of(motif2)        
