@@ -77,7 +77,6 @@ def main():
         return
 
     log.info("Writing motifs")
-<<<<<<< HEAD
     def save_motif_df(df, name):
         df.with_columns(
             pl.col("model").apply(lambda x: x._alpha).alias("alpha"),
@@ -102,7 +101,6 @@ def main():
     log.info(" - Merging motifs")
     motifs = nm.postprocess.merge_motifs_in_df(motifs, pileup, assembly)
     save_motif_df(motifs, "motifs")
-=======
     motifs.with_columns(
         pl.col("model").apply(lambda x: x._alpha).alias("alpha"),
         pl.col("model").apply(lambda x: x._beta).alias("beta")
@@ -116,10 +114,6 @@ def main():
         pl.col("model").apply(lambda x: x._alpha).alias("alpha"),
         pl.col("model").apply(lambda x: x._beta).alias("beta")
     ).drop("model").write_csv(args.output + "/motifs.tsv", separator="\t")
-<<<<<<< HEAD
->>>>>>> 756ec0aaa02f67bccb18ad0f571059b2960f54b5
-=======
->>>>>>> 756ec0aaa02f67bccb18ad0f571059b2960f54b5
 
 if __name__ == "__main__":
     main()
