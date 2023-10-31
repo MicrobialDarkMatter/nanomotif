@@ -52,6 +52,26 @@ nanomotif [assembly] [modkit pileup] [output]
 
 For detailed documentation and examples of all available functionalities in Nanomotif, please refer to the [official documentation](https://nanomotif-docs/docs). It provides comprehensive information on the various classes, methods, and parameters, along with usage examples and explanations.
 
+
+## Output description
+
+Nanomotif output motif at different processing levels
+- **motifs-raw.tsv** - contain all naively detected motifs
+- **motifs-score-filtered.tsv**, minimum score filtration
+- **motifs-score-sub-filtered**, above filtration and removal of motif that are a submotif of another motif within contigs
+- **motifs-score-sub-noise-filtered.tsv**, above filtration and removal of motifs with too many isolated bases, e.g. ..G....C..A is not considered a motif
+- **motifs.tsv**, above filtration and merging of motif based on edit distance. required edit distance is based on expected distanve vs. motif length (estimated from REBASE gold standar motifs)
+
+Columns in output
+- **sequence**, padded motif all of equal length
+- **score**, scored used for selecting motif during search 
+- **contig**, reference in which the motif was found
+- **mod_type**, the type of modification [a or m]
+- **motif**, trimmed motif without padding. braces a re used to indicate multi base match and . used to indicate any base (N)
+- **mod_position**, position within the motif where the modification is located, 0-based index.
+- **alpha**, alpha parameter of the BetaBernoulli posterior
+- **beta**, beta parameter of the BetaBernoulli posterior
+
 ## Contributing
 
 We welcome contributions to Nanomotif! If you encounter any issues, have suggestions for improvements, or would like to add new features, please open an issue or submit a pull request on the [Nanomotif GitHub repository](https://github.com/SorenHeidelbach/nanomotif). We appreciate your feedback and contributions to make Nanomotif even better.

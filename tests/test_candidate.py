@@ -62,34 +62,140 @@ class TestMotif:
         motif_strip_reverse = motif_strip.reverse_compliment()
         assert motif_strip_reverse == Motif("CG..AT", 5)
     
-    def test_child_of(self):
+    def test_sub_motif_of(self):
         motif1 = Motif("ATCG", 0)
         motif2 = Motif("AT", 0)
-        assert motif1.child_of(motif2) == True
+        assert motif1.sub_motif_of(motif2) == True
 
         motif1 = Motif("A[TCG]CG", 0)
         motif2 = Motif("A.C", 0)
-        assert motif1.child_of(motif2) == True
+        assert motif1.sub_motif_of(motif2) == True
 
         motif1 = Motif("ATCG", 0)
         motif2 = Motif("AT", 0)
-        assert motif1.child_of(motif2) == False
+        assert motif1.sub_motif_of(motif2) == True
 
         motif1 = Motif("ATCG", 2)
         motif2 = Motif("CG", 0)
-        assert motif1.child_of(motif2) == False
+        assert motif1.sub_motif_of(motif2) == True
 
         motif1 = Motif("ATCG", 2)
         motif2 = Motif("CG", 2)
-        assert motif1.child_of(motif2) == False
+        assert motif1.sub_motif_of(motif2) == False
+
+        motif1 = Motif("CG", 1)
+        motif2 = Motif("ATCG", 2)
+        assert motif1.sub_motif_of(motif2) == False
+
+    def test_sub_string_of(self):
+        # Equal motifs strings
+        motif1 = Motif("ATCG", 2)
+        motif2 = Motif("ATCG", 0)
+        assert motif1.sub_string_of(motif2) == True
+
+        # Single base difference
+        motif1 = Motif("AGCG", 2)
+        motif2 = Motif("ATCG", 0)
+        assert motif1.sub_string_of(motif2) == False
+
+        # Longer sub string of shorter
+        motif1 = Motif("ATCG", 0)
+        motif2 = Motif("AT", 0)
+        assert motif1.sub_string_of(motif2) == True
+
+        # Workrking with braces
+        motif1 = Motif("ACC", 0)
+        motif2 = Motif("A[CG]C", 2)
+        assert motif1.sub_string_of(motif2) == True
+
+        # Working with dots
+        motif1 = Motif("ATCG", 0)
+        motif2 = Motif("AT.G", 2)
+        assert motif1.sub_string_of(motif2) == True
+
+        # Works when braces in motif1
+        motif1 = Motif("AT.G", 0)
+        motif2 = Motif("ATCG", 2)
+        assert motif1.sub_string_of(motif2) == False
+
+        # Works when braces in motif1
+        motif1 = Motif("AT[ACG]G", 0)
+        motif2 = Motif("ATCG", 0)
+        assert motif1.sub_string_of(motif2) == False
+
+        # Works when motif1 is longer
+        motif1 = Motif("T.....ATCG...C", 0)
+        motif2 = Motif("ATCG", 2)
+        assert motif1.sub_string_of(motif2) == True
+
+        # Works when motif2 is longer
+        motif1 = Motif("ATCG", 2)
+        motif2 = Motif("T.....ATCG...C", 0)
+        assert motif1.sub_string_of(motif2) == False
+
+        # Dots and braces in both
+        motif1 = Motif("[AT]..AT..CG[TA]C..C", 2)
+        motif2 = Motif("[TA]T..CG[AT][GC]", 0)
+        assert motif1.sub_string_of(motif2) == True
+
+    def test_distance(self):
+        motif1 = Motif("A[TCG]CG", 0)
+        motif2 = Motif("A.C", 0)
+        assert motif1.distance(motif2) == 2
+
+        motif1 = Motif("ATCG", 0)
+        motif2 = Motif("AT", 0)
+        assert motif1.distance(motif2) == 2
 
         motif1 = Motif("ATCG", 2)
         motif2 = Motif("CG", 0)
-        assert motif1.child_of(motif2) == True
+        assert motif1.distance(motif2) == 2
 
-        motif1 = Motif("CG", 2)
+        motif1 = Motif("CG", 0)
         motif2 = Motif("ATCG", 2)
-        assert motif1.child_of(motif2) == False
+        assert motif1.distance(motif2) == 2
+
+        motif1 = Motif("C...ATCG", 6)
+        motif2 = Motif("CG", 0)
+        assert motif1.distance(motif2) == 3
+
+        motif1 = Motif("CG", 0)
+        motif2 = Motif("C...ATCG", 6)
+        assert motif1.distance(motif2) == 3
+
+        motif1 = Motif("C..CG...G", 3)
+        motif2 = Motif("CG", 0)
+        assert motif1.distance(motif2) == 2
+
+        motif1 = Motif("CG", 0)
+        motif2 = Motif("C..CG...G", 3)
+        assert motif1.distance(motif2) == 2
+
+        motif1 = Motif("CG", 0)
+        motif2 = Motif("C..CG...[GC]", 3)
+        assert motif1.distance(motif2) == 2
+<<<<<<< HEAD
+    def test_merge(self):
+        motif1 = Motif("..A..", 2)
+        motif2 = Motif("..C..", 2)
+        assert motif1.merge(motif2) == Motif("..[AC]..", 2)
+
+        motif1 = Motif(".ATGC.", 1)
+        motif2 = Motif(".TCAG", 2)
+        merged = motif1.merge(motif2)
+        assert merged == Motif("..[AC][AT]G..", 2)
+        assert merged.mod_position == 2
+
+        motif1 = Motif(".[AT]T.C.[CT]T", 2)
+        motif2 = Motif(".[GC].CA.[CG]G", 2)
+        merged = motif1.merge(motif2)
+        assert merged == Motif("....[AC].[CGT][GT]", 2)
+        assert merged.mod_position == 2
+
+=======
+>>>>>>> 756ec0aaa02f67bccb18ad0f571059b2960f54b5
+        
+        
 
 
 
