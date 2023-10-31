@@ -40,8 +40,6 @@ def remove_sub_motifs(motif_df):
         motif_df_clean.append(df_clean)
     motif_df_clean = pl.concat(motif_df_clean)
     return motif_df_clean
-<<<<<<< HEAD
-<<<<<<< HEAD
 
 def merge_motifs_in_df(motif_df, pileup, assembly):
     new_df = []
@@ -80,7 +78,3 @@ def merge_motifs_in_df(motif_df, pileup, assembly):
         new_df.append(pl.concat(merged_df))
     new_df = pl.concat(new_df)
     return new_df
-=======
->>>>>>> 756ec0aaa02f67bccb18ad0f571059b2960f54b5
-=======
->>>>>>> 756ec0aaa02f67bccb18ad0f571059b2960f54b5

@@ -62,15 +62,18 @@ Nanomotif output motif at different processing levels
 - **motifs-score-sub-noise-filtered.tsv**, above filtration and removal of motifs with too many isolated bases, e.g. ..G....C..A is not considered a motif
 - **motifs.tsv**, above filtration and merging of motif based on edit distance. required edit distance is based on expected distanve vs. motif length (estimated from REBASE gold standar motifs)
 
-Columns in output
-- **sequence**, padded motif all of equal length
-- **score**, scored used for selecting motif during search 
-- **contig**, reference in which the motif was found
-- **mod_type**, the type of modification [a or m]
-- **motif**, trimmed motif without padding. braces a re used to indicate multi base match and . used to indicate any base (N)
-- **mod_position**, position within the motif where the modification is located, 0-based index.
-- **alpha**, alpha parameter of the BetaBernoulli posterior
-- **beta**, beta parameter of the BetaBernoulli posterior
+Description of the columns in all of the above mentioned files
+| **Column**       | **Description**                                                                                       |
+|------------------|-------------------------------------------------------------------------------------------------------|
+| **sequence**     | padded motif all of equal length                                                                      |
+| **score**        | score used for selecting motif during search. -1 indicate a motif merging has occoured and scoring is not present |
+| **contig**       | reference in which the motif was found                                                                |
+| **mod_type**     | the type of modification [a or m]                                                                     |
+| **motif**        | trimmed motif without padding. braces are used to indicate multi base match and . used to indicate any base (N) |
+| **mod_position** | position within the motif where the modification is located, 0-based index.                            |
+| **alpha**        | alpha parameter of the BetaBernoulli posterior                                                       |
+| **beta**         | beta parameter of the BetaBernoulli posterior                                                        |
+
 
 ## Contributing
 
