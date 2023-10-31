@@ -116,6 +116,9 @@ def main():
         pl.col("model").apply(lambda x: x._alpha).alias("alpha"),
         pl.col("model").apply(lambda x: x._beta).alias("beta")
     ).drop("model").write_csv(args.output + "/motifs.tsv", separator="\t")
+<<<<<<< HEAD
+>>>>>>> 756ec0aaa02f67bccb18ad0f571059b2960f54b5
+=======
 >>>>>>> 756ec0aaa02f67bccb18ad0f571059b2960f54b5
 
 if __name__ == "__main__":

@@ -175,6 +175,7 @@ class TestMotif:
         motif2 = Motif("C..CG...[GC]", 3)
         assert motif1.distance(motif2) == 2
 <<<<<<< HEAD
+<<<<<<< HEAD
     def test_merge(self):
         motif1 = Motif("..A..", 2)
         motif2 = Motif("..C..", 2)
@@ -192,6 +193,8 @@ class TestMotif:
         assert merged == Motif("....[AC].[CGT][GT]", 2)
         assert merged.mod_position == 2
 
+=======
+>>>>>>> 756ec0aaa02f67bccb18ad0f571059b2960f54b5
 =======
 >>>>>>> 756ec0aaa02f67bccb18ad0f571059b2960f54b5
         
