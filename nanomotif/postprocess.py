@@ -18,6 +18,19 @@ def remove_noisy_motifs(motif_df):
     motif_df_clean = pl.concat(motif_df_clean)
     return motif_df_clean
 
+def remove_child_motifs(motifs):
+    parent_motifs = []
+    for i, motif in enumerate(motifs):
+        parent = True
+        for j, other in enumerate(motifs):
+            if i == j:
+                continue
+            if motif.sub_string_of(other):
+                parent = False
+                break
+        if parent:
+            parent_motifs.append(motif)
+    return parent_motifs
 
 def remove_sub_motifs(motif_df):
     motif_df_clean = []
@@ -25,17 +38,7 @@ def remove_sub_motifs(motif_df):
         motif_strings = df.get_column("motif").to_list()
         positions = df.get_column("mod_position").to_list()
         motifs = [nm.candidate.Motif(motif_string, pos) for motif_string, pos in zip(motif_strings, positions)]
-        parent_motifs = []
-        for i, motif in enumerate(motifs):
-            parent = True
-            for j, other in enumerate(motifs):
-                if i == j:
-                    continue
-                if motif.sub_string_of(other):
-                    parent = False
-                    break
-            if parent:
-                parent_motifs.append(motif)
+        parent_motifs = remove_child_motifs(motifs)
         df_clean = df.filter(col("motif").is_in(parent_motifs))
         motif_df_clean.append(df_clean)
     motif_df_clean = pl.concat(motif_df_clean)

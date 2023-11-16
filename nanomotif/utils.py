@@ -21,7 +21,8 @@ def subseq_indices(subseq, seq):
     """
     Find occourance indeces of a subseq in a seq
     """
-    index = [match.start() for match in re.finditer(subseq, seq)]
+    compiled_subseq = re.compile(subseq)
+    index = [match.start() for match in re.finditer(compiled_subseq, seq)]
     return np.array(index)
 
 def calculate_match_length(regex):

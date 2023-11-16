@@ -1,6 +1,5 @@
 import nanomotif as nm
 import logging as log
-import polars as pl
 import os
 import json
 
@@ -8,6 +7,7 @@ def main():
     # Parse arguments
     parser = nm.argparser.create_parser()
     args = parser.parse_args()
+
 
     # Check if output directory exists
     if not os.path.exists(args.output):
@@ -30,6 +30,11 @@ def main():
     log.getLogger().addHandler(log.StreamHandler())
     if args.verbose:
         log.getLogger().setLevel(log.DEBUG)
+
+    # Set threads for polars
+    os.environ["POLARS_MAX_THREADS"] = str(args.threads)
+    import polars as pl
+    log.info(f"Using {pl.threadpool_size()} threads for polars")
 
 
     # Log arguments
@@ -88,32 +93,32 @@ def main():
 
     log.info(" - Writing motifs")
     motifs = motifs.filter(pl.col("score") > 0.15)
+    if len(motifs) == 0:
+        log.info("No motifs found")
+        return
     save_motif_df(motifs, "motifs-score-filtered")
 
     log.info(" - Removing sub motifs")
     motifs = nm.postprocess.remove_sub_motifs(motifs)
+    if len(motifs) == 0:
+        log.info("No motifs found")
+        return
     save_motif_df(motifs, "motifs-score-sub-filtered")
 
     log.info(" - Removing noisy motifs")
     motifs = nm.postprocess.remove_noisy_motifs(motifs)
+    if len(motifs) == 0:
+        log.info("No motifs found")
+        return
     save_motif_df(motifs, "motifs-score-sub-noise-filtered")
 
     log.info(" - Merging motifs")
     motifs = nm.postprocess.merge_motifs_in_df(motifs, pileup, assembly)
+    if len(motifs) == 0:
+        log.info("No motifs found")
+        return
     save_motif_df(motifs, "motifs")
-    motifs.with_columns(
-        pl.col("model").apply(lambda x: x._alpha).alias("alpha"),
-        pl.col("model").apply(lambda x: x._beta).alias("beta")
-    ).drop("model").write_csv(args.output + "/motifs-raw.tsv", separator="\t")
 
-    log.info("Postprocessing motifs")
-    motifs = motifs.filter(pl.col("score") > 0.15)
-    motifs = nm.postprocess.remove_sub_motifs(motifs)
-    motifs = nm.postprocess.remove_noisy_motifs(motifs)
-    motifs.with_columns(
-        pl.col("model").apply(lambda x: x._alpha).alias("alpha"),
-        pl.col("model").apply(lambda x: x._beta).alias("beta")
-    ).drop("model").write_csv(args.output + "/motifs.tsv", separator="\t")
-
+    log.info("Done")
 if __name__ == "__main__":
     main()

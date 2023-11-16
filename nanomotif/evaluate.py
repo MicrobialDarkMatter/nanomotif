@@ -117,7 +117,7 @@ def motif_model_read(pileup, contig: str, motif):
 def process_sample(assembly, pileup, 
                    max_candidate_size = 40,
                    min_read_methylation_fraction = 0.8,
-                   min_valid_coverage = 10,
+                   min_valid_coverage = 1,
                    min_kl_divergence = 0.1
                    ):
     """
@@ -134,6 +134,14 @@ def process_sample(assembly, pileup,
     - cdf_position (float): The position to evaluate the cdf at.
     - min_motif_frequency (int): Used to get minimum number of sequences to evaluate motif at.
     """
+    assert pileup is not None, "Pileup is None"
+    assert len(pileup) > 0, "Pileup is empty" 
+    assert assembly is not None, "Assembly is None"
+    assert max_candidate_size > 0, "max_candidate_size must be greater than 0"
+    assert min_read_methylation_fraction >= 0 and min_read_methylation_fraction <= 1, "min_read_methylation_fraction must be between 0 and 1"
+    assert min_valid_coverage >= 0, "min_valid_coverage must be greater than 0"
+    assert min_kl_divergence >= 0, "min_kl_divergence must be greater than 0"
+
     padding = max_candidate_size // 2
     result = []
     pileup = pileup \
@@ -143,8 +151,7 @@ def process_sample(assembly, pileup,
             .groupby(["contig", "mod_type"])
     
     for (contig, modtype), subpileup in pileup:
-        log.info(f"Processing {contig}")
-        log.info(f"Processing {modtype}")
+        log.info(f"Processing {contig} {modtype}")
 
         contig_sequence = assembly.assembly[contig]
         index_plus = subpileup.filter(pl.col("fraction_mod") > min_read_methylation_fraction) \
@@ -154,6 +161,7 @@ def process_sample(assembly, pileup,
             .filter(pl.col("Nvalid_cov") > min_valid_coverage) \
             .filter(pl.col("strand") == "-").get_column("position").to_list()
         if len(index_minus) <= 1 or len(index_plus) <= 1:
+            log.info("Too few methylated positions")
             continue
 
         sequences_plus = contig_sequence.sample_at_indices(index_plus, padding)
@@ -171,6 +179,7 @@ def process_sample(assembly, pileup,
             .filter(col("sequence").is_in(best_candidates))
         
         if len(identified_motifs) == 0:
+            log.info("No motifs found")
             continue
         else:
             result.append(identified_motifs.with_columns(
@@ -191,6 +200,16 @@ def process_sample(assembly, pileup,
 # Motif candidate state space 
 
 def find_best_candidates(methylation_sequences, sequence, pileup, min_kl = 0.2, max_dead_ends = 3):
+    """
+    Find the best motif candidates in a sequence.
+
+    Parameters:
+    - methylation_sequences (DNAarray): The methylation sequences extracted from the contig at methylated sites.
+    - sequence (DNAsequence): The contig to be processed.
+    - pileup (Pileup): The pileup to be processed.
+    - min_kl (float): The minimum KL-divergence for a position in the candidate to be expanded
+    - max_dead_ends (int): The maximum number of low scoring candidates before the search is terminated.
+    """
     padding = methylation_sequences.shape[1] // 2
     total_sequences = methylation_sequences.shape[0]
     mod_type = pileup.get_column("mod_type").unique().to_list()[0]
@@ -214,12 +233,12 @@ def find_best_candidates(methylation_sequences, sequence, pileup, min_kl = 0.2, 
             methylation_sequences_subset, 
             motif_graph = motif_graph,
             min_kl = min_kl,
-            max_rounds_since_new_best = 30
+            max_rounds_since_new_best = 5
         )
 
         # If there is no naive guess, stop the search
         if naive_guess == root_motif:
-            log.info("No naive guess found, stopping search")
+            log.debug("No naive guess found, stopping search")
             break
         guess = naive_guess
         # next_guess = naive_guess
@@ -240,25 +259,25 @@ def find_best_candidates(methylation_sequences, sequence, pileup, min_kl = 0.2, 
         seq_before = methylation_sequences_subset.shape[0]
         methylation_sequences_subset = methylation_sequences_subset.filter_sequence_matches(naive_guess.one_hot(), keep_matches = False)
         if methylation_sequences_subset is None:
-            log.info("No more sequences left")
+            log.debug("No more sequences left")
             break
 
         # Check if we should continue the search
         seq_remaining = methylation_sequences_subset.shape[0]
         seq_remaining_percent = seq_remaining/total_sequences
-        log.info(f"{naive_guess}, {seq_before-seq_remaining} seqs. model: {motif_graph.nodes[naive_guess]['model']}. ({100*seq_remaining_percent:.1f} % left)")
+        log.debug(f"{naive_guess}, {seq_before-seq_remaining} seqs. model: {motif_graph.nodes[naive_guess]['model']}. ({100*seq_remaining_percent:.1f} % left)")
 
-        if motif_graph.nodes[naive_guess]["model"].mean() < 0.3:
+        if motif_graph.nodes[naive_guess]["score"] < 0.1:
             dead_ends += 1
-            log.info(f"Candidate has low score. {dead_ends} of {max_dead_ends} before temination")
+            log.debug(f"Candidate has low score. {dead_ends} of {max_dead_ends} before temination")
             continue
 
         best_candidates.append(naive_guess)
         
         if (seq_remaining/total_sequences) < 0.01:
-            log.info("Stopping search, too few sequences left")
+            log.debug("Stopping search, too few sequences left")
             break
-        log.info("Continuing search")
+        log.debug("Continuing search")
     return motif_graph, best_candidates
 
 
@@ -332,7 +351,7 @@ def motif_child_nodes_kl_dist_prune(motif, meth_pssm, contig_pssm, min_kl=0.1, f
                 yield Motif("".join(new_motif), motif.mod_position)
 
 def a_star_search(root_motif, contig, pileup, methylation_sequences, 
-                  motif_graph = None, min_kl = 0.1, max_rounds_since_new_best = 10):
+                  motif_graph = None, min_kl = 0.1, max_rounds_since_new_best = 5):
     """
     A* search for methylation motifs
 

@@ -183,7 +183,7 @@ class DNAsequence:
         sequences : EqualLengthDNASet
             Sequences of length 2 * padding + 1
         """
-        indices_checked = [index for index in indices if index >= padding and index <= (len(self) - padding)]
+        indices_checked = [index for index in indices if (index > padding) and (index < (len(self) - padding))]
         return EqualLengthDNASet([self.sample_at_index(index, padding) for index in indices_checked])
 
     def sample_subsequence(self, length):
@@ -552,3 +552,108 @@ class DNAarray(np.ndarray):
             The PSSM
         """
         return self.sum(axis = 0).transpose() / self.shape[0]
+
+def regex_to_iupac(regex):
+    # Dictionary to map sorted nucleotide combinations to IUPAC codes
+    mapping = {
+        "A": "A",
+        "T": "T",
+        "C": "C",
+        "G": "G",
+        "AG": "R",
+        "CT": "Y",
+        "CG": "S",
+        "AT": "W",
+        "GT": "K",
+        "AC": "M",
+        "CGT": "B",
+        "AGT": "D",
+        "ACT": "H",
+        "ACG": "V"
+    }
+
+    # Function to sort characters inside brackets and replace with IUPAC code
+    def replace_with_iupac(match):
+        sorted_seq = "".join(sorted(match.group(1)))
+        return mapping.get(sorted_seq, "")
+
+    # Replace all [xy] patterns with their corresponding IUPAC code
+    iupac_seq = re.sub(r'\[([A|T|C|G]+)\]', replace_with_iupac, regex)
+
+    # Replace remaining dots with N for any nucleotide
+    iupac_seq = iupac_seq.replace(".", "N")
+    
+    return iupac_seq
+
+def ipuac_to_regex(iupac):
+    # Dictionary to map sorted nucleotide combinations to IUPAC codes
+    mapping = {
+        "A": "A",
+        "T": "T",
+        "C": "C",
+        "G": "G",
+        "R": "AG",
+        "Y": "CT",
+        "S": "CG",
+        "W": "AT",
+        "K": "GT",
+        "M": "AC",
+        "B": "CGT",
+        "D": "AGT",
+        "H": "ACT",
+        "V": "ACG",
+        "N": "."
+    }
+
+    # Function to sort characters inside brackets and replace with IUPAC code
+    def replace_with_iupac(match):
+        regex_seq = mapping.get(match.group(0))
+        if len(regex_seq) == 1:
+            return regex_seq
+        else:
+            return "[" + mapping.get(match.group(0)) + "]"
+
+    # Replace all [xy] patterns with their corresponding IUPAC code
+    regex_seq = re.sub(r'.', replace_with_iupac, iupac)
+    return regex_seq
+
+
+
+def regex_to_iupac_n(regex):
+    # Dictionary to map sorted nucleotide combinations to IUPAC codes
+    mapping = {
+        "A": "A",
+        "T": "T",
+        "C": "C",
+        "G": "G",
+        "AG": "R",
+        "CT": "Y",
+        "CG": "S",
+        "AT": "W",
+        "GT": "K",
+        "AC": "M",
+        "CGT": "B",
+        "AGT": "D",
+        "ACT": "H",
+        "ACG": "V"
+    }
+
+    # Function to sort characters inside brackets and replace with IUPAC code
+    def replace_with_iupac(match):
+        sorted_seq = "".join(sorted(match.group(1)))
+        return mapping.get(sorted_seq, "")
+
+    # Replace all [xy] patterns with their corresponding IUPAC code
+    iupac_seq = re.sub(r'\[([A|T|C|G]+)\]', replace_with_iupac, regex)
+
+    # Replace remaining dots with N for any nucleotide
+    iupac_seq = iupac_seq.replace(".", "N")
+
+    # Replace consecutive N's with N followed by the count (only if 2 or more)
+    def replace_ns(match):
+        length = len(match.group(0))
+        return r'$\mathregular{N_' + str(length) + '}$' if length > 4 else 'N'
+
+    iupac_seq = re.sub(r'N+', replace_ns, iupac_seq)
+    
+    return iupac_seq

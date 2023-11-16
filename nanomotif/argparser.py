@@ -12,8 +12,8 @@ def  create_parser():
     # Argument for output file
     parser.add_argument("output", type=str, help="Path to the output file.")
 
-    # Verbosity
-    parser.add_argument("-v", "--verbose", action="store_true", help="Increase output verbosity. (set logger to debug level)")
+    # Argument for number of threads
+    parser.add_argument("-t", "--threads", type=int, default=1, help="Number of threads to use. Default is 1.")
 
     # Argument for motif length
     parser.add_argument("-k", "--max_motif_length", type=int, default=30, help="Length of the motif to be searched for. Default is 30.")
@@ -26,6 +26,9 @@ def  create_parser():
 
     # min KL-divergence
     parser.add_argument("--min_kl_divergence", type=float, default=0.2, help="Minimum KL-divergence for growing motif. Default is 0.1.")
+
+    # Verbosity
+    parser.add_argument("-v", "--verbose", action="store_true", help="Increase output verbosity. (set logger to debug level)")
 
     return parser
     

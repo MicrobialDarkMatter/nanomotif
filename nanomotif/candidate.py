@@ -13,6 +13,12 @@ class Motif(str):
         self.mod_position = mod_position
         self.string = self.__str__()
 
+    def from_iupac(iupac_motif):
+        """
+        Generate Motif from IUPAC seqeunce
+        """
+        
+
     def sub_motif_of(self, other_motif):
         """
         Check if a motif is in another motif.
