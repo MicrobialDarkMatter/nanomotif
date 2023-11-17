@@ -5,6 +5,9 @@ import logging as log
 import itertools
 from itertools import takewhile
 from scipy.stats import entropy
+import multiprocessing
+from multiprocessing import get_context
+import progressbar
 from nanomotif.constants import *
 from nanomotif.model import BetaBernoulliModel
 from nanomotif.utils import subseq_indices, calculate_match_length
@@ -12,6 +15,9 @@ from nanomotif.seq import EqualLengthDNASet, DNAsequence
 from nanomotif.candidate import Motif, MotifTree
 import heapq as hq
 import networkx as nx
+import warnings
+import time
+
 
 ##########################################
 # Motif candidate scoring
@@ -147,19 +153,19 @@ def process_sample(assembly, pileup,
     pileup = pileup \
             .filter(pl.col("Nvalid_cov") > min_valid_coverage) \
             .filter(pl.col("fraction_mod") >= min_read_methylation_fraction) \
-            .sort("contig") \
-            .groupby(["contig", "mod_type"])
-    
-    for (contig, modtype), subpileup in pileup:
+            .sort("contig") 
+    total_tasks = pileup.select(pl.struct(["contig", "mod_type"]).n_unique()).item()
+
+    #
+    widgets=[
+        progressbar.Timer(), ' | ',progressbar.Counter(), ' of ', str(total_tasks),' - ', progressbar.Percentage(), ' ',progressbar.Bar(),' (', progressbar.ETA(), ') '
+    ]
+    for (contig, modtype), subpileup in progressbar.progressbar(pileup.groupby(["contig", "mod_type"]), widgets=widgets, max_value=total_tasks, redirect_stdout=True):
         log.info(f"Processing {contig} {modtype}")
 
         contig_sequence = assembly.assembly[contig]
-        index_plus = subpileup.filter(pl.col("fraction_mod") > min_read_methylation_fraction) \
-            .filter(pl.col("Nvalid_cov") > min_valid_coverage) \
-            .filter(pl.col("strand") == "+").get_column("position").to_list()
-        index_minus = subpileup.filter(pl.col("fraction_mod") > min_read_methylation_fraction) \
-            .filter(pl.col("Nvalid_cov") > min_valid_coverage) \
-            .filter(pl.col("strand") == "-").get_column("position").to_list()
+        index_plus = subpileup.filter(pl.col("strand") == "+").get_column("position").to_list()
+        index_minus = subpileup.filter(pl.col("strand") == "-").get_column("position").to_list()
         if len(index_minus) <= 1 or len(index_plus) <= 1:
             log.info("Too few methylated positions")
             continue
@@ -194,6 +200,166 @@ def process_sample(assembly, pileup,
             pl.col("sequence").apply(lambda motif: padding - count_periods_at_start(motif)).alias("mod_position")
         ])
     return motifs
+
+
+
+
+
+def process_subpileup(args, counter, lock, assembly, min_kl_divergence, padding):
+    """
+    Process a single subpileup for one contig and one modtype
+
+    Parameters:
+    - args (tuple): The arguments to the function: contig, modtype, subpileup
+    - counter (multiprocessing.Value): The progress counter
+    - lock (multiprocessing.Lock): The lock for the progress counter
+    - assembly (Assembly): The assembly to be processed.
+    - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
+    - padding (int): The padding to use for the motif.
+    """
+    warnings.filterwarnings("ignore")
+    contig, modtype, subpileup = args
+    with lock:
+        counter.value += 1
+    log.info(f"Processing {contig} {modtype}")
+
+    contig_sequence = assembly.assembly[contig]
+    index_plus = subpileup.filter(pl.col("strand") == "+").get_column("position").to_list()
+    index_minus = subpileup.filter(pl.col("strand") == "-").get_column("position").to_list()
+    if len(index_minus) <= 1 or len(index_plus) <= 1:
+        log.info("Too few methylated positions")
+        return None
+
+    sequences_plus = contig_sequence.sample_at_indices(index_plus, padding)
+    sequences_minus = contig_sequence.sample_at_indices(index_minus, padding).reverse_compliment()
+    sequences = sequences_plus + sequences_minus
+    sequences_array = sequences.convert_to_DNAarray()
+
+    motif_graph, best_candidates = find_best_candidates(
+        sequences_array, 
+        contig_sequence, 
+        subpileup, 
+        min_kl = min_kl_divergence
+    )
+    identified_motifs = nxgraph_to_dataframe(motif_graph) \
+        .filter(col("sequence").is_in(best_candidates))
+    
+    if len(identified_motifs) == 0:
+        log.info("No motifs found")
+        return None
+    else:
+        identified_motifs = identified_motifs.with_columns(
+            pl.lit(contig).alias("contig"),
+            pl.lit(modtype).alias("mod_type")
+        ).with_columns([
+            pl.col("model").apply(lambda x: x._alpha).alias("alpha"),
+            pl.col("model").apply(lambda x: x._beta).alias("beta")
+        ]).drop("model")
+        return identified_motifs
+    
+
+def update_progress_bar(progress, total_tasks, timeout=300):
+    """
+    Update progress bar for parallel processing
+
+    Parameters:
+    - progress (multiprocessing.Value): The progress counter
+    - total_tasks (int): The total number of tasks
+    - timeout (int): The timeout in seconds
+    """
+    last_update_time = time.time()
+    with progressbar.ProgressBar(max_value=total_tasks) as bar:
+        while True:
+            current_time = time.time()
+            if progress.value >= total_tasks:
+                break
+            if current_time - last_update_time > timeout:
+                print("Timeout reached. Exiting progress bar update.")
+                break
+            bar.update(progress.value)
+
+def process_sample_parallel(
+        assembly, pileup, 
+        threads = 2,
+        max_candidate_size = 40,
+        min_read_methylation_fraction = 0.8,
+        min_valid_coverage = 1,
+        min_kl_divergence = 0.1
+    ):
+    """
+    Process a single sample
+    
+    Parameters:
+    - assembly (Assembly): The assembly to be processed.
+    - pileup (Pileup): The pileup to be processed.
+    - max_candidate_size (int): The maximum size of the candidate motifs.
+    - min_read_methylation_fraction (float): The minimum fraction of reads that must be methylated for a position to be considered methylated.
+    - min_valid_coverage (int): The minimum number of reads that must cover a position for it to be considered valid.
+    - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
+    - min_cdf_score (float): Minimum score of 1 - cdf(cdf_position) for a motif to be considered valid.
+    - cdf_position (float): The position to evaluate the cdf at.
+    - min_motif_frequency (int): Used to get minimum number of sequences to evaluate motif at.
+    """
+    assert pileup is not None, "Pileup is None"
+    assert len(pileup) > 0, "Pileup is empty" 
+    assert assembly is not None, "Assembly is None"
+    assert max_candidate_size > 0, "max_candidate_size must be greater than 0"
+    assert min_read_methylation_fraction >= 0 and min_read_methylation_fraction <= 1, "min_read_methylation_fraction must be between 0 and 1"
+    assert min_valid_coverage >= 0, "min_valid_coverage must be greater than 0"
+    assert min_kl_divergence >= 0, "min_kl_divergence must be greater than 0"
+
+    # Infer padding size from candidate_size
+    padding = max_candidate_size // 2
+
+    # Filter pileup
+    pileup = pileup \
+            .filter(pl.col("Nvalid_cov") > min_valid_coverage) \
+            .filter(pl.col("fraction_mod") >= min_read_methylation_fraction) \
+            .sort("contig") 
+    
+    # Create a list of tasks (TODO: not have a list of all data)
+    tasks = [(contig, modtype, subpileup) for (contig, modtype), subpileup in pileup.groupby(["contig", "mod_type"])]
+
+    # Create a progress manager
+    manager = multiprocessing.Manager()
+    counter = manager.Value('i', 0)
+    lock = manager.Lock()
+
+    # Create a pool of workers
+    pool = get_context("spawn").Pool(processes=threads)
+
+    # Create a process for the progress bar
+    progress_bar_process = multiprocessing.Process(target=update_progress_bar, args=(counter, len(tasks)))
+    progress_bar_process.start()
+
+    # Put them workers to work
+    results = pool.starmap(process_subpileup, [(task, counter, lock, assembly, min_kl_divergence, padding) for task in tasks])
+    results = [result for result in results if result is not None]
+
+    # Close the pool
+    pool.close()
+    pool.join()
+
+    # Close the progress bar
+    progress_bar_process.join()
+
+    if len(results) == 0:
+        return None
+    motifs = pl.concat(results)
+
+    model_col = []
+    for a, b in zip(motifs.get_column("alpha").to_list(), motifs.get_column("beta").to_list()):
+        model_col.append(BetaBernoulliModel(a, b))
+
+    motifs = motifs.with_columns([
+            pl.lit(model_col).alias("model"),
+            pl.col("sequence").apply(lambda motif: motif[count_periods_at_start(motif):len(motif)-count_periods_at_end(motif)]).alias("motif"),
+            pl.col("sequence").apply(lambda motif: padding - count_periods_at_start(motif)).alias("mod_position")
+        ]).drop(["alpha", "beta"])
+
+    return motifs
+
+
 
 
 #########################################################################

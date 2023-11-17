@@ -2,8 +2,13 @@ import nanomotif as nm
 import logging as log
 import os
 import json
+os.environ["POLARS_MAX_THREADS"] = "1"
+import polars as pl
+import warnings
 
 def main():
+    warnings.filterwarnings("ignore")
+
     # Parse arguments
     parser = nm.argparser.create_parser()
     args = parser.parse_args()
@@ -27,15 +32,8 @@ def main():
         format="%(asctime)s - %(levelname)s - %(message)s",
         datefmt="%d-%b-%y %H:%M:%S",
     )
-    log.getLogger().addHandler(log.StreamHandler())
     if args.verbose:
         log.getLogger().setLevel(log.DEBUG)
-
-    # Set threads for polars
-    os.environ["POLARS_MAX_THREADS"] = str(args.threads)
-    import polars as pl
-    log.info(f"Using {pl.threadpool_size()} threads for polars")
-
 
     # Log arguments
     log.info("Arguments:")
@@ -44,14 +42,15 @@ def main():
 
     # Run nanomotif
     log.info("Starting nanomotif")
+    log.info("Loading pileup")
+    pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.min_fraction)
     log.info("Loading assembly")
     assembly = nm.load_assembly(args.assembly)
     assm_lengths = pl.DataFrame({
         "contig": list(assembly.assembly.keys()),
         "length": [len(contig) for contig in assembly.assembly.values()]
     })
-    log.info("Loading pileup")
-    pileup = nm.load_pileup(args.pileup)
+    log.info("Filtering pileup")
 
     # Filter pileup to contigs with mods
     contigs_with_mods = pileup.pileup \
@@ -63,20 +62,32 @@ def main():
         .get_column("contig").unique().to_list()
 
     total_contigs = len(assembly.assembly.keys())
-    log.info(f"Processing {len(contigs_with_mods)} of {total_contigs} contigs")
 
     contigs_to_process = [contig for contig in assembly.assembly.keys() if contig in contigs_with_mods]
     pileup = pileup.pileup.filter(pl.col("contig").is_in(contigs_to_process))
-
+    remaining_contigs = pileup.get_column("contig").unique().to_list()
+    log.info(f"Processing {len(remaining_contigs)} of {total_contigs} contigs")
     log.info("Identifying motifs")
-    motifs = nm.evaluate.process_sample(
-        assembly,
-        pileup,
-        max_candidate_size = args.max_motif_length,
-        min_read_methylation_fraction = args.min_fraction,
-        min_valid_coverage = args.min_coverage,
-        min_kl_divergence = args.min_kl_divergence
-    )
+    if args.threads == 1:
+        motifs = nm.evaluate.process_sample(
+            assembly,
+            pileup,
+            max_candidate_size = args.max_motif_length,
+            min_read_methylation_fraction = args.min_fraction,
+            min_valid_coverage = args.min_coverage,
+            min_kl_divergence = args.min_kl_divergence
+        )
+    else:
+        motifs = nm.evaluate.process_sample_parallel(
+                assembly,
+                pileup,
+                threads = args.threads,
+                max_candidate_size = args.max_motif_length,
+                min_read_methylation_fraction = args.min_fraction,
+                min_valid_coverage = args.min_coverage,
+                min_kl_divergence = args.min_kl_divergence
+            )
+
     if motifs is None:
         log.info("No motifs found")
         return
