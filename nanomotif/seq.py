@@ -585,7 +585,7 @@ def regex_to_iupac(regex):
     
     return iupac_seq
 
-def ipuac_to_regex(iupac):
+def iupac_to_regex(iupac):
     # Dictionary to map sorted nucleotide combinations to IUPAC codes
     mapping = {
         "A": "A",
@@ -657,3 +657,8 @@ def regex_to_iupac_n(regex):
     iupac_seq = re.sub(r'N+', replace_ns, iupac_seq)
     
     return iupac_seq
+
+
+def reverse_compliment(seq):
+    """Return the reverse complement of the sequence."""
+    return "".join([COMPLEMENT[base] for base in reversed(seq)])

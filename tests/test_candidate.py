@@ -63,6 +63,10 @@ class TestMotif:
         assert motif_strip_reverse == Motif("CG..AT", 5)
     
     def test_sub_motif_of(self):
+        motif1 = Motif("ATCG", 2)
+        motif2 = Motif("ATCG", 2)
+        assert motif1.sub_motif_of(motif2) == True
+
         motif1 = Motif("ATCG", 0)
         motif2 = Motif("AT", 0)
         assert motif1.sub_motif_of(motif2) == True
@@ -190,6 +194,24 @@ class TestMotif:
         merged = motif1.merge(motif2)
         assert merged == Motif("....[AC].[CGT][GT]", 2)
         assert merged.mod_position == 2
+    
+    def test_iupac(self):
+        motif = Motif("A[TCG]CG", 0)
+        assert motif.iupac() == "ABCG"
+        motif = Motif("A.C", 0)
+        assert motif.iupac() == "ANC"
+        motif = Motif("ATCG", 0)
+        assert motif.iupac() == "ATCG"
+        motif = Motif("ATCG", 2)
+        assert motif.iupac() == "ATCG"
+        motif = Motif("CG", 0)
+        assert motif.iupac() == "CG"
+        motif = Motif("C...ATCG", 6)
+        assert motif.iupac() == "CNNNATCG"
+        motif = Motif("C..CG...G", 3)
+        assert motif.iupac() == "CNNCGNNNG"
+        motif = Motif("C..CG...[GC]", 3)
+        assert motif.iupac() == "CNNCGNNNS"
 
         
         
