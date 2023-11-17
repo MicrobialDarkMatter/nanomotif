@@ -24,16 +24,19 @@ def load_fasta(path, trim_names=False, trim_character=" ") -> dict:
             data[active_sequence_name] += line
     return data
 
-def load_pileup(path: str):
+def load_pileup(path: str, threads: int = 1, min_fraction: float = 0):
     """
     Load pileup file from path to pileup.bed output of modkit pileup
     """
-    pileup = pl.read_csv(path, separator = "\t", has_header = False)
-    pileup = pileup.filter(pl.col("column_10") / (pl.col("column_10") + pl.col("column_17")) > 0.3)
-    pileup = pileup.select(["column_1", "column_2","column_4", "column_6", "column_11", "column_10"]) \
-        .rename({"column_1":"contig", "column_2": "position", "column_4": "mod_type", "column_6": "strand", "column_11": "fraction_mod", "column_10":"Nvalid_cov"}) \
-        .with_columns(pl.col("fraction_mod") / 100) \
-        .sort("position")
+    pileup = (
+        pl.scan_csv(path, separator = "\t", has_header = False)
+        .filter(pl.col("column_11") > min_fraction*100)
+        .filter(pl.col("column_10") / (pl.col("column_10") + pl.col("column_17")) > 0.3)
+        .select(["column_1", "column_2","column_4", "column_6", "column_11", "column_10"])
+        .with_columns(pl.col("column_11") / 100)
+        .collect()
+    )
+    pileup = pileup.rename({"column_1":"contig", "column_2": "position", "column_4": "mod_type", "column_6": "strand", "column_11": "fraction_mod", "column_10":"Nvalid_cov"})
     return Pileup(pileup)
 
 def load_assembly(path: str):
