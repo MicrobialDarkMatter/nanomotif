@@ -2,9 +2,10 @@ import numpy as np
 import re
 import itertools
 import networkx as nx
+import logging as log
 from scipy.stats import entropy
 from nanomotif.constants import *
-
+from nanomotif.seq import regex_to_iupac, iupac_to_regex, reverse_compliment
 class Motif(str):
     def __new__(cls, motif_string, *args, **kwargs):
         return str.__new__(cls, motif_string)
@@ -17,7 +18,11 @@ class Motif(str):
         """
         Generate Motif from IUPAC seqeunce
         """
-        
+    def iupac(self):
+        """
+        Get IUPAC sequence of motif
+        """
+        return regex_to_iupac(self.string)
 
     def sub_motif_of(self, other_motif):
         """
@@ -248,53 +253,136 @@ class Motif(str):
             return f"[{''.join(sorted(merged_set.intersection(canonical_bases)))}]"
         else:
             return ''.join(merged_set)  # return as a string without brackets if only one base
+    
+    def explode_motif(self):
+        """
+        Explode a motif into all possible combinations of bases.
+        """
+        exploded_strings = explode_sequence(self.string)
+        return [Motif(motif, self.mod_position) for motif in exploded_strings]
 
-def merge_motifs(motifs, connectivity_dist=2):
-    # Create network where each node is a motif and the edge weight is the distance between them
-    G = nx.Graph()
+
+def explode_sequence(seq):
+    # Splitting the sequence into parts
+    parts = []
+    temp = ''
+    in_brackets = False
+
+    for char in seq:
+        if char == '[':
+            if temp:
+                parts.append([temp])
+                temp = ''
+            in_brackets = True
+            temp += char
+        elif char == ']':
+            temp += char
+            parts.append([temp])
+            temp = ''
+            in_brackets = False
+        else:
+            if in_brackets:
+                temp += char
+            else:
+                parts.append([char])
+
+    # Handling the case where the sequence ends with a non-bracketed part
+    if temp:
+        parts.append([temp])
+
+    # Processing bracketed parts to extract options
+    for i, part in enumerate(parts):
+        if part[0].startswith('['):
+            # Extracting characters between brackets and splitting them into separate options
+            parts[i] = list(part[0][1:-1])
+
+    # Generating all combinations
+    exploded_sequences = [''.join(combination) for combination in itertools.product(*parts)]
+
+    return exploded_sequences
+
+
+def merge_motifs(motifs, connectivity_dist=2, min_length=4):
+    """
+    Merges a Motifs that are closely related. 
+    
+    Args:
+    - motifs (list): List of Motifs to merge.
+    - connectivity_dist (int): Maximum edit distance between motifs to be merged.
+    - min_length (int): Minimum length of motifs to be merged. 4 Based on estimate from REBASE motifs
+
+    Returns:
+    - list: List of merged motifs.
+    """
+    # Create network where each node is a motif and the edge is the edit distance between them
+    distance_graph = nx.Graph()
+
+    # Subset to motif greater than minimum length
+    motifs = [motif for motif in motifs if motif.trimmed_length() > min_length]
+
+    # Pregenerate iupac version and reverse compliments of motifs
+    motifs_iupac = [motif.iupac() for motif in motifs]
+    motifs_iupac_reverse = [reverse_compliment(motif) for motif in motifs_iupac]
+
+    # Add nodes and edges to graph
     for i, motif in enumerate(motifs):
-        G.add_node(i, motif=motif)
-        # Used Rebase motifs to estimate this threashold 
-        # Motif shorter than5 generally dont have multi base positions
-        if motif.trimmed_length() > 4:
-            for j, other in enumerate(motifs):
-                if i != j:
-                    distance = motif.distance(other)
-                    if distance <= connectivity_dist:
-                        G.add_edge(i, j, weight=distance)
+        distance_graph.add_node(i, motif=motif)
+        for j, other in enumerate(motifs):
+            if (i != j) and (motifs_iupac_reverse[i] != motifs_iupac[j]):
+                distance = motif.distance(other)
+                if distance <= connectivity_dist:
+                    distance_graph.add_edge(i, j, dist=distance)
 
-    # Step 1: Create a copy of the graph
-    G_filtered = G.copy()
+    # Find connected components (clusters)
+    clusters = list(nx.connected_components(distance_graph))
 
-    # Step 2: Remove edges below a certain threshold
-    threshold = connectivity_dist  # Set your threshold value here
-    edges_to_remove = [(u, v) for u, v, d in G_filtered.edges(data=True) if d['weight'] > threshold]
-    G_filtered.remove_edges_from(edges_to_remove)
-
-
-    # Step 3: Find connected components (clusters)
-    clusters = list(nx.connected_components(G_filtered))
+    # Check for mutual reachability between clusters, all nodes should have an edge to all other nodes in the cluster
+    def check_all_nodes_connected(graph):
+        n = len(graph.nodes()) 
+        expected_edges = n * (n - 1) / 2
+        is_complete = len(graph.edges()) == expected_edges
+        return is_complete
+    clusters = [cluster for cluster in clusters if check_all_nodes_connected(distance_graph.subgraph(cluster))]
 
     # Now 'clusters' is a list of sets, where each set is a cluster of nodes
-    new_motifs = []
-    single_motifs = []
+    pre_merge_motifs = []
+    merged_motifs = []
     for i, cluster in enumerate(clusters, start=1):
         if len(cluster) == 1:
-            single_motifs.append(motifs[list(cluster)[0]])
             continue
-        print(f'Cluster {i}: {cluster}')
+        log.debug(f'Cluster {i}: {cluster}')
+        cluster_motifs = []
         merged_motif = None
         for node in cluster:
-            print(f' - Node {node}: {G.nodes[node]["motif"]}')
+            log.debug(f' - Node {node}: {motifs[node]}')
+            cluster_motifs.append(motifs[node])
             # Merge motifs
             if merged_motif is None:
                 merged_motif = motifs[node]
             else:
-                merged_motif = merged_motif.merge(G.nodes[node]["motif"])
+                merged_motif = merged_motif.merge(distance_graph.nodes[node]["motif"])
 
-        print(f' - Merged motif: {merged_motif}')
-        new_motifs.append(merged_motif)
-    return new_motifs, single_motifs
+        # check if merged motif gives rise to non observed motifs
+        exploded_motifs = merged_motif.explode_motif()
+        all_represeneted = True
+        for motif1 in exploded_motifs:
+            represented = False
+            for motif2 in cluster_motifs:
+                # Should be a child or equal to atleast one premerge motif
+                if motif1.sub_motif_of(motif2):
+                    represented = True
+                    break
+            if not represented:
+                all_represeneted = False
+                break
+
+        if not all_represeneted:
+            log.debug(f' - Merged motif: {merged_motif} does not represent all observed motifs: keeping premerge motifs')
+            continue
+        log.debug(f' - Merged motif: {merged_motif}')
+        pre_merge_motifs += cluster_motifs
+        merged_motifs.append(merged_motif)
+    return merged_motifs, pre_merge_motifs
 
 
 def remove_child_motifs(motifs):

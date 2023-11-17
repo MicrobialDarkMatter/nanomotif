@@ -53,15 +53,15 @@ def merge_motifs_in_df(motif_df, pileup, assembly):
         motifs = [nm.candidate.Motif(seq, pos) for seq, pos in zip(motif_seq, motif_pos)]
 
         # Merge motifs
-        merged_motifs, single_motifs = nm.candidate.merge_motifs(motifs)
+        merged_motifs, pre_merge_motifs = nm.candidate.merge_motifs(motifs)
         
         # Create a new dataframe with the non merged motifs
-        single_df = df.filter(col("motif").is_in(single_motifs))
-        new_df.append(single_df)
-
-        if len(merged_motifs) == 0:
-            # No motifs were mergged
+        if  len(pre_merge_motifs) == 0:
+            # No motifs were merged
+            new_df.append(df)
             continue
+        single_df = df.filter(col("motif").is_in(pre_merge_motifs).not_())
+        new_df.append(single_df)
         merged_df = []
         for motif in merged_motifs:
             merged_model = nm.evaluate.motif_model_contig(
@@ -71,10 +71,10 @@ def merge_motifs_in_df(motif_df, pileup, assembly):
             )
             merged_df.append(pl.DataFrame({
                 "sequence": motif.string,
-                "model": merged_model,
                 "score": -1.,
                 "contig": contig,
                 "mod_type": mod_type,
+                "model": merged_model,
                 "motif": motif.string,
                 "mod_position": motif.mod_position
             }))
