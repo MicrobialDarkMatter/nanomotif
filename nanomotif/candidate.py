@@ -320,15 +320,11 @@ def merge_motifs(motifs, connectivity_dist=2, min_length=4):
     # Subset to motif greater than minimum length
     motifs = [motif for motif in motifs if motif.trimmed_length() > min_length]
 
-    # Pregenerate iupac version and reverse compliments of motifs
-    motifs_iupac = [motif.iupac() for motif in motifs]
-    motifs_iupac_reverse = [reverse_compliment(motif) for motif in motifs_iupac]
-
     # Add nodes and edges to graph
     for i, motif in enumerate(motifs):
         distance_graph.add_node(i, motif=motif)
         for j, other in enumerate(motifs):
-            if (i != j) and (motifs_iupac_reverse[i] != motifs_iupac[j]):
+            if (i != j):
                 distance = motif.distance(other)
                 if distance <= connectivity_dist:
                     distance_graph.add_edge(i, j, dist=distance)

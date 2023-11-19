@@ -1,8 +1,8 @@
 from setuptools import setup, find_packages
-
+exec(open('nanomotif/_version.py').read())
 setup(
     name='nanomotif',
-    version='0.1.0',
+    version=__version__,
     description='Identifying methlyation motifs in nanopore data',
     author='AAU_DarkScience',
     author_email='shei@bio.aau.com',

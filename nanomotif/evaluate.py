@@ -1,5 +1,6 @@
 import numpy as np
 import polars as pl
+import os
 from polars import col
 import logging as log
 import itertools
@@ -13,6 +14,8 @@ from nanomotif.model import BetaBernoulliModel
 from nanomotif.utils import subseq_indices, calculate_match_length
 from nanomotif.seq import EqualLengthDNASet, DNAsequence
 from nanomotif.candidate import Motif, MotifTree
+from nanomotif.logger import configure_logger
+from nanomotif.parallel import update_progress_bar
 import heapq as hq
 import networkx as nx
 import warnings
@@ -120,92 +123,94 @@ def motif_model_read(pileup, contig: str, motif):
 # Motif candidate state space search
 ##########################################
 
-def process_sample(assembly, pileup, 
-                   max_candidate_size = 40,
-                   min_read_methylation_fraction = 0.8,
-                   min_valid_coverage = 1,
-                   min_kl_divergence = 0.1
-                   ):
-    """
-    Process a single sample
-    
-    Parameters:
-    - assembly (Assembly): The assembly to be processed.
-    - pileup (Pileup): The pileup to be processed.
-    - max_candidate_size (int): The maximum size of the candidate motifs.
-    - min_read_methylation_fraction (float): The minimum fraction of reads that must be methylated for a position to be considered methylated.
-    - min_valid_coverage (int): The minimum number of reads that must cover a position for it to be considered valid.
-    - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
-    - min_cdf_score (float): Minimum score of 1 - cdf(cdf_position) for a motif to be considered valid.
-    - cdf_position (float): The position to evaluate the cdf at.
-    - min_motif_frequency (int): Used to get minimum number of sequences to evaluate motif at.
-    """
-    assert pileup is not None, "Pileup is None"
-    assert len(pileup) > 0, "Pileup is empty" 
-    assert assembly is not None, "Assembly is None"
-    assert max_candidate_size > 0, "max_candidate_size must be greater than 0"
-    assert min_read_methylation_fraction >= 0 and min_read_methylation_fraction <= 1, "min_read_methylation_fraction must be between 0 and 1"
-    assert min_valid_coverage >= 0, "min_valid_coverage must be greater than 0"
-    assert min_kl_divergence >= 0, "min_kl_divergence must be greater than 0"
-
-    padding = max_candidate_size // 2
-    result = []
-    pileup = pileup \
-            .filter(pl.col("Nvalid_cov") > min_valid_coverage) \
-            .filter(pl.col("fraction_mod") >= min_read_methylation_fraction) \
-            .sort("contig") 
-    total_tasks = pileup.select(pl.struct(["contig", "mod_type"]).n_unique()).item()
-
-    #
-    widgets=[
-        progressbar.Timer(), ' | ',progressbar.Counter(), ' of ', str(total_tasks),' - ', progressbar.Percentage(), ' ',progressbar.Bar(),' (', progressbar.ETA(), ') '
-    ]
-    for (contig, modtype), subpileup in progressbar.progressbar(pileup.groupby(["contig", "mod_type"]), widgets=widgets, max_value=total_tasks, redirect_stdout=True):
-        log.info(f"Processing {contig} {modtype}")
-
-        contig_sequence = assembly.assembly[contig]
-        index_plus = subpileup.filter(pl.col("strand") == "+").get_column("position").to_list()
-        index_minus = subpileup.filter(pl.col("strand") == "-").get_column("position").to_list()
-        if len(index_minus) <= 1 or len(index_plus) <= 1:
-            log.info("Too few methylated positions")
-            continue
-
-        sequences_plus = contig_sequence.sample_at_indices(index_plus, padding)
-        sequences_minus = contig_sequence.sample_at_indices(index_minus, padding).reverse_compliment()
-        sequences = sequences_plus + sequences_minus
-        sequences_array = sequences.convert_to_DNAarray()
-
-        motif_graph, best_candidates = find_best_candidates(
-            sequences_array, 
-            contig_sequence, 
-            subpileup, 
-            min_kl = min_kl_divergence
-        )
-        identified_motifs = nxgraph_to_dataframe(motif_graph) \
-            .filter(col("sequence").is_in(best_candidates))
-        
-        if len(identified_motifs) == 0:
-            log.info("No motifs found")
-            continue
-        else:
-            result.append(identified_motifs.with_columns(
-                pl.lit(contig).alias("contig"),
-                pl.lit(modtype).alias("mod_type")
-            ))
-    if len(result) == 0:
-        return None
-    motifs = pl.concat(result) \
-        .with_columns([
-            pl.col("sequence").apply(lambda motif: motif[count_periods_at_start(motif):len(motif)-count_periods_at_end(motif)]).alias("motif"),
-            pl.col("sequence").apply(lambda motif: padding - count_periods_at_start(motif)).alias("mod_position")
-        ])
-    return motifs
 
 
 
+#
+#def process_sample(assembly, pileup, 
+#                   max_candidate_size = 40,
+#                   min_read_methylation_fraction = 0.8,
+#                   min_valid_coverage = 1,
+#                   min_kl_divergence = 0.1
+#                   ):
+#    """
+#    Process a single sample
+#    
+#    Parameters:
+#    - assembly (Assembly): The assembly to be processed.
+#    - pileup (Pileup): The pileup to be processed.
+#    - max_candidate_size (int): The maximum size of the candidate motifs.
+#    - min_read_methylation_fraction (float): The minimum fraction of reads that must be methylated for a position to be considered methylated.
+#    - min_valid_coverage (int): The minimum number of reads that must cover a position for it to be considered valid.
+#    - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
+#    - min_cdf_score (float): Minimum score of 1 - cdf(cdf_position) for a motif to be considered valid.
+#    - cdf_position (float): The position to evaluate the cdf at.
+#    - min_motif_frequency (int): Used to get minimum number of sequences to evaluate motif at.
+#    """
+#    assert pileup is not None, "Pileup is None"
+#    assert len(pileup) > 0, "Pileup is empty" 
+#    assert assembly is not None, "Assembly is None"
+#    assert max_candidate_size > 0, "max_candidate_size must be greater than 0"
+#    assert min_read_methylation_fraction >= 0 and min_read_methylation_fraction <= 1, "min_read_methylation_fraction must be between 0 and 1"
+#    assert min_valid_coverage >= 0, "min_valid_coverage must be greater than 0"
+#    assert min_kl_divergence >= 0, "min_kl_divergence must be greater than 0"
+#
+#    padding = max_candidate_size // 2
+#    result = []
+#    pileup = pileup \
+#            .filter(pl.col("Nvalid_cov") > min_valid_coverage) \
+#            .filter(pl.col("fraction_mod") >= min_read_methylation_fraction) \
+#            .sort("contig") 
+#    total_tasks = pileup.select(pl.struct(["contig", "mod_type"]).n_unique()).item()
+#
+#    #
+#    widgets=[
+#        progressbar.Timer(), ' | ',progressbar.Counter(), ' of ', str(total_tasks),' - ', progressbar.Percentage(), ' ',progressbar.Bar(),' (', progressbar.ETA(), ') '
+#    ]
+#    for (contig, modtype), subpileup in progressbar.progressbar(pileup.groupby(["contig", "mod_type"]), widgets=widgets, max_value=total_tasks, redirect_stdout=True):
+#        log.info(f"Processing {contig} {modtype}")
+#
+#        contig_sequence = assembly.assembly[contig]
+#        index_plus = subpileup.filter(pl.col("strand") == "+").get_column("position").to_list()
+#        index_minus = subpileup.filter(pl.col("strand") == "-").get_column("position").to_list()
+#        if len(index_minus) <= 1 or len(index_plus) <= 1:
+#            log.info("Too few methylated positions")
+#            continue
+#
+#        sequences_plus = contig_sequence.sample_at_indices(index_plus, padding)
+#        sequences_minus = contig_sequence.sample_at_indices(index_minus, padding).reverse_compliment()
+#        sequences = sequences_plus + sequences_minus
+#        sequences_array = sequences.convert_to_DNAarray()
+#
+#        motif_graph, best_candidates = find_best_candidates(
+#            sequences_array, 
+#            contig_sequence, 
+#            subpileup, 
+#            min_kl = min_kl_divergence
+#        )
+#        identified_motifs = nxgraph_to_dataframe(motif_graph) \
+#            .filter(col("sequence").is_in(best_candidates))
+#        
+#        if len(identified_motifs) == 0:
+#            log.info("No motifs found")
+#            continue
+#        else:
+#            result.append(identified_motifs.with_columns(
+#                pl.lit(contig).alias("contig"),
+#                pl.lit(modtype).alias("mod_type")
+#            ))
+#    if len(result) == 0:
+#        return None
+#    motifs = pl.concat(result) \
+#        .with_columns([
+#            pl.col("sequence").apply(lambda motif: motif[count_periods_at_start(motif):len(motif)-count_periods_at_end(motif)]).alias("motif"),
+#            pl.col("sequence").apply(lambda motif: padding - count_periods_at_start(motif)).alias("mod_position")
+#        ])
+#    return motifs
+#
+#
 
-
-def process_subpileup(args, counter, lock, assembly, min_kl_divergence, padding):
+def worker_function(args, counter, lock, assembly, min_kl_divergence, padding, minimum_methylation_fraction_confident, log_dir, verbose):
     """
     Process a single subpileup for one contig and one modtype
 
@@ -217,15 +222,46 @@ def process_subpileup(args, counter, lock, assembly, min_kl_divergence, padding)
     - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
     - padding (int): The padding to use for the motif.
     """
+    
     warnings.filterwarnings("ignore")
     contig, modtype, subpileup = args
-    with lock:
-        counter.value += 1
+    
+    process_id = os.getpid()
+    log_file = f"{log_dir}/find-motifs.{process_id}.log"
+    configure_logger(log_file, verbose=verbose)
+
+    try:
+        result = process_subpileup(contig, modtype, subpileup, assembly, min_kl_divergence, padding, minimum_methylation_fraction_confident)
+        with lock:
+            counter.value += 1
+        return result
+    except:
+        with lock:
+            counter.value += 1
+        return None
+
+
+
+
+
+def process_subpileup(contig, modtype, subpileup, assembly, min_kl_divergence, padding, minimum_methylation_fraction_confident):
+    """
+    Process a single subpileup for one contig and one modtype
+
+    Parameters:
+    - args (tuple): The arguments to the function: contig, modtype, subpileup
+    - counter (multiprocessing.Value): The progress counter
+    - lock (multiprocessing.Lock): The lock for the progress counter
+    - assembly (Assembly): The assembly to be processed.
+    - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
+    - padding (int): The padding to use for the motif.
+    """
     log.info(f"Processing {contig} {modtype}")
 
     contig_sequence = assembly.assembly[contig]
-    index_plus = subpileup.filter(pl.col("strand") == "+").get_column("position").to_list()
-    index_minus = subpileup.filter(pl.col("strand") == "-").get_column("position").to_list()
+    subpileup_high_confident = subpileup.filter(pl.col("fraction_mod") >= minimum_methylation_fraction_confident)
+    index_plus = subpileup_high_confident.filter(pl.col("strand") == "+").get_column("position").to_list()
+    index_minus = subpileup_high_confident.filter(pl.col("strand") == "-").get_column("position").to_list()
     if len(index_minus) <= 1 or len(index_plus) <= 1:
         log.info("Too few methylated positions")
         return None
@@ -258,33 +294,16 @@ def process_subpileup(args, counter, lock, assembly, min_kl_divergence, padding)
         return identified_motifs
     
 
-def update_progress_bar(progress, total_tasks, timeout=300):
-    """
-    Update progress bar for parallel processing
-
-    Parameters:
-    - progress (multiprocessing.Value): The progress counter
-    - total_tasks (int): The total number of tasks
-    - timeout (int): The timeout in seconds
-    """
-    last_update_time = time.time()
-    with progressbar.ProgressBar(max_value=total_tasks) as bar:
-        while True:
-            current_time = time.time()
-            if progress.value >= total_tasks:
-                break
-            if current_time - last_update_time > timeout:
-                print("Timeout reached. Exiting progress bar update.")
-                break
-            bar.update(progress.value)
-
 def process_sample_parallel(
         assembly, pileup, 
         threads = 2,
-        max_candidate_size = 40,
-        min_read_methylation_fraction = 0.8,
-        min_valid_coverage = 1,
-        min_kl_divergence = 0.1
+        search_frame_size = 40,
+        threshold_methylation_confident = 0.8,
+        threshold_methylation_general = 0.5,
+        threshold_valid_coverage = 1,
+        minimum_kl_divergence = 0.2,
+        verbose = False,
+        log_dir = None
     ):
     """
     Process a single sample
@@ -294,7 +313,7 @@ def process_sample_parallel(
     - pileup (Pileup): The pileup to be processed.
     - max_candidate_size (int): The maximum size of the candidate motifs.
     - min_read_methylation_fraction (float): The minimum fraction of reads that must be methylated for a position to be considered methylated.
-    - min_valid_coverage (int): The minimum number of reads that must cover a position for it to be considered valid.
+    - threshold_valid_coverage (int): The minimum number of reads that must cover a position for it to be considered valid.
     - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
     - min_cdf_score (float): Minimum score of 1 - cdf(cdf_position) for a motif to be considered valid.
     - cdf_position (float): The position to evaluate the cdf at.
@@ -303,18 +322,19 @@ def process_sample_parallel(
     assert pileup is not None, "Pileup is None"
     assert len(pileup) > 0, "Pileup is empty" 
     assert assembly is not None, "Assembly is None"
-    assert max_candidate_size > 0, "max_candidate_size must be greater than 0"
-    assert min_read_methylation_fraction >= 0 and min_read_methylation_fraction <= 1, "min_read_methylation_fraction must be between 0 and 1"
-    assert min_valid_coverage >= 0, "min_valid_coverage must be greater than 0"
-    assert min_kl_divergence >= 0, "min_kl_divergence must be greater than 0"
+    assert search_frame_size > 0, "search_frame_size must be greater than 0"
+    assert threshold_methylation_confident >= 0 and threshold_methylation_confident <= 1, "threshold_methylation_confident must be between 0 and 1"
+    assert threshold_methylation_general >= 0 and threshold_methylation_general <= 1, "threshold_methylation_general must be between 0 and 1"
+    assert threshold_valid_coverage >= 0, "min_valid_coverage must be greater than 0"
+    assert minimum_kl_divergence >= 0, "mininum_kl_divergence must be greater than 0"
 
     # Infer padding size from candidate_size
-    padding = max_candidate_size // 2
+    padding = search_frame_size // 2
 
     # Filter pileup
     pileup = pileup \
-            .filter(pl.col("Nvalid_cov") > min_valid_coverage) \
-            .filter(pl.col("fraction_mod") >= min_read_methylation_fraction) \
+            .filter(pl.col("Nvalid_cov") > threshold_valid_coverage) \
+            .filter(pl.col("fraction_mod") >= threshold_methylation_general) \
             .sort("contig") 
     
     # Create a list of tasks (TODO: not have a list of all data)
@@ -333,7 +353,12 @@ def process_sample_parallel(
     progress_bar_process.start()
 
     # Put them workers to work
-    results = pool.starmap(process_subpileup, [(task, counter, lock, assembly, min_kl_divergence, padding) for task in tasks])
+    results = pool.starmap(worker_function, [(
+        task, 
+        counter, lock, 
+        assembly, minimum_kl_divergence, padding, threshold_methylation_confident, 
+        log_dir, verbose
+        ) for task in tasks])
     results = [result for result in results if result is not None]
 
     # Close the pool
@@ -365,7 +390,7 @@ def process_sample_parallel(
 #########################################################################
 # Motif candidate state space 
 
-def find_best_candidates(methylation_sequences, sequence, pileup, min_kl = 0.2, max_dead_ends = 3):
+def find_best_candidates(methylation_sequences, sequence, pileup, min_kl = 0.2, max_dead_ends = 25):
     """
     Find the best motif candidates in a sequence.
 
@@ -399,7 +424,7 @@ def find_best_candidates(methylation_sequences, sequence, pileup, min_kl = 0.2, 
             methylation_sequences_subset, 
             motif_graph = motif_graph,
             min_kl = min_kl,
-            max_rounds_since_new_best = 5
+            max_rounds_since_new_best = 15
         )
 
         # If there is no naive guess, stop the search
