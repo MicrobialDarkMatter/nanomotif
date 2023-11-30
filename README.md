@@ -29,7 +29,7 @@ python -m pip install nanomotif
 To identify methylated motifs, two files are required: 
 - [Modkit pileup](https://github.com/nanoporetech/modkit/blob/master/book/src/advanced_usage.md#pileup) output
 - Assembly
-If want to identify bin consensus motifs, a file specifying contig bin relationship is required. It should be headerless and formatted as a TSV file with contig names in column 1 and respective bin in column 2.
+- If want to identify bin consensus motifs, a file specifying contig bin relationship is required. It should be headerless and formatted as a TSV file with contig names in column 1 and respective bin in column 2.
 
 *OBS: when demultiplexing, trimming of reads may result in errors downstream. We therefore recommend using untrimmed reads for mapping*
 ```shell
