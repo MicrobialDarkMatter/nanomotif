@@ -6,8 +6,44 @@ import numpy as np
 import re
 import numpy as  np
 import random
-
+import nanomotif as nm
 np.random.seed(1)
+
+def has_n_character_stretches(sequence, n, character):
+    """
+    Check if the given sequence has a segment of three or more consecutive dots.
+
+    Parameters:
+    sequence (str): The sequence to be checked.
+
+    Returns:
+    bool: True if there is a segment of three or more consecutive dots, False otherwise.
+    """
+    count = 0
+    previous_char = ""
+    for char in sequence:
+        if char == character:
+            if previous_char ==character:
+                previous_char = char
+                continue
+            else:
+                previous_char = char
+                count += 1
+        else:
+            previous_char = char
+    if count >= n:
+        return True
+    else:
+        return False
+def motif_type(motif_str):
+    if has_n_character_stretches(motif_str, 2, "N"):
+        return "ambiguous"
+    elif re.search(r"(N){3,}", motif_str):
+        return "bipartite"
+    elif nm.seq.reverse_compliment(motif_str) == motif_str:
+        return "palindrome"
+    else:
+        return "non-palindrome"
 
 def generate_kmers(k: int, alphabet = ["A", "T", "C", "G"]):
     """

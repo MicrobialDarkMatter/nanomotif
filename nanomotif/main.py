@@ -24,31 +24,32 @@ def shared_setup(args, working_dir):
     # Save settings
     with open(working_dir + f"/args.{args.command}.json", "w") as f:
         json.dump(vars(args), f, indent=2)
-
-
-def find_motifs(args):
-    LOG_DIR = args.output + "/logs"
+    
     # Check if output directory exists
     if not os.path.exists(args.output):
         os.makedirs(args.output)
     else:
         log.error(f"Output directory {args.output} already exists")
         return
-    shared_setup(args, args.output)
 
 
+
+
+
+def find_motifs(args, pileup = None, assembly = None):
     # Run nanomotif
     log.info("Starting nanomotif motif finder")
-    log.info("Loading pileup")
-    pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)
-    log.info("Loading assembly")
-    assembly = nm.load_assembly(args.assembly)
+    if pileup is None:
+        log.info("Loading pileup")
+        pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)
+    if assembly is None:
+        log.info("Loading assembly")
+        assembly = nm.load_assembly(args.assembly)
     assm_lengths = pl.DataFrame({
         "contig": list(assembly.assembly.keys()),
         "length": [len(contig) for contig in assembly.assembly.values()]
     })
     log.info("Filtering pileup")
-
     # Filter pileup to contigs with mods, minimum 1 mod per 10kb
     contigs_with_mods = pileup.pileup \
         .groupby(["contig", "mod_type"]) \
@@ -74,7 +75,7 @@ def find_motifs(args):
             threshold_valid_coverage = args.threshold_valid_coverage,
             minimum_kl_divergence = args.minimum_kl_divergence,
             verbose = args.verbose,
-            log_dir = LOG_DIR
+            log_dir = args.output + "/logs"
         )
 
     if motifs is None:
@@ -86,8 +87,17 @@ def find_motifs(args):
         df.with_columns(
             pl.col("model").apply(lambda x: x._alpha).alias("alpha"),
             pl.col("model").apply(lambda x: x._beta).alias("beta")
-        ).drop("model").write_csv(args.output + "/" + name + ".tsv", separator="\t")
-    save_motif_df(motifs, "motifs-raw")
+        ).drop("model").with_columns([
+            pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif_iupac")
+        ]) \
+        .with_columns([
+            pl.col("motif").apply(lambda x: nm.utils.motif_type(x)).alias("motif_type")
+        ]) \
+        .unique(["motif_iupac", "contig", "mod_type", "mod_position"]) \
+        .drop("sequence", "score") \
+        .write_csv(args.output + "/" + name + ".tsv", separator="\t")
+    os.makedirs(args.output + "/precleanup-motifs/", exist_ok=True)
+    save_motif_df(motifs, "precleanup-motifs/motifs-raw")
 
     log.info("Postprocessing motifs")
 
@@ -96,21 +106,21 @@ def find_motifs(args):
     if len(motifs) == 0:
         log.info("No motifs found")
         return
-    save_motif_df(motifs, "motifs-score-filtered")
+    save_motif_df(motifs, "precleanup-motifs/motifs-score-filtered")
 
     log.info(" - Removing sub motifs")
     motifs = nm.postprocess.remove_sub_motifs(motifs)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
-    save_motif_df(motifs, "motifs-score-sub-filtered")
+    save_motif_df(motifs, "precleanup-motifs/motifs-score-sub-filtered")
 
     log.info(" - Removing noisy motifs")
     motifs = nm.postprocess.remove_noisy_motifs(motifs)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
-    save_motif_df(motifs, "motifs-score-sub-noise-filtered")
+    save_motif_df(motifs, "precleanup-motifs/motifs-score-sub-noise-filtered")
 
     log.info(" - Merging motifs")
     motifs = nm.postprocess.merge_motifs_in_df(motifs, pileup, assembly)
@@ -119,54 +129,98 @@ def find_motifs(args):
         return
     save_motif_df(motifs, "motifs")
 
-    if args.run_score_motifs:
-        log.info("Scoring motifs in all contigs")
-        scored_all = nm.scoremotifs.score_sample_parallel(
-            assembly, pileup, motifs.drop("model"),
-            threads = args.threads,
-            threshold_methylation_general = args.threshold_methylation_general,
-            threshold_valid_coverage = 1,
-            verbose = args.verbose,
-            log_dir = LOG_DIR
-            )
-        scored_all.drop("model").write_csv(args.output + "/motifs-scored.tsv", separator="\t")
-    log.info("Done")
+    log.info("Done finding motifs")
+    return motifs.drop("model")
 
-def score_motifs(args):
-    LOG_DIR = os.path.dirname(args.output) + "/logs"
-    shared_setup(args, LOG_DIR)
+def score_motifs(args, pileup = None, assembly = None, motifs = None):
     log.info("Starting nanomotif motif scorer")
-    log.info("Loading pileup")
-    pileup =  nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)
-    log.info("Loading assembly")
-    assm = nm.load_assembly(args.assembly)
-    log.info("Loading motifs")
-    motifs = pl.read_csv(args.motifs, separator="\t")
-
+    if pileup is None:
+        log.info("Loading pileup")
+        pileup =  nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)
+    if assembly is None:
+        log.info("Loading assembly")
+        assembly = nm.load_assembly(args.assembly)
+    if motifs is None:
+        log.info("Loading motifs")
+        motifs = pl.read_csv(args.motifs, separator="\t")
     log.info("Scoring motifs")
     scored_all = nm.scoremotifs.score_sample_parallel(
-        assm, pileup.pileup, motifs,
+        assembly, pileup.pileup, motifs,
         threads = args.threads,
         threshold_methylation_general = args.threshold_methylation_general,
         threshold_valid_coverage = 1,
         verbose = args.verbose,
-        log_dir = LOG_DIR
+        log_dir = args.output + "/logs"
         )
-    scored_all.drop("model").write_csv(args.output, separator="\t")
+    scored_all = scored_all \
+        .with_columns(
+            pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif_iupac")
+        ) \
+        .with_columns([
+            pl.col("motif").apply(lambda x: nm.utils.motif_type(x)).alias("motif_type")
+        ]).unique(["motif_iupac", "contig", "mod_type", "mod_position"])
+    scored_all.drop("model").write_csv(args.output + "/motifs-scored.tsv", separator="\t")
+    return scored_all.drop("model")
+
+def bin_consensus(args, pileup = None, assembly = None, motifs = None, motifs_scored = None):
+    bins = pl.read_csv(args.bins, separator="\t", has_header=False) \
+        .rename({"column_1":"contig", "column_2":"bin"})
+    log.info("Loading motifs-scored")
+    if motifs is None:
+        motifs = pl.read_csv(args.motifs, separator="\t")
+    log.info("Loading motifs")
+    if motifs_scored is None:
+        motifs_scored = pl.read_csv(args.motifs_scored, separator="\t")
+    log.info("Loading pileup")
+    if pileup is None:
+        pileup =  nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)
+    log.info("Loading assembly")
+    if assembly is None:
+        assembly = nm.load_assembly(args.assembly)
+    motifs_scored = motifs_scored.with_columns([
+        pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif_iupac")
+    ])
+    motifs = motifs.with_columns([
+        pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif_iupac")
+    ])
+
+    output = nm.bin_consensus.within_bin_motifs_consensus(pileup.pileup, assembly, motifs, motifs_scored, bins)
+    output.write_csv(args.output + "/bin-motifs.tsv", separator="\t")
+
+def metagenomic_workflow(args):
+    # Check if output directory exists
+    pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)
+    assembly = nm.load_assembly(args.assembly)
+
+    # Find motifs
+    motifs = find_motifs(args, pileup=pileup, assembly=assembly)
+
+    # Score all motifs
+    scored_all = score_motifs(args, pileup=pileup, assembly=assembly, motifs=motifs)
+
+    # Bin consensus
+    bin_consensus(args, pileup=pileup, assembly=assembly, motifs=motifs, motifs_scored=scored_all)
+
+    log.info("Completely done")
+
 
 def main():
     # Parse arguments
     parser = nm.argparser.create_parser()
     args = parser.parse_args()
-
+    shared_setup(args, args.output)
     if args.command == "find-motifs":
         find_motifs(args)
     elif args.command == "score-motifs":
         score_motifs(args)
-    elif args.command == "clean-bins":
-        pass
-    elif args.command == "associate-mges":
-        pass
+    elif args.command == "bin-consensus":
+        bin_consensus(args)
+    elif args.command == "complete-workflow":
+        metagenomic_workflow(args)
+    #elif args.command == "clean-bins":
+    #    pass
+    #elif args.command == "associate-mges":
+    #    pass
     else:
         parser.print_help()
         exit()
