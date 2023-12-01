@@ -35,14 +35,10 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins):
             pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif_iupac")
         )
     # Merge motifs
-    print(bin_consensus)
-    print("Merging motifs")
     merged_motifs = merge_motifs_in_df(bin_consensus.select(["contig","mod_type", "alpha", "beta","motif","mod_position",]), pileup, assembly)
     # Remove submotifs
     merged_motifs = nm.postprocess.remove_sub_motifs(merged_motifs)
     
-    print(merged_motifs)
-    print("Merging motifs2")
     # Join merged motifs with unmerged motifs
     merged_motifs = merged_motifs \
         .join(bin_consensus, on=["contig", "motif", "mod_position", "mod_type"], how="left") \
@@ -50,15 +46,11 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins):
             pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif")
         )
 
-    print(merged_motifs)
-    print("Calculating mean")
 
     bin_consensus = merged_motifs.unique(["bin", "motif", "mod_position", "mod_type", "contig"]) \
         .with_columns(
             (pl.when(pl.col("mean") > 0.5).then(True).otherwise(False)).alias("count_mean_threshold")
         )
-    print(bin_consensus)
-    print("Calculating consensus")
     bin_consensus = bin_consensus \
         .groupby("bin", "motif", "mod_position", "mod_type") \
         .agg(
@@ -75,8 +67,6 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins):
         .with_columns(
             pl.col("motif").apply(lambda x: nm.utils.motif_type(x)).alias("motif_type")
         )
-    print(bin_consensus)
-    print("Filtering")
         
 
     output = bin_consensus.select(["bin", "motif", "mod_position", "mod_type", "contig_count", "count_mean_threshold", "motif_type", "alpha_sum", "beta_sum", "mean_sum"]) \
@@ -86,7 +76,6 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins):
         .with_columns(
             pl.when(pl.col("bin").is_null()).then("unbinned").otherwise(pl.col("bin")).alias("bin")
         )
-    print(output)
     return output
 
 
