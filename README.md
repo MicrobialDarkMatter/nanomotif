@@ -9,7 +9,7 @@ Nanomotif is a Python package that provides functionality for identifying methyl
 To install Nanomotif in your local Python environment, follow these steps:
 
 ```shell
-python3 -m venv nanomitf
+python3 -m venv nanomotif
 source nanomitf/bin/activate
 pip install nanomotif
 ```
