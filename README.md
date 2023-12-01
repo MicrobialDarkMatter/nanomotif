@@ -53,8 +53,8 @@ positional arguments:
   {complete-workflow,find-motifs,score-motifs,bin-consensus}
                         sub-command help
     complete-workflow   Run the complete workflow
-    find-motifs         Find motifs in assembly using modkit pileup
-    score-motifs        Find degree of methylation of all identified motifs for all sequences in the assembly
+    find-motifs         Find motifs in contigs of the assembly
+    score-motifs        Find degree of methylation of all identified motifs for all contigs in the assembly
     bin-consensus       Find consensus motif in each bin
 
 optional arguments:
