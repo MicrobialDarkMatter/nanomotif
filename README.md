@@ -38,8 +38,7 @@ samtools fastq -T MM,ML {DORADO_BASECALLS.sam} > {READS.fastq}
 minimap2 -ax map-ont -y {ASSEMBLY.fasta} {READS.fastq} |
         samtools view -bS |
         samtools sort > {ALIGNMENT.bam}
-        samtools index {ALIGNMENT.bam}
-modkit pileup {ALIGNMENT.bam} --only-tabs
+modkit pileup --only-tabs {ALIGNMENT.bam} {OUT.bed}
 ```
 ## Example Usage
 
