@@ -34,10 +34,10 @@ If you want to identify bin consensus motifs, a file specifying contig bin relat
 
 *OBS: when demultiplexing, trimming of reads may result in errors downstream. We therefore recommend using untrimmed reads for mapping*
 ```shell
-samtools fastq -T MM,ML {DORADO_BASECALLS.sam} > {READS.fastq}
-minimap2 -ax map-ont -y {ASSEMBLY.fasta} {READS.fastq} |
+samtools fastq -T MM,ML {DORADO_BASECALLS.sam} |
+        minimap2 -ax map-ont -y {REFERENCE.fasta} - |
         samtools view -bS |
-        samtools sort > {ALIGNMENT.bam}
+        samtools sort -o {ALIGNMENT.bam}
 modkit pileup --only-tabs {ALIGNMENT.bam} {OUT.bed}
 ```
 ## Example Usage
