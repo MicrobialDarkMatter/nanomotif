@@ -10,6 +10,12 @@ import warnings
 
 def shared_setup(args, working_dir):
     warnings.filterwarnings("ignore")
+    # Check if output directory exists
+    if not os.path.exists(args.output):
+        os.makedirs(args.output)
+    else:
+        log.warn(f"Output directory {args.output} already exists")
+        return
 
     # Set up logging
     LOG_DIR = working_dir + "/logs"
@@ -25,12 +31,6 @@ def shared_setup(args, working_dir):
     with open(working_dir + f"/args.{args.command}.json", "w") as f:
         json.dump(vars(args), f, indent=2)
     
-    # Check if output directory exists
-    if not os.path.exists(args.output):
-        os.makedirs(args.output)
-    else:
-        log.error(f"Output directory {args.output} already exists")
-        return
 
 
 
@@ -91,7 +91,7 @@ def find_motifs(args, pileup = None, assembly = None):
             pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif_iupac")
         ]) \
         .with_columns([
-            pl.col("motif").apply(lambda x: nm.utils.motif_type(x)).alias("motif_type")
+            pl.col("motif_iupac").apply(lambda x: nm.utils.motif_type(x)).alias("motif_type")
         ]) \
         .unique(["motif_iupac", "contig", "mod_type", "mod_position"]) \
         .drop("sequence", "score") \
@@ -157,7 +157,7 @@ def score_motifs(args, pileup = None, assembly = None, motifs = None):
             pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif_iupac")
         ) \
         .with_columns([
-            pl.col("motif").apply(lambda x: nm.utils.motif_type(x)).alias("motif_type")
+            pl.col("motif_iupac").apply(lambda x: nm.utils.motif_type(x)).alias("motif_type")
         ]).unique(["motif_iupac", "contig", "mod_type", "mod_position"])
     scored_all.drop("model").write_csv(args.output + "/motifs-scored.tsv", separator="\t")
     return scored_all.drop("model")
@@ -189,19 +189,23 @@ def bin_consensus(args, pileup = None, assembly = None, motifs = None, motifs_sc
 
 def metagenomic_workflow(args):
     # Check if output directory exists
+    print("Loading required files")
     pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)
     assembly = nm.load_assembly(args.assembly)
 
     # Find motifs
+    print("Finding motifs")
     motifs = find_motifs(args, pileup=pileup, assembly=assembly)
 
     # Score all motifs
+    print("Scoring motifs")
     scored_all = score_motifs(args, pileup=pileup, assembly=assembly, motifs=motifs)
 
     # Bin consensus
+    print("Finding bin consensus motifs")
     bin_consensus(args, pileup=pileup, assembly=assembly, motifs=motifs, motifs_scored=scored_all)
 
-    log.info("Completely done")
+    log.info("Done")
 
 
 def main():
