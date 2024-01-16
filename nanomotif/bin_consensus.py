@@ -1,8 +1,9 @@
 import polars as pl
 import nanomotif as nm
-
+import logging as log
 
 def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins):
+    log.debug("Starting within bin motif consensus")
     motifs = motifs.with_columns([
         pl.lit(True).alias("directly_detected")
     ]).with_columns([
@@ -11,9 +12,8 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins):
         pl.col("motif_iupac").apply(lambda x: nm.seq.iupac_to_regex(x)).alias("motif")
     ])
 
+    log.debug("Joining motifs with bins")
     motifs_scored = motifs_scored.with_columns([
-        pl.lit(True).alias("directly_detected")
-    ]).with_columns([
         pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif_iupac")
     ]).with_columns([
         pl.col("motif_iupac").apply(lambda x: nm.seq.iupac_to_regex(x)).alias("motif")
@@ -27,6 +27,7 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins):
         pl.when(pl.col("directly_detected").is_null()).then(pl.lit(False)).otherwise(pl.col("directly_detected")).alias("directly_detected")
     )
 
+    log.debug("Calculating motif scores")
     # keep directly detected motifs
     bin_consensus = motifs_scored.groupby("bin", "motif", "mod_position", "mod_type") \
         .apply(lambda group: group.filter(
@@ -34,11 +35,14 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins):
         )).with_columns(
             pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif_iupac")
         )
+    log.debug("Mergin similar motifs within bin")
     # Merge motifs
     merged_motifs = merge_motifs_in_df(bin_consensus.select(["contig","mod_type", "alpha", "beta","motif","mod_position",]), pileup, assembly)
+    log.debug("Removing submotifs")
     # Remove submotifs
     merged_motifs = nm.postprocess.remove_sub_motifs(merged_motifs)
     
+    log.debug("Calculating motif scores")
     # Join merged motifs with unmerged motifs
     merged_motifs = merged_motifs \
         .join(bin_consensus, on=["contig", "motif", "mod_position", "mod_type"], how="left") \
@@ -68,7 +72,7 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins):
             pl.col("motif").apply(lambda x: nm.utils.motif_type(x)).alias("motif_type")
         )
         
-
+    log.debug("Filtering motifs")
     output = bin_consensus.select(["bin", "motif", "mod_position", "mod_type", "contig_count", "count_mean_threshold", "motif_type", "alpha_sum", "beta_sum", "mean_sum"]) \
         .rename({"alpha_sum":"methylated_count", "beta_sum":"non_methylated_count", "count_mean_threshold":"contigs_with_motif", "mean_sum":"mean_methylation_bin"}) \
         .filter(pl.col("contigs_with_motif") > 0) \
