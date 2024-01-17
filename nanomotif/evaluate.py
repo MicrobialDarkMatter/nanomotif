@@ -377,7 +377,7 @@ def process_sample_parallel(
         model_col.append(BetaBernoulliModel(a, b))
 
     motifs = motifs.with_columns([
-            pl.lit(model_col).alias("model"),
+            pl.Series(model_col).alias("model"),
             pl.col("sequence").apply(lambda motif: motif[count_periods_at_start(motif):len(motif)-count_periods_at_end(motif)]).alias("motif"),
             pl.col("sequence").apply(lambda motif: padding - count_periods_at_start(motif)).alias("mod_position")
         ]).drop(["alpha", "beta"])
