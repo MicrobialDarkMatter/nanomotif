@@ -9,7 +9,9 @@ setup(
     license='MIT',
     packages=find_packages(),
     include_package_data=True,
-    package_data={"nanomotif": ["data/*"],},
+    package_data={
+        'nanomotif': ['datasets/*'],
+    },
     zip_safe=False,
     install_requires=[
         "wheel",
