@@ -11,7 +11,7 @@ setup(
     include_package_data=True,
     package_data={
         "nanomotif": ["data/*"]
-    }
+    },
     zip_safe=False,
     install_requires=[
         "wheel",
