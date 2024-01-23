@@ -16,6 +16,7 @@ from nanomotif.seq import EqualLengthDNASet, DNAsequence
 from nanomotif.candidate import Motif, MotifTree
 from nanomotif.logger import configure_logger
 from nanomotif.parallel import update_progress_bar
+from nanomotif.seed import set_seed
 import heapq as hq
 import networkx as nx
 import warnings
@@ -26,7 +27,7 @@ import time
 # Motif candidate scoring
 ##########################################
 
-def methylated_motif_occourances(motif: str, sequence: str, methylated_positions) -> tuple:
+def methylated_motif_occourances(motif, sequence, methylated_positions) -> tuple:
     """
     Get occourances of a motif in a contig
 
@@ -38,8 +39,10 @@ def methylated_motif_occourances(motif: str, sequence: str, methylated_positions
     Returns:
     - tuple: A tuple of two numpy arrays, the first containing the positions of the methylated motifs, the second containing the positions of the non-methylated motifs.
     """
-
-
+    assert len(motif) > 0, "Motif is empty"
+    assert len(sequence) > 0, "Sequence is empty"
+    assert len(methylated_positions) > 0, "Methylated positions is empty"
+    assert type(motif) == Motif, "Motif is not a Motif type"
     # Get the index of the methylation in the motif in the contig
     motif_index = subseq_indices(motif.string, sequence) + motif.mod_position
 
@@ -210,7 +213,7 @@ def motif_model_read(pileup, contig: str, motif):
 #
 #
 
-def worker_function(args, counter, lock, assembly, min_kl_divergence, padding, minimum_methylation_fraction_confident, log_dir, verbose):
+def worker_function(args, counter, lock, assembly, min_kl_divergence, padding, minimum_methylation_fraction_confident, log_dir, verbose, seed):
     """
     Process a single subpileup for one contig and one modtype
 
@@ -222,13 +225,14 @@ def worker_function(args, counter, lock, assembly, min_kl_divergence, padding, m
     - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
     - padding (int): The padding to use for the motif.
     """
-    
+    set_seed(seed=seed)
     warnings.filterwarnings("ignore")
     contig, modtype, subpileup = args
     
     process_id = os.getpid()
-    log_file = f"{log_dir}/find-motifs.{process_id}.log"
-    configure_logger(log_file, verbose=verbose)
+    if log_dir is not None:
+        log_file = f"{log_dir}/find-motifs.{process_id}.log"
+        configure_logger(log_file, verbose=verbose)
 
     try:
         result = process_subpileup(contig, modtype, subpileup, assembly, min_kl_divergence, padding, minimum_methylation_fraction_confident)
@@ -275,7 +279,9 @@ def process_subpileup(contig, modtype, subpileup, assembly, min_kl_divergence, p
         sequences_array, 
         contig_sequence, 
         subpileup, 
-        min_kl = min_kl_divergence
+        min_kl = min_kl_divergence,
+        max_dead_ends = 25,
+        max_rounds_since_new_best = 15
     )
     identified_motifs = nxgraph_to_dataframe(motif_graph) \
         .filter(col("sequence").is_in(best_candidates))
@@ -288,8 +294,8 @@ def process_subpileup(contig, modtype, subpileup, assembly, min_kl_divergence, p
             pl.lit(contig).alias("contig"),
             pl.lit(modtype).alias("mod_type")
         ).with_columns([
-            pl.col("model").apply(lambda x: x._alpha).alias("alpha"),
-            pl.col("model").apply(lambda x: x._beta).alias("beta")
+            pl.col("model").map_elements(lambda x: x._alpha).alias("alpha"),
+            pl.col("model").map_elements(lambda x: x._beta).alias("beta")
         ]).drop("model")
         return identified_motifs
     
@@ -303,7 +309,8 @@ def process_sample_parallel(
         threshold_valid_coverage = 1,
         minimum_kl_divergence = 0.2,
         verbose = False,
-        log_dir = None
+        log_dir = None,
+        seed = None
     ):
     """
     Process a single sample
@@ -338,7 +345,7 @@ def process_sample_parallel(
             .sort("contig") 
     
     # Create a list of tasks (TODO: not have a list of all data)
-    tasks = [(contig, modtype, subpileup) for (contig, modtype), subpileup in pileup.groupby(["contig", "mod_type"])]
+    tasks = [(contig, modtype, subpileup) for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])]
 
     # Create a progress manager
     manager = multiprocessing.Manager()
@@ -349,7 +356,7 @@ def process_sample_parallel(
     pool = get_context("spawn").Pool(processes=threads)
 
     # Create a process for the progress bar
-    progress_bar_process = multiprocessing.Process(target=update_progress_bar, args=(counter, len(tasks)))
+    progress_bar_process = multiprocessing.Process(target=update_progress_bar, args=(counter, len(tasks), True))
     progress_bar_process.start()
 
     # Put them workers to work
@@ -357,7 +364,7 @@ def process_sample_parallel(
         task, 
         counter, lock, 
         assembly, minimum_kl_divergence, padding, threshold_methylation_confident, 
-        log_dir, verbose
+        log_dir, verbose, seed
         ) for task in tasks])
     results = [result for result in results if result is not None]
 
@@ -378,8 +385,8 @@ def process_sample_parallel(
 
     motifs = motifs.with_columns([
             pl.Series(model_col).alias("model"),
-            pl.col("sequence").apply(lambda motif: motif[count_periods_at_start(motif):len(motif)-count_periods_at_end(motif)]).alias("motif"),
-            pl.col("sequence").apply(lambda motif: padding - count_periods_at_start(motif)).alias("mod_position")
+            pl.col("sequence").map_elements(lambda motif: motif[count_periods_at_start(motif):len(motif)-count_periods_at_end(motif)]).alias("motif"),
+            pl.col("sequence").map_elements(lambda motif: padding - count_periods_at_start(motif)).alias("mod_position")
         ]).drop(["alpha", "beta"])
 
     return motifs
@@ -390,7 +397,7 @@ def process_sample_parallel(
 #########################################################################
 # Motif candidate state space 
 
-def find_best_candidates(methylation_sequences, sequence, pileup, min_kl = 0.2, max_dead_ends = 25):
+def find_best_candidates(methylation_sequences, sequence, pileup, min_kl = 0.2, max_dead_ends = 25, max_rounds_since_new_best = 15):
     """
     Find the best motif candidates in a sequence.
 
@@ -424,7 +431,7 @@ def find_best_candidates(methylation_sequences, sequence, pileup, min_kl = 0.2, 
             methylation_sequences_subset, 
             motif_graph = motif_graph,
             min_kl = min_kl,
-            max_rounds_since_new_best = 15
+            max_rounds_since_new_best = max_rounds_since_new_best
         )
 
         # If there is no naive guess, stop the search
@@ -456,17 +463,18 @@ def find_best_candidates(methylation_sequences, sequence, pileup, min_kl = 0.2, 
         # Check if we should continue the search
         seq_remaining = methylation_sequences_subset.shape[0]
         seq_remaining_percent = seq_remaining/total_sequences
-        log.debug(f"{naive_guess}, {seq_before-seq_remaining} seqs. model: {motif_graph.nodes[naive_guess]['model']}. ({100*seq_remaining_percent:.1f} % left)")
 
         if motif_graph.nodes[naive_guess]["score"] < 0.1:
             dead_ends += 1
-            log.debug(f"Candidate has low score. {dead_ends} of {max_dead_ends} before temination")
+            log.debug(f"Candidate has low score, {naive_guess}. {dead_ends} of {max_dead_ends} before temination")
             continue
+
+        log.info(f"Keeping {naive_guess}, represented in {seq_before-seq_remaining} seqs. model: {motif_graph.nodes[naive_guess]['model']}. ({100*seq_remaining_percent:.1f} % of sequences remaining)")
 
         best_candidates.append(naive_guess)
         
         if (seq_remaining/total_sequences) < 0.01:
-            log.debug("Stopping search, too few sequences left")
+            log.debug("Stopping search, too few sequences remaining")
             break
         log.debug("Continuing search")
     return motif_graph, best_candidates
@@ -542,7 +550,7 @@ def motif_child_nodes_kl_dist_prune(motif, meth_pssm, contig_pssm, min_kl=0.1, f
                 yield Motif("".join(new_motif), motif.mod_position)
 
 def a_star_search(root_motif, contig, pileup, methylation_sequences, 
-                  motif_graph = None, min_kl = 0.1, max_rounds_since_new_best = 5):
+                  motif_graph = None, min_kl = 0.1, max_rounds_since_new_best = 10, max_motif_length = 18):
     """
     A* search for methylation motifs
 
@@ -600,8 +608,8 @@ def a_star_search(root_motif, contig, pileup, methylation_sequences,
         current = hq.heappop(priority_que)[1]
         if current in visisted_nodes:
             continue
-        if len(current.strip()) > 18:
-            log.debug(f"{current}, Skipping due to length")
+        if len(current.strip()) > max_motif_length:
+            log.debug(f"{current}, Skipping scoring and expansion due to length (>{max_motif_length})")
             continue
 
 

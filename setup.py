@@ -8,6 +8,10 @@ setup(
     author_email='shei@bio.aau.com',
     license='MIT',
     packages=find_packages(),
+    include_package_data=True,
+    package_data={
+        "nanomotif": ["data/*"]
+    }
     zip_safe=False,
     install_requires=[
         "wheel",

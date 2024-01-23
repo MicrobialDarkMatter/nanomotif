@@ -3,6 +3,7 @@ import numpy as np
 import warnings
 import re
 import random
+random.seed(2403)
 import nanomotif.utils as utils
 from nanomotif.constants import *
 import matplotlib.pyplot as plt

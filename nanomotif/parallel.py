@@ -3,7 +3,7 @@ import progressbar
 import time
 
 
-def update_progress_bar(progress, total_tasks, timeout=3000):
+def update_progress_bar(progress, total_tasks, print_progress, timeout=3000):
     """
     Update progress bar for parallel processing
 
@@ -21,4 +21,6 @@ def update_progress_bar(progress, total_tasks, timeout=3000):
             if current_time - last_update_time > timeout:
                 print("Timeout reached. Exiting progress bar update.")
                 break
-            bar.update(progress.value)
+            if print_progress:
+                bar.update(progress.value)
+            time.sleep(0.5)

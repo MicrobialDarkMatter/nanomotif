@@ -81,3 +81,42 @@ def merge_motifs_in_df(motif_df, pileup, assembly):
         new_df.append(pl.concat(merged_df))
     new_df = pl.concat(new_df)
     return new_df
+
+def join_motif_complements(motif_df):
+    if "model" in motif_df.columns:
+        motif_df = motif_df.with_columns(
+            pl.col("model").map_elements(lambda x: x._alpha).alias("n_mod"),
+            pl.col("model").map_elements(lambda x: x._beta).alias("n_nomod")
+        ).drop("model")
+    motif_df = motif_df.select([
+        "contig", "mod_type", "motif", "mod_position", "n_mod", "n_nomod"
+    ])
+    motif_df = motif_df.with_columns([
+        pl.col("motif").apply(lambda x: nm.candidate.regex_to_iupac(x)).alias("motif")
+    ]).with_columns([
+        pl.col("motif").apply(lambda x: nm.utils.motif_type(x)).alias("motif_type")
+    ]).with_columns([
+        pl.col("motif").apply(lambda x: nm.candidate.reverse_compliment(x)).alias("motif_complement")
+    ])
+    
+    
+    motifs_out = motif_df \
+        .join(
+            motif_df.select([
+                "contig", "mod_type", "motif_complement", "mod_position", "n_mod", "n_nomod"
+            ]),
+            left_on = ["contig", "mod_type", "motif"],
+            right_on = ["contig", "mod_type", "motif_complement"],
+            how = "left",
+            suffix = "_complement"
+        ) \
+        .filter(
+            (pl.col("motif") >= pl.col("motif_complement")) | pl.col("mod_position_complement").is_null()
+        ) \
+        .with_columns([
+            pl.when(pl.col("mod_position_complement").is_not_null()) \
+                .then(pl.col("motif_complement")) \
+                .otherwise(None) \
+                .alias("motif_complement")
+        ])
+    return motifs_out
