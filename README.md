@@ -147,6 +147,7 @@ optional arguments:
 Running `find-motifs` generates pre-cleanup folder, whihc contains motif that got removed in the postprocessing steps. The name of the file indicate which postprocessing steps have been run on the motifs.
 
 ### bin-consensus 
+`find-motifs` outputs results to `bin-motifs.tsv`
 The format is almost identical the the output of find-motifs, except everything is aggregated to bin level and the contig column is replaced by a bin column
 | **Column**       | **Description**                                                                                       |
 |------------------|-------------------------------------------------------------------------------------------------------|
