@@ -32,7 +32,7 @@ This runs a test run on a small dataset, ensuring everything works.
 
 ## Required files
 
-To identify methylated motifs, the follwoing files are required: 
+To identify methylated motifs, the following files are required: 
 - Assembly
 - methylation pileup
 - Contig-bin relationship*
@@ -114,7 +114,7 @@ optional arguments:
                         minimum fraction of reads that must be methylated at a position for the position to be methylated. These position are used for counting number of
                         methylated position of a motif. Default: 0.6
   --search_frame_size SEARCH_FRAME_SIZE
-                        length of the sequnces sampled around confident methylatyion sites. Default: 40
+                        length of the sequences sampled around confident methylation sites. Default: 40
   --threshold_methylation_confident THRESHOLD_METHYLATION_CONFIDENT
                         minimum fraction of reads that must be methylated at a position for the position to be considered confiently methylated. These position are used to
                         search for candidate motifs. Default: 0.8
@@ -144,7 +144,7 @@ optional arguments:
 | **n_mod_complement**       | Number of motif positions that are methylated in the contig.                               |
 | **n_nomod_complement**     | Number of motif positions that are not methylated in the contig.                           |
 
-Running `find-motifs` generates pre-cleanup folder, whihc contains motif that got removed in the postprocessing steps. The name of the file indicate which postprocessing steps have been run on the motifs.
+Running `find-motifs` generates pre-cleanup folder, which contains motif that got removed in the postprocessing steps. The name of the file indicates which postprocessing steps have been run on the motifs.
 
 ### bin-consensus 
 `bin-consensus` outputs results to `bin-motifs.tsv`
