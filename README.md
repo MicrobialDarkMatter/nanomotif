@@ -23,7 +23,12 @@ conda create -n nanomotif python=3.9
 conda activate nanomotif
 python -m pip install nanomotif
 ```
-
+#### Check installation
+Once installed, the installation can be checked by running
+```shell
+nanomotif check-installation
+```
+This will perform a small test run, ensuring everything workson your platform.
 ## Required files
 
 To identify methylated motifs, the follwoing files are required: 
