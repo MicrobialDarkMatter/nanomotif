@@ -73,15 +73,20 @@ positional arguments:
     bin-consensus       generate consensus set of motif for each bin
     complete-workflow   run find-motifs, score-motifs and bin-consensus
 ```
- If you are interested in just finding methylated motifs in a monoculture sample, find-motifs is suffcient. 
+#### Monoculture
+If you are interested in just finding methylated motifs in a monoculture sample, we recomment just running `find-motifs`. 
 ```
 nanomotif find-motifs ASSEMBLY.fasta PILEUP.bed
 ```
- If you have metagenomic sample with multiple organimns, complete-workflow is recommended. 
+
+#### Metagenomic sample
+If you have metagenomic sample with multiple organimns, we recommend running the `complete-workflow`
 ```
 nanomotif complete-workflow ASSEMBLY.fasta PILEUP.bed CONTIG_BIN.tsv
 ```
 
+#### Help
+Help page of `complete-workflow` contains description of all arguments
 ```
 usage: nanomotif complete-workflow [-h] [--out OUT] [-t THREADS] [-v] [--seed SEED] [--threshold_methylation_general THRESHOLD_METHYLATION_GENERAL]
                                    [--search_frame_size SEARCH_FRAME_SIZE] [--threshold_methylation_confident THRESHOLD_METHYLATION_CONFIDENT]
@@ -115,7 +120,7 @@ optional arguments:
 ## Output description
 ### find-motifs and score-motifs
 
-`find-motifs` output results to the `motifs.tsv` file. `score-motifs` outputs the result to `motifs-scored.tsv`.
+`find-motifs` outputs results to `motifs.tsv` and `score-motifs` outputs result to `motifs-scored.tsv`.
 
 `find-motifs`and `score-motifs` follow the same output format, described in the table below:
 
@@ -128,18 +133,28 @@ optional arguments:
 | **n_mod**        | number of motif positions that are methylated in the contig                                                       |
 | **n_nomod**         | number of motif positions that are not methylated in the contig                                                        |
 | **motifs_type** | type of motif the sequence (palindrome, non-palindrome, bipartite or ambiguous) |
-
-If a complement of a motif is detected, it gets added as a complement of the motif.
- | **Column**                  | **Description**                                                                            |
-|----------------------------|---------------------------------------------------------------------------------------------|
-| **motif_complement**       | Sequence of the complement motif in IUPAC format.                                            |
+| **motif_complement**       | Sequence of the complement motif if present in IUPAC format.                                            |
 | **mod_position_complement**           | Position within the complement motif where the methylation is located. 0-based index.                 |
 | **n_mod_complement**       | Number of motif positions that are methylated in the contig.                               |
 | **n_nomod_complement**     | Number of motif positions that are not methylated in the contig.                           |
 
+Running `find-motifs` generates pre-cleanup folder, whihc contains motif that got removed in the postprocessing steps. The name of the file indicate which postprocessing steps have been run on the motifs.
+
 ### bin-consensus 
 The format is almost identical the the output of find-motifs, except everything is aggregated to bin level and the contig column is replaced by a bin column
-
+| **Column**       | **Description**                                                                                       |
+|------------------|-------------------------------------------------------------------------------------------------------|
+| **bin**       | bin to which the motif belong                                                                |
+| **motif**        | sequence of the detected motif in IUPAC format |
+| **mod_position** | position within the motif where the methylation is located. 0-based index.                            |
+| **mod_type**     | the type of modification [a (6mA) or m (5mC)]                                                                     |
+| **n_mod**        | number of motif positions that are methylated in all contigs in the bin                                                       |
+| **n_nomod**         | number of motif positions that are not methylated in all contigs in the bin                                                       |
+| **motifs_type** | type of motif the sequence (palindrome, non-palindrome, bipartite or ambiguous) |
+| **motif_complement**       | Sequence of the complement motif if present.                                            |
+| **mod_position_complement**           | Position within the complement motif where the methylation is located. 0-based index.                 |
+| **n_mod_complement**       | Number of motif positions that are methylated in all contigs in the bin                               |
+| **n_nomod_complement**     | Number of motif positions that are not methylated in all contigs in the bin                           |
 
 ## License
 
