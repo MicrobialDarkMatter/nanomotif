@@ -74,13 +74,13 @@ positional arguments:
     complete-workflow   run find-motifs, score-motifs and bin-consensus
 ```
 #### Monoculture
-If you are interested in just finding methylated motifs in a monoculture sample, we recomment just running `find-motifs`. 
+If you are interested in finding methylated motifs in a monoculture sample, we recomment just running `find-motifs`. 
 ```
 nanomotif find-motifs ASSEMBLY.fasta PILEUP.bed
 ```
 
 #### Metagenomic sample
-If you have metagenomic sample with multiple organimns, we recommend running the `complete-workflow`
+If you have metagenomic sample with multiple organims, we recommend running `complete-workflow`
 ```
 nanomotif complete-workflow ASSEMBLY.fasta PILEUP.bed CONTIG_BIN.tsv
 ```
