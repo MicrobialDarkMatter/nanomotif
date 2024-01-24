@@ -6,7 +6,7 @@ Nanomotif is a Python package that provides functionality for identifying methyl
 
 #### Local Environment
 
-To install Nanomotif in your local Python environment, follow these steps:
+To install Nanomotif in a local Python environment:
 
 ```shell
 python3 -m venv nanomotif
@@ -24,11 +24,12 @@ conda activate nanomotif
 python -m pip install nanomotif
 ```
 #### Check installation
-Once installed, the installation can be checked by running
+Once installed, the installation can be checked by running:
 ```shell
 nanomotif check-installation
 ```
-This will perform a small test run, ensuring everything workson your platform.
+This runs a test run on a small dataset, ensuring everything works.
+
 ## Required files
 
 To identify methylated motifs, the follwoing files are required: 
