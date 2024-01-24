@@ -26,112 +26,119 @@ python -m pip install nanomotif
 
 ## Required files
 
-To identify methylated motifs, two files are required: 
-- [Modkit pileup](https://github.com/nanoporetech/modkit/blob/master/book/src/advanced_usage.md#pileup) output
+To identify methylated motifs, the follwoing files are required: 
 - Assembly
+- methylation pileup
+- Contig-bin relationship*
 
-If you want to identify bin consensus motifs, a file specifying contig bin relationship is required. It should be headerless and formatted as a TSV file with contig names in column 1 and respective bin in column 2.
+**Only for bin-consensus (and by extension, complete-workflow)*
+
+#### Assembly
+Assembly from any assembler can be used. Nanomotif was developed using assemblies made with [metaFlye](https://github.com/fenderglass/Flye)
+
+#### Methylation pileup
+Generated using ONT [modkit](https://github.com/nanoporetech/modkit/blob/master/book/src/advanced_usage.md#pileup). Assembly and basecalls with methylations are required.
 
 *OBS: when demultiplexing, trimming of reads may result in errors downstream. We therefore recommend using untrimmed reads for mapping*
 ```shell
-samtools fastq -T MM,ML {DORADO_BASECALLS.sam} |
-        minimap2 -ax map-ont -y {REFERENCE.fasta} - |
-        samtools view -bS |
+samtools fastq -T MM,ML {DORADO_BASECALLS.sam} | \
+        minimap2 -ax map-ont -y {ASSEMBLY.fasta} - | \
+        samtools view -bS | \
         samtools sort -o {ALIGNMENT.bam}
 modkit pileup --only-tabs {ALIGNMENT.bam} {OUT.bed}
 ```
-## Example Usage
 
-Nanomotif have several commands. The main command is complete-workflow, which runs motifs finding, motif scoring and bin consensus. 
+#### Contig-bin
+File describing which contigs belongs to which bins. It should be headerless, tab-separated file with contig id in the first column and bin in the second column. If the bins are outputted in a folder with one fasta file pr. bin, the contig-bin file can be generated using the following snippet:
+```
+BINS=/path/to/bins    # Bin directory
+EXT="fa"              # Filename extension
+grep ">" ${BINS}/*.${EXT} | \
+        sed "s/.*\///" | \
+        sed "s/.${EXT}:>/\t/" | \
+        awk -F'\t' '{print $2 "\t" $1}' > contig_bin.tsv
+```
+
+## Usage
 
 ```
-usage: nanomotif [-h] [--version] {complete-workflow,find-motifs,score-motifs,bin-consensus} ...
+usage: nanomotif [-h] [--version] {find-motifs,score-motifs,bin-consensus,complete-workflow,check-installation} ...
 
 Motif identification and utilisation commands
 
 positional arguments:
-  {complete-workflow,find-motifs,score-motifs,bin-consensus}
-                        sub-command help
-    complete-workflow   Run the complete workflow
-    find-motifs         Find motifs in contigs of the assembly
-    score-motifs        Find degree of methylation of all identified motifs for all contigs in the assembly
-    bin-consensus       Find consensus motif in each bin
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --version             show program's version number and exit
+                        Command descriptions
+    find-motifs         identifies motifs in contigs
+    score-motifs        generate feature complete output (all identified motifs have an entry for all contigs)
+    bin-consensus       generate consensus set of motif for each bin
+    complete-workflow   run find-motifs, score-motifs and bin-consensus
+```
+ If you are interested in just finding methylated motifs in a monoculture sample, find-motifs is suffcient. 
+```
+nanomotif find-motifs ASSEMBLY.fasta PILEUP.bed
+```
+ If you have metagenomic sample with multiple organimns, complete-workflow is recommended. 
+```
+nanomotif complete-workflow ASSEMBLY.fasta PILEUP.bed CONTIG_BIN.tsv
 ```
 
 ```
-usage: nanomotif complete-workflow [-h] [-t THREADS] [-v] [--search_frame_size SEARCH_FRAME_SIZE]
-                                   [--threshold_methylation_confident THRESHOLD_METHYLATION_CONFIDENT]
-                                   [--threshold_methylation_general THRESHOLD_METHYLATION_GENERAL] [--threshold_valid_coverage THRESHOLD_VALID_COVERAGE]
-                                   [--minimum_kl_divergence MINIMUM_KL_DIVERGENCE]
-                                   assembly pileup bins output
-
+usage: nanomotif complete-workflow [-h] [--out OUT] [-t THREADS] [-v] [--seed SEED] [--threshold_methylation_general THRESHOLD_METHYLATION_GENERAL]
+                                   [--search_frame_size SEARCH_FRAME_SIZE] [--threshold_methylation_confident THRESHOLD_METHYLATION_CONFIDENT]
+                                   [--threshold_valid_coverage THRESHOLD_VALID_COVERAGE] [--minimum_kl_divergence MINIMUM_KL_DIVERGENCE]
+                                   assembly pileup bins
 positional arguments:
-  assembly              Assembly file.
-  pileup                Modkit pileup file.
-  bins                  File specifying to which bin contigs belong. (tsv file with no header and columns: contig, bin)
-  output                Output directory.
+  assembly              path to the assembly file.
+  pileup                path to the modkit pileup file.
+  bins                  tsv file specifying which bin contigs belong.
 
 optional arguments:
   -h, --help            show this help message and exit
+  --out OUT             path to the output folder
   -t THREADS, --threads THREADS
-                        Number of threads to use. Default is 1.
-  -v, --verbose         Increase output verbosity. (set logger to debug level)
-  --search_frame_size SEARCH_FRAME_SIZE
-                        Length of the sequnces sampled around methylatyion sites. Default: 40
-  --threshold_methylation_confident THRESHOLD_METHYLATION_CONFIDENT
-                        Minimum fraction of reads that must be methylated to be considered in motif search. Default: 0.8
+                        number of threads to use. Default is 1
+  -v, --verbose         increase output verbosity. (set logger to debug level)
+  --seed SEED           seed for random number generator. Default: 1
   --threshold_methylation_general THRESHOLD_METHYLATION_GENERAL
-                        Minimum fraction of reads that must be methylated for a position to be considered modified. Default: 0.5
+                        minimum fraction of reads that must be methylated at a position for the position to be methylated. These position are used for counting number of
+                        methylated position of a motif. Default: 0.6
+  --search_frame_size SEARCH_FRAME_SIZE
+                        length of the sequnces sampled around confident methylatyion sites. Default: 40
+  --threshold_methylation_confident THRESHOLD_METHYLATION_CONFIDENT
+                        minimum fraction of reads that must be methylated at a position for the position to be considered confiently methylated. These position are used to
+                        search for candidate motifs. Default: 0.8
   --threshold_valid_coverage THRESHOLD_VALID_COVERAGE
-                        Minimum valid base coverage for a position to be considered. Default: 5
+                        minimum valid base coverage for a position to be considered. Default: 5
   --minimum_kl_divergence MINIMUM_KL_DIVERGENCE
-                        Minimum KL-divergence for a position to considered for expansion in motif search. Default: 0.2
+                        minimum KL-divergence for a position to considered for expansion in motif search. Higher value means less exhaustive, but faster search. Default: 0.2
 ```
-
 ## Output description
+### find-motifs and score-motifs
 
+`find-motifs` output results to the `motifs.tsv` file. `score-motifs` outputs the result to `motifs-scored.tsv`.
 
-### Find motifs output
-The main output is `motifs.tsv`, which contain the identified motifs within a contigs. It contains the following:
+`find-motifs`and `score-motifs` follow the same output format, described in the table below:
 
 | **Column**       | **Description**                                                                                       |
 |------------------|-------------------------------------------------------------------------------------------------------|
 | **contig**       | contig in which the motif was found                                                                |
-| **mod_type**     | the type of modification [a (6mA) or m (5mC)]                                                                     |
-| **motif**        | sequence of the detected motif in regex form (braces indicate multi base position and . indicate N positions) |
-| **mod_position** | position within the motif where the methylation is located. 0-based index.                            |
-| **alpha**        | number of motif positions that are methylated in the contig                                                       |
-| **beta**         | number of motif positions that are not methylated in the contig                                                        |
-| **motif_iupac**        | sequence of the detected motif in [IUPAC](https://www.bioinformatics.org/sms/iupac.html) form  |
-| **motifs_type** | what kind of motif the sequence represents (palindrome, non-palindrome, bipartite or ambiguous)
-
-In addition to `motifs.tsv`, a `precleanup-motifs` is outputted containing raw motifs. The formats of these files follow ``motifs.tsv
-
-### Score motifs output
-
-The output is exactly the same format as the output from find motifs. It only contain alpha and beta values for all identified motifs in all contigs for all contigs. 
-
-### Bin consensus 
-
-Identifies the consensus motifs with in bins and reports degree of methylation within the bin. The output is written to `bin-motfs.tsv`, which contain the following:
-
-| **Column**       | **Description**                                                                                       |
-|------------------|-------------------------------------------------------------------------------------------------------|
-| **bin**       | the bin                                                                |
-| **motif**        | sequence of the motif in [IUPAC](https://www.bioinformatics.org/sms/iupac.html) form  |
+| **motif**        | sequence of the detected motif in IUPAC format |
 | **mod_position** | position within the motif where the methylation is located. 0-based index.                            |
 | **mod_type**     | the type of modification [a (6mA) or m (5mC)]                                                                     |
-| **contig_count**        | number contigs in the bin                                                       |
-| **contigs_with_motif**         | number of contigs in the bin with mean methylation above 50%                                                        |
-| **motifs_type** | what kind of motif the sequence represents (palindrome, non-palindrome, bipartite or ambiguous) |
-| **methylated_count** | number of methylated positions in all contigs in the bin |
-| **non_methylated_count** | number of non-methylated position in all contigs in the bin |
-| **mean_methylation_bin** | mean methylation of all contigs in the bin |
+| **n_mod**        | number of motif positions that are methylated in the contig                                                       |
+| **n_nomod**         | number of motif positions that are not methylated in the contig                                                        |
+| **motifs_type** | type of motif the sequence (palindrome, non-palindrome, bipartite or ambiguous) |
 
+If a complement of a motif is detected, it gets added as a complement of the motif.
+ | **Column**                  | **Description**                                                                            |
+|----------------------------|---------------------------------------------------------------------------------------------|
+| **motif_complement**       | Sequence of the complement motif in IUPAC format.                                            |
+| **mod_position_complement**           | Position within the complement motif where the methylation is located. 0-based index.                 |
+| **n_mod_complement**       | Number of motif positions that are methylated in the contig.                               |
+| **n_nomod_complement**     | Number of motif positions that are not methylated in the contig.                           |
+
+### bin-consensus 
+The format is almost identical the the output of find-motifs, except everything is aggregated to bin level and the contig column is replaced by a bin column
 
 
 ## License
