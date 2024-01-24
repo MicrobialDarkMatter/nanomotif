@@ -2,6 +2,7 @@ import nanomotif as nm
 from nanomotif.logger import configure_logger
 import logging as log
 import os
+import shutil
 from pathlib import Path
 import json
 os.environ["POLARS_MAX_THREADS"] = "1"
@@ -15,11 +16,10 @@ from nanomotif._version import __version__
 def shared_setup(args, working_dir):
     warnings.filterwarnings("ignore")
     # Check if output directory exists
-    if not os.path.exists(args.output):
-        os.makedirs(args.output)
+    if not os.path.exists(args.out):
+        os.makedirs(args.out)
     else:
-        log.warn(f"Output directory {args.output} already exists")
-        return
+        log.warn(f"Output directory {args.out} already exists")
 
     # Set up logging
     LOG_DIR = working_dir + "/logs"
@@ -70,8 +70,8 @@ def find_motifs(args, pileup = None, assembly = None):
     pileup = pileup.pileup.filter(pl.col("contig").is_in(contigs_to_process))
     remaining_contigs = pileup.get_column("contig").unique().to_list()
 
-    os.makedirs(args.output + "/temp/", exist_ok=True)
-    pileup.write_csv(args.output + "/temp/filtered_pileup.tsv", separator="\t")
+    os.makedirs(args.out + "/temp/", exist_ok=True)
+    pileup.write_csv(args.out + "/temp/filtered_pileup.tsv", separator="\t")
     log.info(f"Processing {len(remaining_contigs)} of {total_contigs} contigs")
     log.info("Identifying motifs")
     motifs = nm.evaluate.process_sample_parallel(
@@ -83,7 +83,7 @@ def find_motifs(args, pileup = None, assembly = None):
             threshold_valid_coverage = args.threshold_valid_coverage,
             minimum_kl_divergence = args.minimum_kl_divergence,
             verbose = args.verbose,
-            log_dir = args.output + "/logs",
+            log_dir = args.out + "/logs",
             seed = args.seed
         )
 
@@ -117,8 +117,8 @@ def find_motifs(args, pileup = None, assembly = None):
     def save_motif_df(df, name):
         df = format_motif_df(df)
         df = df.sort(["contig", "mod_type", "motif"])
-        df.write_csv(args.output + "/" + name + ".tsv", separator="\t")
-    os.makedirs(args.output + "/precleanup-motifs/", exist_ok=True)
+        df.write_csv(args.out + "/" + name + ".tsv", separator="\t")
+    os.makedirs(args.out + "/precleanup-motifs/", exist_ok=True)
     save_motif_df(motifs, "precleanup-motifs/motifs-raw")
 
     log.info("Postprocessing motifs")
@@ -157,6 +157,9 @@ def find_motifs(args, pileup = None, assembly = None):
 
     log.info(" - Removing motifs observed less than min count")
     motifs = motifs.filter(pl.col("n_mod") + pl.col("n_nomod") > 50)
+    if len(motifs) == 0:
+        log.info("No motifs found")
+        return
     save_motif_df(motifs, "motifs")
 
     log.info("Done finding motifs")
@@ -202,7 +205,7 @@ def score_motifs(args, pileup = None, assembly = None, motifs = None):
         threshold_methylation_general = args.threshold_methylation_general,
         threshold_valid_coverage = 1,
         verbose = args.verbose,
-        log_dir = args.output + "/logs",
+        log_dir = args.out + "/logs",
         seed = args.seed
         )
     scored_all = nm.postprocess.join_motif_complements(scored_all)
@@ -212,7 +215,7 @@ def score_motifs(args, pileup = None, assembly = None, motifs = None):
         ])
     
     scored_all = scored_all.sort(["contig", "mod_type", "motif"])
-    scored_all.write_csv(args.output + "/motifs-scored.tsv", separator="\t")
+    scored_all.write_csv(args.out + "/motifs-scored.tsv", separator="\t")
     return scored_all
 
 def bin_consensus(args, pileup = None, assembly = None, motifs = None, motifs_scored = None):
@@ -256,7 +259,7 @@ def bin_consensus(args, pileup = None, assembly = None, motifs = None, motifs_sc
 
     output = output.rename({"contig":"bin", "n_mod":"n_mod_bin", "n_nomod":"n_nomod_bin"})
     output = output.sort(["bin", "mod_type", "motif"])
-    output.write_csv(args.output + "/bin-motifs.tsv", separator="\t")
+    output.write_csv(args.out + "/bin-motifs.tsv", separator="\t")
 
 def metagenomic_workflow(args):
     # Check if output directory exists
@@ -267,6 +270,9 @@ def metagenomic_workflow(args):
     # Find motifs
     log.info("Finding motifs")
     motifs = find_motifs(args, pileup=pileup, assembly=assembly)
+    if motifs is None:
+        log.info("Stopping workflow")
+        return
 
     # Score all motifs
     log.info("Scoring motifs")
@@ -300,12 +306,13 @@ def check_install(args):
     bin_consensus(args, pileup=pileup, assembly=assembly, motifs=motifs, motifs_scored=scored_all)
 
     log.info("Done")
+    shutil.rmtree(args.out)
 
 def main():
     # Parse arguments
     parser = nm.argparser.create_parser()
     args = parser.parse_args()
-    shared_setup(args, args.output)
+    shared_setup(args, args.out)
     if args.command == "find-motifs":
         find_motifs(args)
     elif args.command == "score-motifs":
