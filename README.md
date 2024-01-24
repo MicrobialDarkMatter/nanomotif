@@ -147,16 +147,16 @@ optional arguments:
 Running `find-motifs` generates pre-cleanup folder, whihc contains motif that got removed in the postprocessing steps. The name of the file indicate which postprocessing steps have been run on the motifs.
 
 ### bin-consensus 
-`find-motifs` outputs results to `bin-motifs.tsv`
+`bin-consensus` outputs results to `bin-motifs.tsv`
 The format is almost identical the the output of find-motifs, except everything is aggregated to bin level and the contig column is replaced by a bin column
 | **Column**       | **Description**                                                                                       |
 |------------------|-------------------------------------------------------------------------------------------------------|
-| **bin**       | bin to which the motif belong                                                                |
-| **motif**        | sequence of the detected motif in IUPAC format |
+| **bin**          | bin to which the motif belong                                                                         |
+| **motif**        | sequence of the detected motif in IUPAC format                                                        |
 | **mod_position** | position within the motif where the methylation is located. 0-based index.                            |
 | **mod_type**     | the type of modification [a (6mA) or m (5mC)]                                                                     |
 | **n_mod**        | number of motif positions that are methylated in all contigs in the bin                                                       |
-| **n_nomod**         | number of motif positions that are not methylated in all contigs in the bin                                                       |
+| **n_nomod**      | number of motif positions that are not methylated in all contigs in the bin                                                       |
 | **motifs_type** | type of motif the sequence (palindrome, non-palindrome, bipartite or ambiguous) |
 | **motif_complement**       | Sequence of the complement motif if present.                                            |
 | **mod_position_complement**           | Position within the complement motif where the methylation is located. 0-based index.                 |
