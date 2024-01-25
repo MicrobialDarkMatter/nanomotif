@@ -32,7 +32,7 @@ This runs a test run on a small dataset, ensuring everything works.
 
 ## Required files
 
-To identify methylated motifs, the follwoing files are required: 
+To identify methylated motifs, the following files are required: 
 - Assembly
 - methylation pileup
 - Contig-bin relationship*
@@ -114,7 +114,7 @@ optional arguments:
                         minimum fraction of reads that must be methylated at a position for the position to be methylated. These position are used for counting number of
                         methylated position of a motif. Default: 0.6
   --search_frame_size SEARCH_FRAME_SIZE
-                        length of the sequnces sampled around confident methylatyion sites. Default: 40
+                        length of the sequences sampled around confident methylation sites. Default: 40
   --threshold_methylation_confident THRESHOLD_METHYLATION_CONFIDENT
                         minimum fraction of reads that must be methylated at a position for the position to be considered confiently methylated. These position are used to
                         search for candidate motifs. Default: 0.8
@@ -144,18 +144,19 @@ optional arguments:
 | **n_mod_complement**       | Number of motif positions that are methylated in the contig.                               |
 | **n_nomod_complement**     | Number of motif positions that are not methylated in the contig.                           |
 
-Running `find-motifs` generates pre-cleanup folder, whihc contains motif that got removed in the postprocessing steps. The name of the file indicate which postprocessing steps have been run on the motifs.
+Running `find-motifs` generates pre-cleanup folder, which contains motif that got removed in the postprocessing steps. The name of the file indicates which postprocessing steps have been run on the motifs.
 
 ### bin-consensus 
+`bin-consensus` outputs results to `bin-motifs.tsv`
 The format is almost identical the the output of find-motifs, except everything is aggregated to bin level and the contig column is replaced by a bin column
 | **Column**       | **Description**                                                                                       |
 |------------------|-------------------------------------------------------------------------------------------------------|
-| **bin**       | bin to which the motif belong                                                                |
-| **motif**        | sequence of the detected motif in IUPAC format |
+| **bin**          | bin to which the motif belong                                                                         |
+| **motif**        | sequence of the detected motif in IUPAC format                                                        |
 | **mod_position** | position within the motif where the methylation is located. 0-based index.                            |
 | **mod_type**     | the type of modification [a (6mA) or m (5mC)]                                                                     |
 | **n_mod**        | number of motif positions that are methylated in all contigs in the bin                                                       |
-| **n_nomod**         | number of motif positions that are not methylated in all contigs in the bin                                                       |
+| **n_nomod**      | number of motif positions that are not methylated in all contigs in the bin                                                       |
 | **motifs_type** | type of motif the sequence (palindrome, non-palindrome, bipartite or ambiguous) |
 | **motif_complement**       | Sequence of the complement motif if present.                                            |
 | **mod_position_complement**           | Position within the complement motif where the methylation is located. 0-based index.                 |
