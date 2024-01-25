@@ -18,15 +18,15 @@ def  create_parser():
     parser_optional.add_argument("-t", "--threads", type=int, default=1, help="number of threads to use. Default is 1")
     parser_optional.add_argument("-v", "--verbose", action="store_true", help="increase output verbosity. (set logger to debug level)")
     parser_optional.add_argument("--seed", type=int, default=1, help="seed for random number generator. Default: %(default)s")
-    parser_optional.add_argument("--threshold_methylation_general", type=float, default=0.6, help="minimum fraction of reads that must be methylated at a position for the position to be methylated. These position are used for counting number of methylated position of a motif. Default: %(default)s")
+    parser_optional.add_argument("--threshold_methylation_general", type=float, default=0.70, help="minimum fraction of reads that must be methylated at a position for the position to be methylated. These position are used for counting number of methylated position of a motif. Default: %(default)s")
 
     ###########################################################################
     # Find Motifs
     parser_shared_find_motifs = argparse.ArgumentParser(add_help=False)
     parser_shared_find_motifs.add_argument("--search_frame_size", type=int, default=40, help="length of the sequnces sampled around confident methylatyion sites. Default: %(default)s")
-    parser_shared_find_motifs.add_argument("--threshold_methylation_confident", type=float, default=0.8, help="minimum fraction of reads that must be methylated at a position for the position to be considered confiently methylated. These position are used to search for candidate motifs. Default: %(default)s")
+    parser_shared_find_motifs.add_argument("--threshold_methylation_confident", type=float, default=0.80, help="minimum fraction of reads that must be methylated at a position for the position to be considered confiently methylated. These position are used to search for candidate motifs. Default: %(default)s")
     parser_shared_find_motifs.add_argument("--threshold_valid_coverage", type=int, default=5, help="minimum valid base coverage for a position to be considered. Default: %(default)s")
-    parser_shared_find_motifs.add_argument("--minimum_kl_divergence", type=float, default=0.2, help="minimum KL-divergence for a position to considered for expansion in  motif search. Higher value means less exhaustive, but faster search. Default: %(default)s")
+    parser_shared_find_motifs.add_argument("--minimum_kl_divergence", type=float, default=0.05, help="minimum KL-divergence for a position to considered for expansion in  motif search. Higher value means less exhaustive, but faster search. Default: %(default)s")
     parser_find_motifs = subparsers.add_parser(
         'find-motifs', 
         parents=[parser_positional, parser_optional, parser_shared_find_motifs], 
@@ -61,7 +61,6 @@ def  create_parser():
 
     ###########################################################################
     # Check installation
-    parser_check_installation = subparsers.add_parser('check-installation', parents=[parser_optional, parser_shared_find_motifs], conflict_handler="resolve")
-    parser_check_installation.add_argument("--out", type=str, help="path to the output folder. Default: %(default)s", default="nanomotif-install-check")
+    parser_check_installation = subparsers.add_parser('check-installation', parents=[parser_optional, parser_shared_find_motifs], add_help=False)
     return parser
     
