@@ -1,8 +1,5 @@
 from setuptools import setup, find_packages
-def read_version():
-    with open("nanomotif/_version.py", "r") as f:
-        return re.search(r'^__version__\s*=\s*[\'"]([^\'"]*)[\'"]', f.read(), re.MULTILINE).group(1)
-
+exec(open('nanomotif/_version.py').read())
 setup(
     name='nanomotif',
     version=__version__,
