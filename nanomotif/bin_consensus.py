@@ -35,7 +35,7 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins):
         .apply(lambda group: group.filter(pl.col("directly_detected").any()))
     log.debug("Mergin similar motifs within bin")
     # Merge motifs
-    merged_motifs = merge_motifs_in_df(bin_consensus.select(["contig","mod_type", "n_mod", "n_nomod","motif","mod_position",]), pileup, assembly)
+    merged_motifs = nm.postprocess.merge_motifs_in_df(bin_consensus.select(["contig","mod_type", "n_mod", "n_nomod","motif","mod_position",]), pileup, assembly)
     log.debug("Removing submotifs")
     # Remove submotifs
     merged_motifs = nm.postprocess.remove_sub_motifs(merged_motifs)

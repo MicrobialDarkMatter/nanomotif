@@ -1,5 +1,6 @@
 import nanomotif as nm
 import polars as pl
+import numpy as np
 from polars import col
 import logging as log
 
@@ -53,17 +54,46 @@ def merge_motifs_in_df(motif_df, pileup, assembly):
         motifs = [nm.candidate.Motif(seq, pos) for seq, pos in zip(motif_seq, motif_pos)]
 
         # Merge motifs
-        merged_motifs, pre_merge_motifs = nm.candidate.merge_motifs(motifs)
-        
+        merged_motifs = nm.candidate.merge_motifs(motifs)
+        all_merged_motifs = []
+        all_premerge_motifs = []
+        # Check mean shift of premerge motifs to merged motif is high enough
+        for cluster, motifs in merged_motifs.items():
+            merged_motif = motifs[0]
+            premerge_motifs = motifs[1]
+            merge_mean = nm.evaluate.motif_model_contig(
+                pileup.filter((col("contig") == contig) & (col("mod_type") == mod_type)), 
+                assembly.assembly[contig].sequence,
+                merged_motif
+            ).mean()
+            pre_merge_means = []
+            for pre_merge_motif in premerge_motifs:
+                pre_merge_means.append(nm.evaluate.motif_model_contig(
+                    pileup.filter((col("contig") == contig) & (col("mod_type") == mod_type)), 
+                    assembly.assembly[contig].sequence,
+                    pre_merge_motif
+                ).mean())
+            
+            pre_merge_mean = sum(np.array(pre_merge_means)) / len(pre_merge_means)
+            mean_shift = merge_mean - pre_merge_mean
+            if mean_shift < -0.2:
+                log.warning(f"Mean shift of merged motif {merged_motif} is too low, keeping original motifs")
+                merged_motifs.pop(cluster)
+            
+            else:
+                log.info(f"Mean shift of merged motif {merged_motif} is {mean_shift}")
+                all_merged_motifs.append(merged_motif)
+                all_premerge_motifs.extend(premerge_motifs)
+
         # Create a new dataframe with the non merged motifs
-        if  len(pre_merge_motifs) == 0:
+        if  len(all_premerge_motifs) == 0:
             # No motifs were merged
             new_df.append(df)
             continue
-        single_df = df.filter(col("motif").is_in(pre_merge_motifs).not_())
+        single_df = df.filter(col("motif").is_in(all_premerge_motifs).not_())
         new_df.append(single_df)
         merged_df = []
-        for motif in merged_motifs:
+        for motif in all_merged_motifs:
             merged_model = nm.evaluate.motif_model_contig(
                 pileup.filter((col("contig") == contig) & (col("mod_type") == mod_type)), 
                 assembly.assembly[contig].sequence,
