@@ -23,7 +23,14 @@ class Motif(str):
         Get IUPAC sequence of motif
         """
         return regex_to_iupac(self.string)
-
+    def identical(self, other_motif):
+        """
+        Check if two motifs are identical.
+        """
+        assert isinstance(other_motif, Motif)
+        str_equal = self.string == other_motif.string
+        pos_equal = self.mod_position == other_motif.mod_position
+        return str_equal and pos_equal
     def sub_motif_of(self, other_motif):
         """
         Check if a motif is in another motif.
@@ -301,6 +308,32 @@ def explode_sequence(seq):
 
     return exploded_sequences
 
+def check_all_nodes_connected(graph):
+        n = len(graph.nodes()) 
+        expected_edges = n * (n - 1) / 2
+        is_fully_connected = len(graph.edges()) == expected_edges
+        return is_fully_connected
+
+class MotifDistanceGraph(nx.Graph):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    def add_motifs(self, motifs, min_distance = 2):
+        for motif in motifs:
+            self.add_motif(motif, min_distance)
+    def add_motif(self, motif, min_distance = 2):
+        self.add_node(motif)
+        for other_motif in self.nodes():
+            if not motif.identical(other_motif):
+                distance = motif.distance(other_motif)
+                if distance <= min_distance:
+                    self.add_edge(motif, other_motif, dist=distance)
+    def get_connected_clusters(self):
+        return list(nx.connected_components(self))
+    
+    def get_fully_connected_clusters(self):
+        clusters = self.get_connected_clusters()
+        return [cluster for cluster in clusters if check_all_nodes_connected(self.subgraph(cluster).copy())]
+
 
 def merge_motifs(motifs, connectivity_dist=2, min_length=4):
     """
@@ -314,35 +347,17 @@ def merge_motifs(motifs, connectivity_dist=2, min_length=4):
     Returns:
     - list: List of merged motifs.
     """
-    # Create network where each node is a motif and the edge is the edit distance between them
-    distance_graph = nx.Graph()
 
     # Subset to motif greater than minimum length
     motifs = [motif for motif in motifs if motif.trimmed_length() > min_length]
+    distance_graph = MotifDistanceGraph()
+    distance_graph.add_motifs(motifs, connectivity_dist)
+    clusters = distance_graph.get_fully_connected_clusters()
 
-    # Add nodes and edges to graph
-    for i, motif in enumerate(motifs):
-        distance_graph.add_node(i, motif=motif)
-        for j, other in enumerate(motifs):
-            if (i != j):
-                distance = motif.distance(other)
-                if distance <= connectivity_dist:
-                    distance_graph.add_edge(i, j, dist=distance)
-
-    # Find connected components (clusters)
-    clusters = list(nx.connected_components(distance_graph))
-
-    # Check for mutual reachability between clusters, all nodes should have an edge to all other nodes in the cluster
-    def check_all_nodes_connected(graph):
-        n = len(graph.nodes()) 
-        expected_edges = n * (n - 1) / 2
-        is_complete = len(graph.edges()) == expected_edges
-        return is_complete
-    clusters = [cluster for cluster in clusters if check_all_nodes_connected(distance_graph.subgraph(cluster))]
 
     # Now 'clusters' is a list of sets, where each set is a cluster of nodes
-    pre_merge_motifs = []
-    merged_motifs = []
+    motif_merged = {}
+
     for i, cluster in enumerate(clusters, start=1):
         if len(cluster) == 1:
             continue
@@ -350,35 +365,18 @@ def merge_motifs(motifs, connectivity_dist=2, min_length=4):
         cluster_motifs = []
         merged_motif = None
         for node in cluster:
-            log.debug(f' - Node {node}: {motifs[node]}')
-            cluster_motifs.append(motifs[node])
+            log.debug(f' - {node}')
+            cluster_motifs.append(node)
             # Merge motifs
             if merged_motif is None:
-                merged_motif = motifs[node]
+                merged_motif = node
             else:
-                merged_motif = merged_motif.merge(distance_graph.nodes[node]["motif"])
+                merged_motif = merged_motif.merge(node)
 
-        # check if merged motif gives rise to non observed motifs
-        exploded_motifs = merged_motif.explode_motif()
-        all_represeneted = True
-        for motif1 in exploded_motifs:
-            represented = False
-            for motif2 in cluster_motifs:
-                # Should be a child or equal to atleast one premerge motif
-                if motif1.sub_motif_of(motif2):
-                    represented = True
-                    break
-            if not represented:
-                all_represeneted = False
-                break
 
-        if not all_represeneted:
-            log.debug(f' - Merged motif: {merged_motif} does not represent all observed motifs: keeping premerge motifs')
-            continue
         log.debug(f' - Merged motif: {merged_motif}')
-        pre_merge_motifs += cluster_motifs
-        merged_motifs.append(merged_motif)
-    return merged_motifs, pre_merge_motifs
+        motif_merged[i] = [merged_motif, cluster_motifs]
+    return motif_merged
 
 
 def remove_child_motifs(motifs):
