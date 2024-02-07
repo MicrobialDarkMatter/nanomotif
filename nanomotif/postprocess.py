@@ -45,7 +45,7 @@ def remove_sub_motifs(motif_df):
     motif_df_clean = pl.concat(motif_df_clean)
     return motif_df_clean
 
-def merge_motifs_in_df(motif_df, pileup, assembly):
+def merge_motifs_in_df(motif_df, pileup, assembly, mean_shift_threshold = -0.2):
     new_df = []
     for (contig, mod_type), df in motif_df.groupby("contig", "mod_type"):
         # Get list of motifs
@@ -76,9 +76,8 @@ def merge_motifs_in_df(motif_df, pileup, assembly):
             
             pre_merge_mean = sum(np.array(pre_merge_means)) / len(pre_merge_means)
             mean_shift = merge_mean - pre_merge_mean
-            if mean_shift < -0.2:
-                log.warning(f"Mean shift of merged motif {merged_motif} is too low, keeping original motifs")
-                merged_motifs.pop(cluster)
+            if mean_shift < mean_shift_threshold:
+                log.info(f"Mean shift of merged motif {merged_motif} is {mean_shift}, keeping original motifs")
             
             else:
                 log.info(f"Mean shift of merged motif {merged_motif} is {mean_shift}")
