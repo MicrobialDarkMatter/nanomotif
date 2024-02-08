@@ -1,6 +1,8 @@
 import polars as pl
+from polars import col
 import nanomotif as nm
 import logging as log
+import numpy as np
 
 def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins):
     log.debug("Starting within bin motif consensus")
@@ -35,8 +37,12 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins):
         .apply(lambda group: group.filter(pl.col("directly_detected").any()))
     log.debug("Mergin similar motifs within bin")
     # Merge motifs
-    merged_motifs = nm.postprocess.merge_motifs_in_df(bin_consensus.select(["contig","mod_type", "n_mod", "n_nomod","motif","mod_position",]), pileup, assembly)
+    bin_consensus = bin_consensus.with_columns(
+        pl.lit(-1).alias("score")
+    )
+    merged_motifs = nm.postprocess.merge_motifs_in_df(bin_consensus.select(["contig","mod_type", "n_mod", "n_nomod","motif","mod_position"]), pileup, assembly)
     log.debug("Removing submotifs")
+    bin_consensus = bin_consensus.drop("score")
     # Remove submotifs
     merged_motifs = nm.postprocess.remove_sub_motifs(merged_motifs)
     
@@ -77,7 +83,7 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins):
 
 
 
-def merge_motifs_in_df(motif_df, pileup, assembly):
+def merge_motifs_in_df(motif_df, pileup, assembly, mean_shift_threshold = -0.25):
     new_df = []
     for (contig, mod_type), df in motif_df.groupby("contig", "mod_type"):
         # Get list of motifs
@@ -86,19 +92,47 @@ def merge_motifs_in_df(motif_df, pileup, assembly):
         motifs = [nm.candidate.Motif(seq, pos) for seq, pos in zip(motif_seq, motif_pos)]
 
         # Merge motifs
-        merged_motifs, pre_merge_motifs = nm.candidate.merge_motifs(motifs)
-        
+        merged_motifs = nm.candidate.merge_motifs(motifs)
+        all_merged_motifs = []
+        all_premerge_motifs = []
+        # Check mean shift of premerge motifs to merged motif is high enough
+        for cluster, motifs in merged_motifs.items():
+            merged_motif = motifs[0]
+            premerge_motifs = motifs[1]
+            merge_mean = nm.evaluate.motif_model_contig(
+                pileup.filter((col("contig") == contig) & (col("mod_type") == mod_type)), 
+                assembly.assembly[contig].sequence,
+                merged_motif
+            ).mean()
+            pre_merge_means = []
+            for pre_merge_motif in premerge_motifs:
+                pre_merge_means.append(nm.evaluate.motif_model_contig(
+                    pileup.filter((col("contig") == contig) & (col("mod_type") == mod_type)), 
+                    assembly.assembly[contig].sequence,
+                    pre_merge_motif
+                ).mean())
+            
+            pre_merge_mean = sum(np.array(pre_merge_means)) / len(pre_merge_means)
+            mean_shift = merge_mean - pre_merge_mean
+            if mean_shift < mean_shift_threshold:
+                log.info(f"Mean shift of merged motif {merged_motif} is {mean_shift}, keeping original motifs")
+            
+            else:
+                log.info(f"Mean shift of merged motif {merged_motif} is {mean_shift}")
+                all_merged_motifs.append(merged_motif)
+                all_premerge_motifs.extend(premerge_motifs)
+
         # Create a new dataframe with the non merged motifs
-        if  len(pre_merge_motifs) == 0:
+        if  len(all_premerge_motifs) == 0:
             # No motifs were merged
             new_df.append(df)
             continue
-        single_df = df.filter(pl.col("motif").is_in(pre_merge_motifs).not_())
+        single_df = df.filter(col("motif").is_in(all_premerge_motifs).not_())
         new_df.append(single_df)
         merged_df = []
-        for motif in merged_motifs:
+        for motif in all_merged_motifs:
             merged_model = nm.evaluate.motif_model_contig(
-                pileup.filter((pl.col("contig") == contig) & (pl.col("mod_type") == mod_type)), 
+                pileup.filter((col("contig") == contig) & (col("mod_type") == mod_type)), 
                 assembly.assembly[contig].sequence,
                 motif
             )
@@ -106,12 +140,10 @@ def merge_motifs_in_df(motif_df, pileup, assembly):
                 "contig": contig,
                 "mod_type": mod_type,
                 "n_mod": merged_model._alpha,
-                "n_nomod": merged_model._beta,
-                "motif": motif.string,
+                "n_nomod": merged_model._beta - 1,
+                "motif": nm.candidate.regex_to_iupac(motif.string),
                 "mod_position": motif.mod_position
             }))
         new_df.append(pl.concat(merged_df))
     new_df = pl.concat(new_df)
-
     return new_df
-
