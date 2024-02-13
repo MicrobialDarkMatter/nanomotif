@@ -3,7 +3,6 @@ Models
 """
 import numpy as np
 from scipy.stats import beta
-import matplotlib.pyplot as plt
 
 class BetaBernoulliModel():
     def __init__(self, alpha = 0, beta = 1):
@@ -42,14 +41,5 @@ class BetaBernoulliModel():
 
     def __repr__(self):
         return str(self)
-    
-    def plot(self, ax = None):
-        if ax is None:
-            fig, ax = plt.subplots()
-        x = np.linspace(0, 1, 1000)
-        ax.plot(x, beta.pdf(x, self._alpha, self._beta), 'r-')
-        ax.set_title('Beta Distribution', fontsize='15')
-        ax.set_xlabel('Values of Random Variable X (0, 1)', fontsize='15')
-        ax.set_ylabel('Probability', fontsize='15')
-        return ax
+
 
