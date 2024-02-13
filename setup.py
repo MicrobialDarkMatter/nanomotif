@@ -19,7 +19,6 @@ setup(
         "numpy==1.24.4",
         "pandas==2.0.2",
         "polars>=0.19",
-        "seaborn==0.12.2",
         "scipy==1.10.1",
         "networkx==3.1",
         "progressbar2==3.53.1"
