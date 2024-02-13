@@ -6,8 +6,7 @@ import random
 random.seed(2403)
 import nanomotif.utils as utils
 from nanomotif.constants import *
-import matplotlib.pyplot as plt
-from matplotlib import cm
+
 
 class Assembly():
     def __init__(self, assembly: dict):
