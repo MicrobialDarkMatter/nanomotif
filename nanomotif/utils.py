@@ -4,7 +4,6 @@ Utility functions
 from itertools import product
 import numpy as np
 import re
-import numpy as  np
 import random
 import nanomotif as nm
 np.random.seed(1)
