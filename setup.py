@@ -16,12 +16,12 @@ setup(
     install_requires=[
         "wheel",
         "requests",
-        "numpy==1.24.4",
-        "pandas==2.0.2",
+        "numpy>=1.24.4",
+        "pandas>=2.0.2",
         "polars>=0.19",
-        "scipy==1.10.1",
-        "networkx==3.1",
-        "progressbar2==3.53.1"
+        "scipy>=1.10.1",
+        "networkx>=3.1",
+        "progressbar2>=3.53.1"
     ],
     entry_points={
             'console_scripts': [
