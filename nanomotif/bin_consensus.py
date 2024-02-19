@@ -4,86 +4,63 @@ import nanomotif as nm
 import logging as log
 import numpy as np
 
-def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins):
+def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins, minimum_contig_motif_methylation=0.25, minimum_bin_methylation=0.75):
     log.debug("Starting within bin motif consensus")
-    motifs = motifs.with_columns([
-        pl.lit(True).alias("directly_detected")
-    ]).with_columns([
-        pl.col("motif") \
-            .map_elements(lambda x: nm.seq.regex_to_iupac(x)) \
-            .map_elements(lambda x: nm.seq.iupac_to_regex(x)) \
-            .alias("motif")
-    ])
 
-    log.debug("Joining motifs with bins")
-    motifs_scored = motifs_scored.with_columns([
-        pl.col("motif") \
-            .map_elements(lambda x: nm.seq.regex_to_iupac(x)) \
-            .map_elements(lambda x: nm.seq.iupac_to_regex(x)).alias("motif")
-    ]) \
-    .join(bins, on="contig", how = "left") \
-    .filter(pl.col("bin").is_not_null()) \
-    .join(
-        motifs.select("contig", "motif", "mod_type", "mod_position", "directly_detected"), 
-        on=["contig", "motif", "mod_type", "mod_position"], 
-        how="left"
+    motifs = motifs.with_columns(pl.lit(True).alias("directly_detected"))
+    def convert_motifs_to_regex(motifs):
+        return motifs.with_columns(pl.col("motif").map_elements(lambda x: nm.seq.regex_to_iupac(x)).map_elements(lambda x: nm.seq.iupac_to_regex(x)))
+    motifs = convert_motifs_to_regex(motifs)
+    motifs_scored = convert_motifs_to_regex(motifs_scored)
+
+    motifs_scored = motifs_scored \
+        .join(bins, on="contig", how = "left") \
+        .filter(pl.col("bin").is_not_null())
+    motifs_scored = motifs_scored.join(
+        motifs.select("contig", "motif", "mod_type", "mod_position", "directly_detected"), on=["contig", "motif", "mod_type", "mod_position"], how="left"
     ).with_columns(
-        pl.when(pl.col("directly_detected").is_null()).then(pl.lit(False)).otherwise(pl.col("directly_detected")).alias("directly_detected")
-    )
-
-    log.debug("Calculating motif scores")
-    # keep directly detected motifs
-    bin_consensus = motifs_scored.groupby("bin", "motif", "mod_position", "mod_type") \
-        .apply(lambda group: group.filter(pl.col("directly_detected").any()))
-    log.debug("Mergin similar motifs within bin")
-    # Merge motifs
-    bin_consensus = bin_consensus.with_columns(
-        pl.lit(-1).alias("score")
-    )
-    merged_motifs = nm.postprocess.merge_motifs_in_df(bin_consensus.select(["contig","mod_type", "n_mod", "n_nomod","motif","mod_position"]), pileup, assembly)
-    log.debug("Removing submotifs")
-    bin_consensus = bin_consensus.drop("score")
-    # Remove submotifs
-    merged_motifs = nm.postprocess.remove_sub_motifs(merged_motifs)
+        pl.col("directly_detected").fill_null(False)
+    ).groupby("bin", "motif", "mod_position", "mod_type") \
+            .apply(lambda group: group.filter(pl.col("directly_detected").any()))
     
-    log.debug("Calculating motif scores")
-    # Join merged motifs with unmerged motifs
-    bin_consensus = merged_motifs \
-        .join(
-            bin_consensus, on=["contig", "motif", "mod_position", "mod_type"], 
-            how="left"
+    methylated_contig_mass = motifs_scored.filter(
+            ((pl.col("n_mod") / (pl.col("n_mod") + pl.col("n_nomod"))) > minimum_contig_motif_methylation)
+        ).groupby(["bin", "motif", "mod_type", "mod_position"]).agg([
+            (pl.col("n_mod") + pl.col("n_nomod")).sum().alias("n_motif_meth_contigs")
+        ])
+    all_contig_mass = motifs_scored.groupby(["bin", "motif", "mod_type", "mod_position"]).agg([
+            (pl.col("n_mod") + pl.col("n_nomod")).sum().alias("n_motif_contigs"),
+        ])
+    result = methylated_contig_mass.join(all_contig_mass, on=["bin", "motif", "mod_type", "mod_position"]) \
+        .with_columns(
+            (pl.col("n_motif_meth_contigs") / pl.col("n_motif_contigs")).alias("methylated_proportion")
         )
-    bin_consensus = bin_consensus.with_columns(
+    motifs_scored_filt = motifs_scored.join(result, on=["bin", "motif", "mod_type", "mod_position"]).filter(pl.col("methylated_proportion") > minimum_bin_methylation)
+
+    
+    log.debug("Removing submotifs")
+    # Remove submotifs
+    contig_motifs = nm.postprocess.remove_sub_motifs(motifs_scored_filt)
+
+    contig_motifs = contig_motifs.with_columns(
             pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif"),
             (pl.col("n_mod")  / (pl.col("n_mod") + pl.col("n_nomod"))).alias("mean")
         )
-    bin_consensus=bin_consensus.unique([
-            "bin", "motif", "mod_position", "mod_type", "contig"
-        ])
-    bin_consensus = bin_consensus.with_columns(
-            (pl.when(pl.col("mean") > 0.5).then(True).otherwise(False)).alias("n_contigs_above_mean")
-        )
-    bin_consensus = bin_consensus.groupby("bin", "motif", "mod_position", "mod_type") \
+    bin_motifs = contig_motifs.groupby("bin", "motif", "mod_position", "mod_type") \
         .agg(
             pl.col("n_mod").sum().alias("n_mod_bin"),
             pl.col("n_nomod").sum().alias("n_nomod_bin"),
-            pl.col("n_contigs_above_mean").sum().alias("n_contigs_above_mean"),
             pl.col("contig").count().alias("contig_count")
         ).with_columns( 
             pl.col("motif").apply(lambda x: nm.utils.motif_type(x)).alias("motif_type"),
             (pl.col("n_mod_bin") / (pl.col("n_mod_bin") + pl.col("n_nomod_bin"))).alias("mean_sum")
         )
-        
-    log.debug("Filtering motifs")
-    output = bin_consensus.select(["bin", "motif", "mod_position", "mod_type", "contig_count", "n_contigs_above_mean", "motif_type", "n_mod_bin", "n_nomod_bin", "mean_sum"]) \
-        .rename({"n_contigs_above_mean":"contigs_with_motif", "mean_sum":"mean_methylation_bin"}) \
-        .filter(pl.col("contigs_with_motif") > 0) \
-        .filter(pl.col("n_mod_bin") > 50)
-    return output
+    return bin_motifs
 
 
 
 def merge_motifs_in_df(motif_df, pileup, assembly, mean_shift_threshold = -0.25):
+    # DEPRECATED CURRENTLY
     new_df = []
     for (contig, mod_type), df in motif_df.groupby("contig", "mod_type"):
         # Get list of motifs
