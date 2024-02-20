@@ -156,7 +156,7 @@ def find_motifs(args, pileup = None, assembly = None):
     save_motif_df(motifs, "precleanup-motifs/motifs-score-sub-noise-merge-complement")
 
     log.info(" - Removing motifs observed less than min count")
-    motifs = motifs.filter(pl.col("n_mod") + pl.col("n_nomod") > 50)
+    motifs = motifs.filter(pl.col("n_mod") + pl.col("n_nomod") > 1)
     if len(motifs) == 0:
         log.info("No motifs found")
         return

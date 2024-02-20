@@ -38,11 +38,11 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins, m
     motifs_scored_filt = motifs_scored.join(result, on=["bin", "motif", "mod_type", "mod_position"]).filter(pl.col("methylated_proportion") > minimum_bin_methylation)
 
     
-    log.debug("Removing submotifs")
+    #log.debug("Removing submotifs")
     # Remove submotifs
-    contig_motifs = nm.postprocess.remove_sub_motifs(motifs_scored_filt)
+    #contig_motifs = nm.postprocess.remove_sub_motifs(motifs_scored_filt)
 
-    contig_motifs = contig_motifs.with_columns(
+    contig_motifs = motifs_scored_filt.with_columns(
             pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif"),
             (pl.col("n_mod")  / (pl.col("n_mod") + pl.col("n_nomod"))).alias("mean")
         )
