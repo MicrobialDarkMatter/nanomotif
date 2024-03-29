@@ -399,7 +399,7 @@ def binnary(args):
         
         # Create a new contig_bin file
         new_contig_bins = data_processing.create_contig_bin_file(contig_bins.to_pandas(), include_contigs_df.to_pandas(), contamination.to_pandas())
-        data_processing.generate_output(new_contig_bins, args.out, "decontaminated_contig_bins_with_include.tsv")
+        data_processing.generate_output(new_contig_bins, args.out, "new_contig_bin.tsv")
         
         if args.write_bins:
             logger.info("Write bins flag is set. Writing bins to file...")
