@@ -62,5 +62,89 @@ def  create_parser():
     ###########################################################################
     # Check installation
     parser_check_installation = subparsers.add_parser('check-installation', parents=[parser_optional, parser_shared_find_motifs], add_help=False)
+    
+    
+    ###########################################################################
+    # Bin contamination and inclusion
+    parser_binnary_shared = argparse.ArgumentParser(description="Contamination DNA Methylation Pattern", add_help=False)
+    """Function to add common arguments to a subparser."""
+    parser_binnary_shared.add_argument(
+        "--motifs_scored", type=str, help="Path to motifs-scored.tsv from nanomotif", required=True
+    )
+    parser_binnary_shared.add_argument("--bin_motifs", type=str, help="Path to bin-motifs.tsv file", required=True)
+    parser_binnary_shared.add_argument(
+        "--contig_bins", type=str, help="Path to bins.tsv file for contig bins", required=True
+    )
+    parser_binnary_shared.add_argument("-t", "--threads", type=int, default=1, help="Number of threads to use for multiprocessing")
+    parser_binnary_shared.add_argument(
+        "--mean_methylation_cutoff",
+        type=float,
+        default=0.25,
+        help="Cutoff value for considering a motif as methylated",
+    )
+    parser_binnary_shared.add_argument(
+        "--n_motif_contig_cutoff",
+        type=int,
+        default=10,
+        help="Number of motifs that needs to be observed in a contig before it is considered valid for scoring",
+    )
+    parser_binnary_shared.add_argument(
+        "--n_motif_bin_cutoff",
+        type=int,
+        default=500,
+        help="Number of motifs that needs to be observed in a bin to be considered valid for scoring",
+    )
+    
+    parser_binnary_shared.add_argument(
+        "--ambiguous_motif_percentage_cutoff",
+        type=float,
+        default=0.40,
+        help="Percentage of ambiguous motifs defined as mean methylation between 0.05 and 0.40 in a bin. Motifs with an ambiguous methylation percentage of more than this value are removed from scoring. Default is 0.40",
+    )
+    parser_binnary_shared.add_argument("--out", type=str, help="Path to output directory", required=True, default="nanomotif")
+    
+    # Binnary contamination
+    parser_contamination = subparsers.add_parser(
+        'detect_contamination', 
+        help="Detect contamination in bins",
+        parents=[parser_binnary_shared]
+    )  
+    
+    # Binnary inclusion
+    parser_inclusion = subparsers.add_parser(
+        'include_contigs', 
+        help="Include contigs in bins",
+        parents=[parser_binnary_shared]
+    )
+    
+    group = parser_inclusion.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--contamination_file",
+        type=str,
+        help="Path to an existing contamination file to include in the analysis"
+    )
+    group.add_argument(
+        "--run_detect_contamination",
+        action='store_true',
+        help="Indicate that the detect_contamination workflow should be run first"
+    )
+    parser_inclusion.add_argument(
+        "--write_bins",
+        action='store_true',
+        help="If specified, new bins will be written to a bins folder. Requires --assembly_file to be specified.",
+    )
+    parser_inclusion.add_argument(
+        "--assembly_file",
+        type=str,
+        help="Path to assembly.fasta file"
+    )
+    parser_inclusion.add_argument(
+        "--min_motif_comparisons",
+        type=int,
+        default=5,
+        help="Minimum number of non-NA motif comparisons required to include a contig in the analysis. Default is 5",
+    )
+    
+    
     return parser
     

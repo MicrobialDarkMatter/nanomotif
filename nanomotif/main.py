@@ -2,6 +2,7 @@ import nanomotif as nm
 from nanomotif.logger import configure_logger
 import logging as log
 import os
+import sys
 import shutil
 from pathlib import Path
 import json
@@ -309,11 +310,124 @@ def check_install(args):
     log.info("Done")
     shutil.rmtree(args.out)
 
+
+####################################################################################################
+# Binnary - contamination and inclusion
+from nanomotif.binnary import data_processing, detect_contamination, include_contigs
+from nanomotif.binnary.logging import set_logger_config
+
+
+
+def binnary(args):
+    """
+    binnary entry point for the DNA Methylation Pattern Analysis tool.
+    Orchestrates the workflow of the tool based on the provided arguments.
+    """
+    
+    # Conditional check for --write_bins and --assembly_file
+    if args.command == "include_contigs":
+        if args.write_bins and not args.assembly_file:
+            print("Error: --assembly_file must be specified when --write_bins is used.")
+            sys.exit(1)
+        elif not args.write_bins and args.assembly_file:
+            print("Error: --assembly_file can only be used when --write_bins is specified.")
+            sys.exit(1)
+    
+    print("Starting Binnary ", args.command, " analysis...")
+
+    
+    # Settting up the logger
+    # set_logger_config(args)
+    logger = log.getLogger(__name__)
+    logger.info("Starting Binnary analysis...")
+    
+    # Set number of threads for polars
+    os.environ['POLARS_MAX_THREADS'] = str(args.threads)
+    
+    POLAR_THREADS = pl.threadpool_size()
+    logger.info(f"Polars is using {POLAR_THREADS} threads.")
+    
+    # Step 1: Load and preprocess data
+    # These functions would be defined in your data_processing module
+    (
+        motifs_scored,
+        bin_motifs,
+        contig_bins,
+    ) = data_processing.load_data(args)
+
+    
+
+    # Step 2: create motifs_scored_in_bins and bin_motif_binary
+    bin_motif_binary = data_processing.prepare_bin_consensus(bin_motifs, args)
+    
+    motifs_in_bin_consensus = bin_motif_binary.select("motif_mod").unique()["motif_mod"]
+    
+    motifs_scored_in_bins = data_processing.prepare_motifs_scored_in_bins(
+        motifs_scored,
+        motifs_in_bin_consensus,
+        contig_bins
+    )
+    
+    
+    # Create the bin_consensus dataframe for scoring
+    logger.info("Creating bin_consensus dataframe for scoring...")
+    bin_motifs_from_motifs_scored_in_bins = data_processing.construct_bin_consensus_from_motifs_scored_in_bins(
+        motifs_scored_in_bins,
+        args
+    )
+
+    # Functions from the analysis module
+    if args.command == "detect_contamination" or (args.command == "include_contigs" and args.run_detect_contamination):
+        contamination = detect_contamination.detect_contamination(
+            motifs_scored_in_bins, bin_motifs_from_motifs_scored_in_bins, args
+        )
+        data_processing.generate_output(contamination.to_pandas(), args.out, "bin_contamination.tsv")
+        
+
+    if args.command == "include_contigs":
+        # User provided contamination file
+        if args.contamination_file:
+            print("Loading contamination file...")
+            contamination = data_processing.load_contamination_file(args.contamination_file)
+        
+        # Run the include_contigs analysis    
+        include_contigs_df = include_contigs.include_contigs(
+            motifs_scored_in_bins, bin_motifs_from_motifs_scored_in_bins, contamination, args
+        )
+        
+        # Save the include_contigs_df results
+        data_processing.generate_output(include_contigs_df.to_pandas(), args.out, "include_contigs.tsv")
+        
+        # Create a new contig_bin file
+        new_contig_bins = data_processing.create_contig_bin_file(contig_bins.to_pandas(), include_contigs_df.to_pandas(), contamination.to_pandas())
+        data_processing.generate_output(new_contig_bins, args.out, "new_contig_bin.tsv")
+        
+        if args.write_bins:
+            logger.info("Write bins flag is set. Writing bins to file...")
+            print("Loading assembly file...")
+            logger.info("Loading assembly file...")
+            assembly = data_processing.read_fasta(args.assembly_file)
+            
+            logger.info(f"Writing bins to {args.out}/bins/...")
+            data_processing.write_bins_from_contigs(new_contig_bins, assembly, args.out)
+    
+    logger.info(f"Analysis Completed. Results are saved to: {args.out}")
+    print("Analysis Completed. Results are saved to:", args.out)
+
+
+
+
+
 def main():
     # Parse arguments
     parser = nm.argparser.create_parser()
     args = parser.parse_args()
     
+    if args.command in ["detect_contamination", "include_contigs"]:
+        args.verbose = False
+        args.seed = 1
+    
+    shared_setup(args, args.out)
     
     if args.command == "find-motifs":
         shared_setup(args, args.out)
@@ -331,6 +445,9 @@ def main():
         args.out = "nanomotif_install_check"
         shared_setup(args, args.out)
         check_install(args)
+
+    elif args.command in ["detect_contamination", "include_contigs"]:
+        binnary(args)
     else:
         parser.print_help()
         exit()
