@@ -427,7 +427,6 @@ def main():
         args.verbose = False
         args.seed = 1
     
-    shared_setup(args, args.out)
     
     if args.command == "find-motifs":
         shared_setup(args, args.out)
@@ -447,6 +446,7 @@ def main():
         check_install(args)
 
     elif args.command in ["detect_contamination", "include_contigs"]:
+        shared_setup(args, args.out)
         binnary(args)
     else:
         parser.print_help()
