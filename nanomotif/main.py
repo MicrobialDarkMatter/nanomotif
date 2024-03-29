@@ -289,6 +289,7 @@ def check_install(args):
     
     # Check if output directory exists
     log.info("Loading required files")
+    args.out = "nanomotif_install_check"
 
     pileup = nm.datasets.geobacillus_plasmids_pileup()
     assembly = nm.datasets.geobacillus_plasmids_assembly()
@@ -429,20 +430,24 @@ def main():
     shared_setup(args, args.out)
     
     if args.command == "find-motifs":
+        shared_setup(args, args.out)
         find_motifs(args)
     elif args.command == "score-motifs":
+        shared_setup(args, args.out)
         score_motifs(args)
     elif args.command == "bin-consensus":
+        shared_setup(args, args.out)
         bin_consensus(args)
     elif args.command == "complete-workflow":
+        shared_setup(args, args.out)
         metagenomic_workflow(args)
     elif args.command == "check-installation":
+        args.out = "nanomotif_install_check"
+        shared_setup(args, args.out)
         check_install(args)
+
     elif args.command in ["detect_contamination", "include_contigs"]:
         binnary(args)
-    #    pass
-    #elif args.command == "associate-mges":
-    #    pass
     else:
         parser.print_help()
         exit()
