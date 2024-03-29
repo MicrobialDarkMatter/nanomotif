@@ -76,7 +76,6 @@ def  create_parser():
         "--contig_bins", type=str, help="Path to bins.tsv file for contig bins", required=True
     )
     parser_binnary_shared.add_argument("-t", "--threads", type=int, default=1, help="Number of threads to use for multiprocessing")
-
     parser_binnary_shared.add_argument(
         "--mean_methylation_cutoff",
         type=float,
