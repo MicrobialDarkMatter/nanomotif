@@ -66,7 +66,7 @@ grep ">" ${BINS}/*.${EXT} | \
 ```
 
 ## Usage
-
+### Motif identification
 ```
 usage: nanomotif [-h] [--version] {find-motifs,score-motifs,bin-consensus,complete-workflow,check-installation} ...
 
@@ -123,8 +123,9 @@ optional arguments:
   --minimum_kl_divergence MINIMUM_KL_DIVERGENCE
                         minimum KL-divergence for a position to considered for expansion in motif search. Higher value means less exhaustive, but faster search. Default: 0.2
 ```
-## Output description
-### find-motifs and score-motifs
+
+#### Output description
+##### find-motifs and score-motifs
 
 `find-motifs` outputs results to `motifs.tsv` and `score-motifs` outputs result to `motifs-scored.tsv`.
 
@@ -146,7 +147,7 @@ optional arguments:
 
 Running `find-motifs` generates pre-cleanup folder, which contains motif that got removed in the postprocessing steps. The name of the file indicates which postprocessing steps have been run on the motifs.
 
-### bin-consensus 
+##### bin-consensus 
 `bin-consensus` outputs results to `bin-motifs.tsv`
 The format is almost identical the the output of find-motifs, except everything is aggregated to bin level and the contig column is replaced by a bin column
 | **Column**       | **Description**                                                                                       |
@@ -162,6 +163,101 @@ The format is almost identical the the output of find-motifs, except everything 
 | **mod_position_complement**           | Position within the complement motif where the methylation is located. 0-based index.                 |
 | **n_mod_complement**       | Number of motif positions that are methylated in all contigs in the bin                               |
 | **n_nomod_complement**     | Number of motif positions that are not methylated in all contigs in the bin                           |
+
+
+### Bin contamination
+#### Usage
+After motif identification it is possible to identify contamination in bins using the bin-motifs, contig-bin and motif-scored files. 
+
+```
+usage: nanomotif detect_contamination [-h] --motifs_scored MOTIFS_SCORED --bin_motifs BIN_MOTIFS --contig_bins CONTIG_BINS [-t THREADS] [--mean_methylation_cutoff MEAN_METHYLATION_CUTOFF]
+                                      [--n_motif_contig_cutoff N_MOTIF_CONTIG_CUTOFF] [--n_motif_bin_cutoff N_MOTIF_BIN_CUTOFF] [--ambiguous_motif_percentage_cutoff AMBIGUOUS_MOTIF_PERCENTAGE_CUTOFF] --out
+                                      OUT
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --motifs_scored MOTIFS_SCORED
+                        Path to motifs-scored.tsv from nanomotif
+  --bin_motifs BIN_MOTIFS
+                        Path to bin-motifs.tsv file
+  --contig_bins CONTIG_BINS
+                        Path to bins.tsv file for contig bins
+  -t THREADS, --threads THREADS
+                        Number of threads to use for multiprocessing
+  --mean_methylation_cutoff MEAN_METHYLATION_CUTOFF
+                        Cutoff value for considering a motif as methylated
+  --n_motif_contig_cutoff N_MOTIF_CONTIG_CUTOFF
+                        Number of motifs that needs to be observed in a contig before it is considered valid for scoring
+  --n_motif_bin_cutoff N_MOTIF_BIN_CUTOFF
+                        Number of motifs that needs to be observed in a bin to be considered valid for scoring
+  --ambiguous_motif_percentage_cutoff AMBIGUOUS_MOTIF_PERCENTAGE_CUTOFF
+                        Percentage of ambiguous motifs defined as mean methylation between 0.05 and 0.40 in a bin. Motifs with an ambiguous methylation percentage of more than this value are removed from
+                        scoring. Default is 0.40
+  --out OUT             Path to output directory
+```
+
+The output is a `bin_contamination.tsv` file with the following columns:
+
+| **Column**       | **Description**                                                                                       |
+|------------------|-------------------------------------------------------------------------------------------------------|
+| **bin**          | bin to which the motif belong                                                                         |
+| **bin_contig_compare** | The contig for which the methylation pattern is compared. The name is a concatenation of bin + "_" + contig. |
+| **binary_methylation_missmatch_score** | Number of methylation missmatches between the contig and the bin_consensus pattern. |
+| **non_na_comparisons** | Number of non-NA comparisons between the contig and the bin_consensus pattern. |
+| **contig** | The contig for which the methylation pattern is compared. | 
+
+### Include unbinned contigs
+This module tries to assign contigs in the assembly file to bins by comparing the methylation pattern of the contig to the bin consensus. the contig must have a unique perfect match to the bin consensus to be assigned to a bin. Additionally, the `include_contigs` assigns all the contigs in the `bin_contamination.tsv` file to as unbinned. If decontamination should not be performed, the `include_contigs` can be run with an empty `bin_contamination.tsv` file with just the column. 
+
+```
+usage: nanomotif include_contigs [-h] --motifs_scored MOTIFS_SCORED --bin_motifs BIN_MOTIFS --contig_bins CONTIG_BINS [-t THREADS] [--mean_methylation_cutoff MEAN_METHYLATION_CUTOFF]
+                                 [--n_motif_contig_cutoff N_MOTIF_CONTIG_CUTOFF] [--n_motif_bin_cutoff N_MOTIF_BIN_CUTOFF] [--ambiguous_motif_percentage_cutoff AMBIGUOUS_MOTIF_PERCENTAGE_CUTOFF] --out OUT
+                                 (--contamination_file CONTAMINATION_FILE | --run_detect_contamination) [--write_bins] [--assembly_file ASSEMBLY_FILE] [--min_motif_comparisons MIN_MOTIF_COMPARISONS]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --motifs_scored MOTIFS_SCORED
+                        Path to motifs-scored.tsv from nanomotif
+  --bin_motifs BIN_MOTIFS
+                        Path to bin-motifs.tsv file
+  --contig_bins CONTIG_BINS
+                        Path to bins.tsv file for contig bins
+  -t THREADS, --threads THREADS
+                        Number of threads to use for multiprocessing
+  --mean_methylation_cutoff MEAN_METHYLATION_CUTOFF
+                        Cutoff value for considering a motif as methylated
+  --n_motif_contig_cutoff N_MOTIF_CONTIG_CUTOFF
+                        Number of motifs that needs to be observed in a contig before it is considered valid for scoring
+  --n_motif_bin_cutoff N_MOTIF_BIN_CUTOFF
+                        Number of motifs that needs to be observed in a bin to be considered valid for scoring
+  --ambiguous_motif_percentage_cutoff AMBIGUOUS_MOTIF_PERCENTAGE_CUTOFF
+                        Percentage of ambiguous motifs defined as mean methylation between 0.05 and 0.40 in a bin. Motifs with an ambiguous methylation percentage of more than this value are removed from
+                        scoring. Default is 0.40
+  --out OUT             Path to output directory
+  --contamination_file CONTAMINATION_FILE
+                        Path to an existing contamination file to include in the analysis
+  --run_detect_contamination
+                        Indicate that the detect_contamination workflow should be run first
+  --write_bins          If specified, new bins will be written to a bins folder. Requires --assembly_file to be specified.
+  --assembly_file ASSEMBLY_FILE
+                        Path to assembly.fasta file
+  --min_motif_comparisons MIN_MOTIF_COMPARISONS
+                        Minimum number of non-NA motif comparisons required to include a contig in the analysis. Default is 5
+```
+
+The output is two files: `include_contigs.tsv` and `new_contig_bin.tsv`. The `include_contigs.tsv` file is the contigs that were assigned based on the methylation pattern and the `new_contig_bin.tsv` is the updated contig-bin file.
+
+The `include_contigs.tsv` file has the following columns:
+
+| **Column**       | **Description**                                                                                       |
+|------------------|-------------------------------------------------------------------------------------------------------|
+| **bin**          | bin to which the motif belong                                                                         |
+| **bin_compare** | The contig for which the methylation pattern is compared. The name is a concatenation of bin + "_" + contig. |
+| **binary_methylation_missmatch_score** | Number of methylation missmatches between the contig and the bin_consensus pattern. |
+| **non_na_comparisons** | Number of non-NA comparisons between the contig and the bin_consensus pattern. |
+| **contig** | The contig for which the methylation pattern is compared. | 
+
+
 
 ## License
 

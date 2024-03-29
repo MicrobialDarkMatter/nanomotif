@@ -1,0 +1,7 @@
+bin	mod_type	motif	mod_position	n_mod_bin	n_nomod_bin	motif_type	motif_complement	mod_position_complement	n_mod_complement
+b1	a	m1	1	200	800	palindrom			
+b1	a	m3	1	600	400	palindrom			
+b2	a	m2	1	900	100	palindrom			
+b3	a	m1	1	500	500	palindrom			
+b3	a	m6	1	1000	0	palindrom			
+b3	a	m7	1	300	0	palindrom			
