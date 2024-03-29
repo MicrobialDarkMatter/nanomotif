@@ -66,11 +66,6 @@ def include_contigs(motifs_scored_in_bins, bin_consensus, contamination, args):
     
     contig_bin_comparison_score = ut.split_bin_contig(contig_bin_comparison_score)
     
-    dp.generate_output(contig_bin_comparison_score.to_pandas(), args.out, "motif_binary_comparison.tsv")
-    
-    
-    
-    
     logger.info("Assigning contigs to bins...")
     # Filter contigs where motif comparisons are less than args.min_motif_comparisons
     # TODO: looking for 0 comparisons is now redundant. Also remove the column.
