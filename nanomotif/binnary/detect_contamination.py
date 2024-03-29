@@ -1,8 +1,8 @@
 import polars as pl
 import pandas as pd
-from src import data_processing as dp
-from src import scoring as sc
-from src.utils import split_bin_contig
+from nanomotif.binnary import data_processing as dp
+from nanomotif.binnary import scoring as sc
+from nanomotif.binnary.utils import split_bin_contig
 import logging
 
 def detect_contamination(motifs_scored_in_bins, bin_consensus, args):

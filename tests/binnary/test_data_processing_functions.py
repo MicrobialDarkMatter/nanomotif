@@ -1,5 +1,5 @@
 import pytest
-from src import data_processing
+from nanomotif.binnary import data_processing
 from .conftest import MockArgs
 import polars as pl
 

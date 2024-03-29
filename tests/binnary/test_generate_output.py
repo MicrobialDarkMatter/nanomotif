@@ -1,7 +1,7 @@
 import os
 import pytest
 import pandas as pd
-from src.data_processing import generate_output
+from nanomotif.binnary.data_processing import generate_output
 from pathlib import Path
 
 def test_generate_output_new_directory(tmp_path):

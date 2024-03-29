@@ -1,0 +1,5 @@
+bin	bin_compare	binary_methylation_missmatch_score	non_na_comparisons	contig_bin	contig
+b1	unbinned_contig_15	0	1	unbinned	contig_15
+b3	unbinned_contig_15	0	2	unbinned	contig_15
+b2	b3_contig_6	0	4	b3	contig_6
+b2	unbinned_contig_14	0	4	unbinned	contig_14

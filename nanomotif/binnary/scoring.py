@@ -1,5 +1,5 @@
-from src import data_processing as dp
-from src import utils as ut
+from nanomotif.binnary import data_processing as dp
+from nanomotif.binnary import utils as ut
 import polars as pl
 from multiprocessing import Pool, Queue, Process, get_context
 import logging

@@ -1,6 +1,6 @@
 import polars as pl
 import pandas as pd
-from src import utils as ut
+from nanomotif.binnary import utils as ut
 
 
 

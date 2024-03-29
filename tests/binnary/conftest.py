@@ -1,22 +1,22 @@
 import pytest
-from src import data_processing
+from nanomotif.binnary import data_processing
 
 class MockArgs:
     def __init__(self):
-        self.motifs_scored = "data/test_data/motifs-scored.tsv"
-        self.bin_motifs = "data/test_data/bin-motifs.tsv"
-        self.contig_bins = "data/test_data/bins.tsv"
+        self.motifs_scored = "datasets/binnary_testdata/motifs-scored.tsv"
+        self.bin_motifs = "datasets/binnary_testdata/bin-motifs.tsv"
+        self.contig_bins = "datasets/binnary_testdata/contig_bin.tsv"
         self.mean_methylation_cutoff = 0.25
         self.n_motif_bin_cutoff = 500
         self.n_motif_contig_cutoff = 10
         self.ambiguous_motif_percentage_cutoff = 0.40
         self.min_motif_comparisons = 2
-        self.out = "tests/test_output"
+        self.out = "tests/binnary/test_output"
         self.threads = 1
 
 # Remove tests/test_output directory
 import shutil
-shutil.rmtree("tests/test_output", ignore_errors=True)
+shutil.rmtree("tests/binnary/test_output", ignore_errors=True)
 
 
 @pytest.fixture(scope="session")

@@ -1,5 +1,5 @@
 import pytest
-from src.cli_parser import get_parser
+from nanomotif.argparser import create_parser
 
 
 def test_argparser_detect_contamination_with_specific_data(mocker):
@@ -7,7 +7,7 @@ def test_argparser_detect_contamination_with_specific_data(mocker):
     mocker.patch(
         "sys.argv",
         [
-            "./binnary.py",  # Assuming 'binnary.py' is a typo and should be 'binary.py' or similar
+            "nanomotif",  # Assuming 'binnary.py' is a typo and should be 'binary.py' or similar
             "detect_contamination",
             "--motifs_scored",
             "data/motifs-scored.tsv",
@@ -21,7 +21,7 @@ def test_argparser_detect_contamination_with_specific_data(mocker):
     )
 
     # Parse the arguments
-    parser = get_parser()
+    parser = create_parser()
     args = parser.parse_args()
 
     # Assertions to verify that all arguments are correctly parsed

@@ -1,8 +1,8 @@
 import pytest
-from src import scoring as sc
-from src import data_processing as dp
+from nanomotif.binnary import scoring as sc
+from nanomotif.binnary import data_processing as dp
 import polars as pl
-from src.utils import split_bin_contig
+from nanomotif.binnary.utils import split_bin_contig
 
 from .conftest import MockArgs
 

@@ -1,7 +1,7 @@
 import pytest
-from src import include_contigs as ic
-from src import detect_contamination as dc
-from src import data_processing as dp
+from nanomotif.binnary import include_contigs as ic
+from nanomotif.binnary import detect_contamination as dc
+from nanomotif.binnary import data_processing as dp
 from .conftest import MockArgs
 
 def test_include_contigs(loaded_data, motifs_scored_in_bins_and_bin_motifs):

@@ -1,6 +1,6 @@
 import pytest
-from src import detect_contamination
-from src import data_processing as dp
+from nanomotif.binnary import detect_contamination
+from nanomotif.binnary import data_processing as dp
 from .conftest import MockArgs
 import os
 
