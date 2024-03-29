@@ -3,10 +3,10 @@ import numpy as np
 import warnings
 import re
 import random
+random.seed(2403)
 import nanomotif.utils as utils
 from nanomotif.constants import *
-import matplotlib.pyplot as plt
-from matplotlib import cm
+
 
 class Assembly():
     def __init__(self, assembly: dict):
@@ -450,49 +450,6 @@ class EqualLengthDNASet:
         Convert EqualLengthDNASet to DNAarray
         """
         return DNAarray([[DNAsequence.base_to_vector[base] for base in sequence] for sequence in self.sequences])
-    
-    def plot_pssm(self, ax=None, center_x_axis=True):
-        """
-        Method to plot the positional conservation of DNA sequences in the object.
-
-        Parameters:
-        ax (matplotlib.axes.Axes, optional): An existing Axes object to draw the plot onto, 
-                                            default is None in which case a new figure will be created.
-        Returns:
-        None
-
-        This method generates a plot showing the conservation of sequences in the object.
-        It plots the positional frequencies of each nucleotide.
-        """
-        
-        # If no Axes object provided, create a new figure and axes
-        if ax is None:
-            _, ax = plt.subplots()
-
-        # Plot positional frequencies for each nucleotide
-        int_base = self.sequences[0].int_base
-        for i in range(1,5):
-            ax.plot(self.pssm()[i-1], label=f"{int_base[i]}", linewidth=2, c=cm.cubehelix(i/5))
-
-        # Configure x-axis labels and ticks
-        if center_x_axis:
-            n_labs = min(4, (self.sequence_length-1)//2) 
-            window = (self.sequence_length-1)//2
-            x_axis_step = max(window//n_labs, 1)
-            labs_positive = np.arange(0, x_axis_step * n_labs + 1, x_axis_step)
-            tick_label = np.concatenate((-labs_positive, labs_positive))
-            tick_position = tick_label + window
-            ax.set_xticks(tick_position)
-            ax.set_xticklabels(tick_label)
-            ax.set_xlabel("Relative Position")
-        else:
-            ax.set_xticks(np.arange(0, self.sequence_length, 1))
-            ax.set_xlabel("Position")
-        # Set title and labels
-        ax.set_title(f"Number of sequences: {len(self.sequences)}")
-        ax.set_ylabel("Frequency")
-
-        return ax
 
 class DNAarray(np.ndarray):
     """
