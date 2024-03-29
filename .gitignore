@@ -7,6 +7,7 @@ reports
 __pycache__/
 *.py[cod]
 *$py.class
+tests/binnary/test_output
 
 # C extensions
 *.so
