@@ -334,7 +334,7 @@ def load_contamination_file(contamination_file):
     return contamination
 
 
-def create_contig_bin_file(contig_bins, include, contamination):
+def create_contig_bin_file(contig_bins, contamination, include=None):
     """
     Create a new contig_bin file based on the analysis results and contamination file.
     """
@@ -342,7 +342,8 @@ def create_contig_bin_file(contig_bins, include, contamination):
     contig_bins = contig_bins[~contig_bins["contig"].isin(contamination["contig"])]
     
     # Add the contigs in the include DataFrame to the contig_bins
-    contig_bins = pd.concat([contig_bins, include[["contig", "bin"]]], ignore_index=True)
+    if include is not None:
+        contig_bins = pd.concat([contig_bins, include[["contig", "bin"]]], ignore_index=True)
     
     # Sort the contig_bins by bin and contig
     contig_bins = contig_bins.sort_values(by=["bin", "contig"])
