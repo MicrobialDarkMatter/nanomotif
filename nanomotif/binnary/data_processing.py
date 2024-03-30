@@ -64,8 +64,8 @@ def write_bins_from_contigs(new_contig_bins, assembly_dict, output_dir):
     logger = logging.getLogger(__name__)
     
     # check if the output directory exists
-    logger.info(f"Writing bins to {output_dir}/bins/...")
-    output_bins_dir = os.path.join(output_dir, "bins")
+    logger.info(f"Writing bins to {output_dir}")
+    output_bins_dir = os.path.join(output_dir)
     if not os.path.exists(output_bins_dir):
         os.makedirs(output_bins_dir)
     
