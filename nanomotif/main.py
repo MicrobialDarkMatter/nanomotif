@@ -325,13 +325,12 @@ def binnary(args):
     """
     
     # Conditional check for --write_bins and --assembly_file
-    if args.command == "include_contigs":
-        if args.write_bins and not args.assembly_file:
-            print("Error: --assembly_file must be specified when --write_bins is used.")
-            sys.exit(1)
-        elif not args.write_bins and args.assembly_file:
-            print("Error: --assembly_file can only be used when --write_bins is specified.")
-            sys.exit(1)
+    if args.write_bins and not args.assembly_file:
+        print("Error: --assembly_file must be specified when --write_bins is used.")
+        sys.exit(1)
+    elif not args.write_bins and args.assembly_file:
+        print("Error: --assembly_file can only be used when --write_bins is specified.")
+        sys.exit(1)
     
     print("Starting Binnary ", args.command, " analysis...")
 
@@ -382,12 +381,14 @@ def binnary(args):
             motifs_scored_in_bins, bin_motifs_from_motifs_scored_in_bins, args
         )
         data_processing.generate_output(contamination.to_pandas(), args.out, "bin_contamination.tsv")
-        
+        # Create a decontaminated contig_bin file
+        new_contig_bins = data_processing.create_contig_bin_file(contig_bins.to_pandas(), contamination.to_pandas())
+        data_processing.generate_output(new_contig_bins, args.out, "decontaminated_contig_bin.tsv")
 
     if args.command == "include_contigs":
         # User provided contamination file
         if args.contamination_file:
-            print("Loading contamination file...")
+            logger.info("Loading contamination file...")
             contamination = data_processing.load_contamination_file(args.contamination_file)
         
         # Run the include_contigs analysis    
@@ -402,14 +403,14 @@ def binnary(args):
         new_contig_bins = data_processing.create_contig_bin_file(contig_bins.to_pandas(), include_contigs_df.to_pandas(), contamination.to_pandas())
         data_processing.generate_output(new_contig_bins, args.out, "new_contig_bin.tsv")
         
-        if args.write_bins:
-            logger.info("Write bins flag is set. Writing bins to file...")
-            print("Loading assembly file...")
-            logger.info("Loading assembly file...")
-            assembly = data_processing.read_fasta(args.assembly_file)
-            
-            logger.info(f"Writing bins to {args.out}/bins/...")
-            data_processing.write_bins_from_contigs(new_contig_bins, assembly, args.out)
+    if args.write_bins:
+        logger.info("Write bins flag is set. Writing bins to file...")
+        logger.info("Loading assembly file...")
+        assembly = data_processing.read_fasta(args.assembly_file)
+        
+        bin_dir = os.path.join(args.out, args.command + "_bins")
+        
+        data_processing.write_bins_from_contigs(new_contig_bins, assembly, bin_dir)
     
     logger.info(f"Analysis Completed. Results are saved to: {args.out}")
     print("Analysis Completed. Results are saved to:", args.out)
