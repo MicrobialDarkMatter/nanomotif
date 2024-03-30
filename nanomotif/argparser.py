@@ -101,6 +101,17 @@ def  create_parser():
         default=0.40,
         help="Percentage of ambiguous motifs defined as mean methylation between 0.05 and 0.40 in a bin. Motifs with an ambiguous methylation percentage of more than this value are removed from scoring. Default is 0.40",
     )
+    parser_binnary_shared.add_argument(
+        "--write_bins",
+        action='store_true',
+        help="If specified, new bins will be written to a bins folder. Requires --assembly_file to be specified.",
+    )
+    parser_binnary_shared.add_argument(
+        "--assembly_file",
+        type=str,
+        help="Path to assembly.fasta file"
+    )
+    
     parser_binnary_shared.add_argument("--out", type=str, help="Path to output directory", required=True, default="nanomotif")
     
     # Binnary contamination
@@ -127,16 +138,6 @@ def  create_parser():
         "--run_detect_contamination",
         action='store_true',
         help="Indicate that the detect_contamination workflow should be run first"
-    )
-    parser_inclusion.add_argument(
-        "--write_bins",
-        action='store_true',
-        help="If specified, new bins will be written to a bins folder. Requires --assembly_file to be specified.",
-    )
-    parser_inclusion.add_argument(
-        "--assembly_file",
-        type=str,
-        help="Path to assembly.fasta file"
     )
     parser_inclusion.add_argument(
         "--min_motif_comparisons",
