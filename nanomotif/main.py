@@ -382,7 +382,11 @@ def binnary(args):
         )
         data_processing.generate_output(contamination.to_pandas(), args.out, "bin_contamination.tsv")
         # Create a decontaminated contig_bin file
-        new_contig_bins = data_processing.create_contig_bin_file(contig_bins.to_pandas(), contamination.to_pandas())
+        new_contig_bins = data_processing.create_contig_bin_file(
+            contig_bins=contig_bins.to_pandas(), 
+            contamination=contamination.to_pandas(),
+            include=None
+        )
         data_processing.generate_output(new_contig_bins, args.out, "decontaminated_contig_bin.tsv")
 
     if args.command == "include_contigs":
@@ -400,7 +404,11 @@ def binnary(args):
         data_processing.generate_output(include_contigs_df.to_pandas(), args.out, "include_contigs.tsv")
         
         # Create a new contig_bin file
-        new_contig_bins = data_processing.create_contig_bin_file(contig_bins.to_pandas(), include_contigs_df.to_pandas(), contamination.to_pandas())
+        new_contig_bins = data_processing.create_contig_bin_file(
+            contig_bins=contig_bins.to_pandas(), 
+            contamination= contamination.to_pandas(),
+            include=include_contigs_df.to_pandas()
+        )
         data_processing.generate_output(new_contig_bins, args.out, "new_contig_bin.tsv")
         
     if args.write_bins:
