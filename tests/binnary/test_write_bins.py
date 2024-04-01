@@ -23,9 +23,44 @@ def test_create_contig_bin_contamination(loaded_data):
     assert new_contig_bin is not None, "Output is None"
     # Contigs in contamination may not be in the new contig_bin
     assert not new_contig_bin["contig"].isin(contamination["contig"]).all(), "Contigs in contamination are not in the new contig_bin"
-    
 
-def test_create_contig_bin_include(loaded_data):
+
+
+def test_create_contig_bin_include_and_no_contamination(loaded_data):
+    """
+    Test create_contig_bin function.
+    """
+    contig_bin = loaded_data["contig_bins"]
+    
+    # Just for testing purposes it is not used in the function.
+    contamination = pd.DataFrame({
+        'bin': ['b3', 'b3', 'b3'],
+        'bin_contig_compare': ['b3_contig_12', 'b3_contig_13', 'b3_contig_6'],
+        'binary_methylation_missmatch_score': [2, 2, 3],
+        'non_na_comparisons': [4, 4, 4],
+        'contig': ['contig_12', 'contig_13', 'contig_6']
+    })
+    
+    include = pd.DataFrame({
+        'bin': ['b2', 'b2', 'b3'],
+        'bin_compare': ['b3_contig_6', 'unbinned_contig_14', 'unbinned_contig_15'],
+        'binary_methylation_missmatch_score': [0, 0, 0],
+        'non_na_comparisons': [4, 4, 2],
+        'contig_bin': ['b3', 'unbinned', 'unbinned'],
+        'contig': ['contig_6', 'contig_14', 'contig_15']
+    })
+
+
+    new_contig_bin = dp.create_contig_bin_file(contig_bin.to_pandas(), include=include, contamination=None)
+
+    assert new_contig_bin is not None, "Output is None"
+    # Contigs in contamination may not be in the new contig_bin
+    assert contamination["contig"].isin(new_contig_bin["contig"]).all(), "Contigs in contamination are not in the new contig_bin"
+    assert include["contig"].isin(new_contig_bin["contig"]).all(), "Contigs in include are not in the new contig_bin"
+    
+  
+
+def test_create_contig_bin_include_and_contamination(loaded_data):
     """
     Test create_contig_bin function.
     """
