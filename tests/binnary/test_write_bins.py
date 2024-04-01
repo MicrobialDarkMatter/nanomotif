@@ -49,9 +49,15 @@ def test_create_contig_bin_include_and_no_contamination(loaded_data):
         'contig_bin': ['b3', 'unbinned', 'unbinned'],
         'contig': ['contig_6', 'contig_14', 'contig_15']
     })
+    contamination_dummy = pd.DataFrame({
+        'bin': [],
+        'bin_contig_compare': [],
+        'binary_methylation_missmatch_score': [],
+        'non_na_comparisons': [],
+        'contig': []
+    })
 
-
-    new_contig_bin = dp.create_contig_bin_file(contig_bin.to_pandas(), include=include, contamination=None)
+    new_contig_bin = dp.create_contig_bin_file(contig_bin.to_pandas(), include=include, contamination=contamination_dummy)
 
     assert new_contig_bin is not None, "Output is None"
     # Contigs in contamination may not be in the new contig_bin
