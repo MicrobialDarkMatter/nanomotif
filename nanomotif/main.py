@@ -337,14 +337,14 @@ def binnary(args):
     
     # Settting up the logger
     # set_logger_config(args)
-    logger = log.getLogger(__name__)
-    logger.info("Starting Binnary analysis...")
+    # logger = log.getLogger(__name__)
+    log.info("Starting Binnary analysis...")
     
     # Set number of threads for polars
     os.environ['POLARS_MAX_THREADS'] = str(args.threads)
     
     POLAR_THREADS = pl.threadpool_size()
-    logger.info(f"Polars is using {POLAR_THREADS} threads.")
+    log.info(f"Polars is using {POLAR_THREADS} threads.")
     
     # Step 1: Load and preprocess data
     # These functions would be defined in your data_processing module
@@ -369,18 +369,23 @@ def binnary(args):
     
     
     # Create the bin_consensus dataframe for scoring
-    logger.info("Creating bin_consensus dataframe for scoring...")
+    log.info("Creating bin_consensus dataframe for scoring...")
     bin_motifs_from_motifs_scored_in_bins = data_processing.construct_bin_consensus_from_motifs_scored_in_bins(
         motifs_scored_in_bins,
         args
     )
 
-    # Functions from the analysis module
-    if args.command == "detect_contamination" or (args.command == "include_contigs" and args.run_detect_contamination):
+    # Setting up the contamination analysis
+    if (args.command == "detect_contamination" and not args.contamination_file) or (args.command == "include_contigs" and args.run_detect_contamination):
         contamination = detect_contamination.detect_contamination(
             motifs_scored_in_bins, bin_motifs_from_motifs_scored_in_bins, args
         )
         data_processing.generate_output(contamination.to_pandas(), args.out, "bin_contamination.tsv")
+    elif args.contamination_file:
+        log.info("Loading contamination file...")
+        contamination = data_processing.load_contamination_file(args.contamination_file)
+        
+    if args.command == "detect_contamination":
         # Create a decontaminated contig_bin file
         new_contig_bins = data_processing.create_contig_bin_file(
             contig_bins=contig_bins.to_pandas(), 
@@ -390,10 +395,24 @@ def binnary(args):
         data_processing.generate_output(new_contig_bins, args.out, "decontaminated_contig_bin.tsv")
 
     if args.command == "include_contigs":
-        # User provided contamination file
-        if args.contamination_file:
-            logger.info("Loading contamination file...")
-            contamination = data_processing.load_contamination_file(args.contamination_file)
+        # # User provided contamination file
+        # if args.contamination_file:
+        #     log.info("Loading contamination file...")
+        #     contamination = data_processing.load_contamination_file(args.contamination_file)
+        
+        ## If run_detect_contamination is false and contamination file is not provided, then set contamination to None
+        if not args.run_detect_contamination and not args.contamination_file:
+            contamination = pl.DataFrame(
+                {
+                    "bin": [],
+                    "bin_contig_compare": [],
+                    "binary_methylation_missmatch_score": [],
+                    "non_na_comparisons": [],
+                    "contig": []
+                }
+            )
+        
+        
         
         # Run the include_contigs analysis    
         include_contigs_df = include_contigs.include_contigs(
@@ -404,6 +423,8 @@ def binnary(args):
         data_processing.generate_output(include_contigs_df.to_pandas(), args.out, "include_contigs.tsv")
         
         # Create a new contig_bin file
+        
+        
         new_contig_bins = data_processing.create_contig_bin_file(
             contig_bins=contig_bins.to_pandas(), 
             contamination= contamination.to_pandas(),
@@ -412,15 +433,15 @@ def binnary(args):
         data_processing.generate_output(new_contig_bins, args.out, "new_contig_bin.tsv")
         
     if args.write_bins:
-        logger.info("Write bins flag is set. Writing bins to file...")
-        logger.info("Loading assembly file...")
+        log.info("Write bins flag is set. Writing bins to file...")
+        log.info("Loading assembly file...")
         assembly = data_processing.read_fasta(args.assembly_file)
         
         bin_dir = os.path.join(args.out, args.command + "_bins")
         
         data_processing.write_bins_from_contigs(new_contig_bins, assembly, bin_dir)
     
-    logger.info(f"Analysis Completed. Results are saved to: {args.out}")
+    log.info(f"Analysis Completed. Results are saved to: {args.out}")
     print("Analysis Completed. Results are saved to:", args.out)
 
 

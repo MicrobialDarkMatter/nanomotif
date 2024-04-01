@@ -121,6 +121,12 @@ def  create_parser():
         parents=[parser_binnary_shared]
     )  
     
+    parser_contamination.add_argument(
+        '--contamination_file',
+        type=str,
+        help="Path to an existing contamination file if bins should be outputtet as a post-processing step"
+    )
+    
     # Binnary inclusion
     parser_inclusion = subparsers.add_parser(
         'include_contigs', 
@@ -128,7 +134,7 @@ def  create_parser():
         parents=[parser_binnary_shared]
     )
     
-    group = parser_inclusion.add_mutually_exclusive_group(required=True)
+    group = parser_inclusion.add_mutually_exclusive_group(required=False)
     group.add_argument(
         "--contamination_file",
         type=str,
