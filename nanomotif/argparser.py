@@ -111,6 +111,11 @@ def  create_parser():
         type=str,
         help="Path to assembly.fasta file"
     )
+    parser_binnary_shared.add_argument(
+        "--save_scores",
+        action='store_true',
+        help="If specified, the scores for each comparison will be saved to a scores folder in the output directory"
+    )
     
     parser_binnary_shared.add_argument("--out", type=str, help="Path to output directory", required=True, default="nanomotif")
     
