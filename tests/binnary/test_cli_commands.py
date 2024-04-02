@@ -265,3 +265,50 @@ def test_include_no_contamination():
     remove_dir_with_contents(outdir)
     
     
+         
+def test_contamination_with_output_scores():
+    """
+    Test detect_contamination with outputting scores.
+    
+    nanomotif detect_contamination \
+        --motifs_scored nanomotif/datasets/binnary_testdata/motifs-scored.tsv \
+        --bin_motifs nanomotif/datasets/binnary_testdata/bin-motifs.tsv \
+        --contig_bins nanomotif/datasets/binnary_testdata/contig_bin.tsv \
+        --min_motif_comparisons 2 \
+        --save_scores \
+        -t 1 --out <out>
+    
+    """
+    outdir = "tests/binnary/testrun_savescores"
+    
+    cmd = [
+        "nanomotif", "detect_contamination",
+        "--motifs_scored", "datasets/binnary_testdata/motifs-scored.tsv",
+        "--bin_motifs", "datasets/binnary_testdata/bin-motifs.tsv",
+        "--contig_bins", "datasets/binnary_testdata/contig_bin.tsv",
+        "--save_scores",
+        "-t", "1",
+        "--out", outdir
+    ]
+    
+    result = subprocess.run(cmd)
+    
+    # Check that the CLI tool executed successfully
+    assert result.returncode == 0, "CLI tool did not exit successfully"
+
+    # Check that the output directory was created
+    assert os.path.isdir(outdir), "Output directory was not created"
+    
+    bins_in_dir = glob.glob(f"{outdir}/scores/detect_contamination/*.csv")
+    assert len(bins_in_dir) == 13, "No scores were written"
+    
+    csvs = glob.glob(f"{outdir}/scores/*/*.csv")
+    for csv in csvs:
+        os.remove(csv)
+    
+    csvdirs = glob.glob(f"{outdir}/scores/*")
+    for csvdir in csvdirs:
+        os.rmdir(csvdir)
+    
+    os.rmdir(f"{outdir}/scores")
+    remove_dir_with_contents(outdir)

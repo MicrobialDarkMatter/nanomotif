@@ -1,5 +1,6 @@
 from nanomotif.binnary import data_processing as dp
 from nanomotif.binnary import utils as ut
+import os
 import polars as pl
 from multiprocessing import Pool, Queue, Process, get_context
 import logging
@@ -69,7 +70,7 @@ def define_mean_methylation_thresholds(motif_binary_compare):
 
 
 
-def compare_methylation_pattern(motif_binary_compare, choices):
+def compare_methylation_pattern(motif_binary_compare):
     """
     Compares the methylation pattern between bin and contig motifs using Polars and calculates the motif_comparison_score.
     """
@@ -103,7 +104,7 @@ def compare_methylation_pattern(motif_binary_compare, choices):
     return contig_bin_comparison_score
 
 
-def process_bin_contig(bin_contig, bin_motifs_from_motifs_scored_in_bins, motifs_scored_in_contigs, mode, choices):
+def process_bin_contig(bin_contig, bin_motifs_from_motifs_scored_in_bins, motifs_scored_in_contigs, mode, args):
     worker_setup_logging(log_queue)
     logger = logging.getLogger(__name__)
     logger.info(f"Processing {bin_contig}")
@@ -128,8 +129,12 @@ def process_bin_contig(bin_contig, bin_motifs_from_motifs_scored_in_bins, motifs
     # Define methylation thresholds
     motif_binary_compare = define_mean_methylation_thresholds(motif_binary_compare)
 
+    if args.save_scores:
+        path = os.path.join(args.out, "scores", args.command, "binary_compare" + bin_contig + ".csv")
+        motif_binary_compare.write_csv(path)
+
     # Calculate the comparison score regardless of methylation presence
-    contig_bin_comparison_score = compare_methylation_pattern(motif_binary_compare, choices)
+    contig_bin_comparison_score = compare_methylation_pattern(motif_binary_compare)
     
     # Check if the contig has no methylation and note it, but do not exclude it from further processing
     contigHasNMethylation = motif_binary_compare.filter(pl.col("methylation_binary_compare") == 1).height
@@ -152,7 +157,7 @@ def process_bin_contig(bin_contig, bin_motifs_from_motifs_scored_in_bins, motifs
     
     return contig_bin_comparison_score, None
 
-def compare_methylation_pattern_multiprocessed(motifs_scored_in_bins, bin_consensus, choices, mode, args, num_processes=1):
+def compare_methylation_pattern_multiprocessed(motifs_scored_in_bins, bin_consensus, mode, args, num_processes=1):
     logger = logging.getLogger(__name__)
     logger.info("Starting comparison of methylation patterns")
     
@@ -161,6 +166,10 @@ def compare_methylation_pattern_multiprocessed(motifs_scored_in_bins, bin_consen
         .select(["bin_contig", "motif_mod", "mean"]) \
         .rename({"bin_contig": "bin_compare"})
     
+    if args.save_scores:
+        dir = os.path.join(args.out, "scores", args.command)
+        if not os.path.exists(dir):
+            os.makedirs(dir)
 
     comparison_score = pl.DataFrame()
     contigs_w_no_methylation = []
@@ -169,8 +178,8 @@ def compare_methylation_pattern_multiprocessed(motifs_scored_in_bins, bin_consen
         results = pool.starmap(
             process_bin_contig,
             [
-                (bin_contig, bin_consensus, motifs_scored_in_contigs, mode, choices)
-                for bin_contig in motifs_scored_in_contigs.select("bin_compare").unique().to_pandas()["bin_compare"].tolist()
+                (bin_contig, bin_consensus, motifs_scored_in_contigs, mode, args)
+                for bin_contig in motifs_scored_in_contigs.select("bin_compare").unique()["bin_compare"]
             ]
         )
         
