@@ -192,6 +192,7 @@ def remove_ambiguous_motifs_from_bin_consensus(motifs_scored_in_bins, args):
     # Remove motifs in bins where the majority of the mean methylation of motifs is in the range of 0.05-0.4
     contig_motif_mean_density = motifs_scored_in_bins \
         .filter(pl.col("bin") != "unbinned") \
+        .filter(pl.col("n_motifs") >= args.n_motif_contig_cutoff) \
         .with_columns(
             ((pl.col("mean") > 0.05) & (pl.col("mean") < 0.4)).alias("is_ambiguous")
         )
