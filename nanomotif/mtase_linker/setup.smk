@@ -71,11 +71,12 @@ rule BLASTP_dbget:
     params: 
         url1="https://raw.githubusercontent.com/JSBoejer/MTase-Linker_models/main/REbase_all_protein_seqs_RecSeqs_anno_format_08_01_2024.fa.gz",
         url2="https://raw.githubusercontent.com/JSBoejer/MTase-Linker_models/main/PFAM_MTase_profiles.hmm",
-        temp_output=os.path.join(config["DEPENDENCYDIR"], "REbase_all_protein_seqs_RecSeqs_anno_format_08_01_2024.fa.gz")
+        temp_output1=os.path.join(config["DEPENDENCYDIR"], "REbase_all_protein_seqs_RecSeqs_anno_format_08_01_2024.fa.gz"),
+        temp_output2=os.path.join(config["DEPENDENCYDIR"], "PFAM_MTase_profiles.hmm")
     shell:
         """
-        wget -O {params.temp_output} {params.url1} && gunzip -c {params.temp_output} > {output}
-        wget -O {params.temp_output} {params.url2}
+        wget -O {params.temp_output1} {params.url1} && gunzip -c {params.temp_output1} > {output}
+        wget -O {params.temp_output2} {params.url2}
         """
 
 # Make BLASTP database

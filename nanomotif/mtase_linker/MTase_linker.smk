@@ -19,25 +19,7 @@ DEPENDENCYDIR = config["DEPENDENCY_PATH"]
 
 rule all:
     input:
-        #os.path.join(OUTPUTDIR, "DNA_methylase_findertest/assembly.polished/assembly.polished.DNA_methylases.combined.summary.tsv")
-        #os.path.join(OUTPUTDIR, "DNA_methylase_findertest/DNA_methylase_finder_summary_total.tsv")
-        #expand(os.path.join(OUTPUTDIR, "prodigal/{binname}/{binname}.faa"), binname = bin_ids)
-        #expand(os.path.join(OUTPUTDIR, "defensefinder/{binname}/{binname}.processed_defense_finder_hmmer.tsv"),  binname = bin_ids)
-        #expand(os.path.join(OUTPUTDIR, "defensefinder/{binname}/{binname}.defense_finder_MTase.faa"),  binname = bin_ids)
-        #expand(os.path.join(OUTPUTDIR, "blastp/{binname}/{binname}.REbase_MTase_alignment.tsv"),  binname = bin_ids)
-        #expand(os.path.join(OUTPUTDIR, "blastp/{binname}/{binname}.REbase_MTase_motif_guess_alignment.tsv"),  binname = bin_ids)
-        #expand(os.path.join(OUTPUTDIR, "interproscan/{binname}/{binname}.pfam_hits_MTase_AAseqs.tsv"), binname = bin_ids)
-        #expand(os.path.join(OUTPUTDIR, "interproscan/{binname}/{binname}.gene_name_mod_table.tsv"), binname = bin_ids)
-        #os.path.join(OUTPUTDIR, "defensefinder/defense_finder_mtase_all2.tsv")
-        #os.path.join(OUTPUTDIR, "blastp/REbase_MTase_motif_guess_alignment_all.tsv")
-        #os.path.join(OUTPUTDIR, "interproscan/gene_name_mod_table_all.tsv")
         os.path.join(OUTPUTDIR, "mtase_assignment_table.tsv")
-        #expand(os.path.join(OUTPUTDIR, "pfam_hmm_hits/{binname}/{binname}.pfam_hits_MTase_AAseqs.tsv"), binname = bin_ids)
-        #expand(os.path.join(OUTPUTDIR, "pfam_hmm_hits/{binname}/{binname}.gene_name_mod_table.tsv"), binname = bin_ids)
-        #os.path.join(OUTPUTDIR, "pfam_hmm_hits/mmlong2_lite.bin.1.15/mmlong2_lite.bin.1.15.pfam_hits_MTase_AAseqs.tsv")
-        #os.path.join(OUTPUTDIR, "blastp/mmlong2_lite.bin.1.74/mmlong2_lite.bin.1.74.REbase_MTase_motif_guess_alignment.tsv")
-        #os.path.join(OUTPUTDIR, "pfam_hmm_hits/mmlong2_lite.bin.3.32/mmlong2_lite.bin.3.32.pfam_hits_MTase_AAseqs.tsv")
-        #directory(os.path.join(OUTPUTDIR, "gtdb-tk_mmlong2"))
 
 
 

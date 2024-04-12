@@ -59,6 +59,7 @@ def run_MTase_linker(args):
         sys.stderr.write(msg)
         sys.exit(1)
 
+
     c1 = os.path.join(cwd, args.dependency_dir)
     c2 = os.path.join(args.dependency_dir)
     if os.path.exists(c1) and os.path.isdir(c1):
@@ -106,7 +107,7 @@ def run_MTase_linker(args):
         sys.stderr.write(msg)
         sys.exit(1)
 
-    # next, find the workflow params file
+
     workflow = None
     workflow = {"THREADS": args.threads,
                 "BINSDIR": binsdir,

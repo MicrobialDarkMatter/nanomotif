@@ -63,9 +63,9 @@ def get_models(args):
 
      # Check if the workflow executed successfully
     if status:
-        print("Conda environments were successfully created.")
+        print("pfam models and REbase database were successfully retreived.")
     else:
-        print("Creation of conda environments failed.")
+        print("pfam models and REbase database could not be retreived.")
 
 
 def defensefinder_update(args):
