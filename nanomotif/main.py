@@ -445,6 +445,19 @@ def binnary(args):
     print("Analysis Completed. Results are saved to:", args.out)
 
 
+from nanomotif.mtase_linker.dependencies import snakemake_create_environments, get_models, defensefinder_update
+from nanomotif.mtase_linker.command import run_MTase_linker
+
+def mtase_linker(args):
+    if args.mtase_linker_command == "install":
+        snakemake_create_environments(args)
+        get_models(args)
+        defensefinder_update(args)
+    elif args.mtase_linker_command == "run":
+        run_MTase_linker(args)
+    else:
+        print(f"Unknown MTase-linker command: {args.mtase_linker_command}")
+       
 
 
 
@@ -453,7 +466,7 @@ def main():
     parser = nm.argparser.create_parser()
     args = parser.parse_args()
     
-    if args.command in ["detect_contamination", "include_contigs"]:
+    if args.command in ["detect_contamination", "include_contigs", "MTase-linker"]:
         args.verbose = False
         args.seed = 1
     
@@ -478,6 +491,11 @@ def main():
     elif args.command in ["detect_contamination", "include_contigs"]:
         shared_setup(args, args.out)
         binnary(args)
+
+    elif args.command == "MTase-linker":
+        mtase_linker(args)
+
+
     else:
         parser.print_help()
         exit()

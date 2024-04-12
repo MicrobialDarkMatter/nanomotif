@@ -1,5 +1,6 @@
 import argparse
 from nanomotif._version import __version__
+import os
 
 
 def  create_parser():
@@ -157,6 +158,43 @@ def  create_parser():
         help="Minimum number of non-NA motif comparisons required to include a contig in the analysis. Default is 5",
     )
     
+    ###########################################################################
+    # MTase-linker
+    # First, add a subparser for the 'MTase-linker' command
+    parser_mtase_linker = subparsers.add_parser(
+        'MTase-linker', 
+        help="Commands related to MTase-linker"
+    )
+
+    # Then, create subparsers for the 'MTase-linker' command
+    mtase_linker_subparsers = parser_mtase_linker.add_subparsers(
+        title="MTase-linker commands", 
+        dest="mtase_linker_command"
+    )
+
+    # Add the 'run' subcommand under 'MTase-linker'
+    parser_mtase_linker_run = mtase_linker_subparsers.add_parser(
+        'run', 
+        help="Run the MTase-linker analysis"
+    )
+    parser_mtase_linker_run.add_argument("-t", "--threads", type=int, default=1, help="Number of threads to use. Default is 1")
+    parser_mtase_linker_run.add_argument("--forceall", type=bool, default=False, help="Forcerun workflow regardless of already created output (default = False)")
+    parser_mtase_linker_run.add_argument("--dryrun", type=bool, default=False, help="Dry-run the workflow (default False)")
+    parser_mtase_linker_run.add_argument("--binsdir", type=str, required=True, help="Directory with bin files or assembly files. Needs to have the .fa extension.")
+    parser_mtase_linker_run.add_argument("--contig_bin", type=str, required=True, help="tsv file specifying which bin contigs belong.")
+    parser_mtase_linker_run.add_argument("--bin_motifs", type=str, required=True, help="bin-motifs.tsv output from nanomotif.")
+    parser_mtase_linker_run.add_argument("-d", "--dependency_dir", type=str, default=os.path.join(os.getcwd(), "ML_dependencies"), help="Same as for installation. Path to the parent directory of the ML_dependencies directory created during installation of the MTase-linker module.")
+    parser_mtase_linker_run.add_argument("-o", "--outputdir", type=str, default=os.getcwd(), help="Output directory.")
+    parser_mtase_linker_run.add_argument("--identity", type=str, default=80, help="Identity threshold for motif prediction")
+    parser_mtase_linker_run.add_argument("--qcovs", type=str, default=80, help="Query coverage for motif prediction")
+
+    # Add the 'install_dependencies' subcommand under 'MTase-linker'
+    parser_mtase_linker_install = mtase_linker_subparsers.add_parser(
+        'install', 
+        help="Install necessary dependencies for MTase-linker"
+    )
+    parser_mtase_linker_install.add_argument("-d", "--dependency_dir", type=str, default=os.getcwd(), help="Path to the directory, where dependencies should be installed (Default: cwd)")
+    #parser_mtase_linker_install.add_argument("--models_dir", type=str, default=os.getcwd(), help="Path to the directory, where models and databases should be installed (Default: cwd)")
     
     return parser
     
