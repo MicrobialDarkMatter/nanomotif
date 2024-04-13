@@ -8,22 +8,22 @@ from logging.handlers import QueueHandler, QueueListener
 
 # Set up logging
 ## Create queue for logging
-log_queue = Queue()
+# log_queue = Queue()
 
-## Set up a listener to handle logs from the queue
-def setup_logging_queue(queue):
-    while True:
-        record = queue.get()
-        if record is None:  # Use None as a sentinel to stop the listener
-            break
-        logger = logging.getLogger(record.name)
-        logger.handle(record)
+# ## Set up a listener to handle logs from the queue
+# def setup_logging_queue(queue):
+#     while True:
+#         record = queue.get()
+#         if record is None:  # Use None as a sentinel to stop the listener
+#             break
+#         logger = logging.getLogger(record.name)
+#         logger.handle(record)
 
-def worker_setup_logging(queue):
-    q_handler = QueueHandler(queue)
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    logger.addHandler(q_handler)
+# def worker_setup_logging(queue):
+#     q_handler = QueueHandler(queue)
+#     logger = logging.getLogger()
+#     logger.setLevel(logging.INFO)
+#     logger.addHandler(q_handler)
 
 def define_mean_methylation_thresholds(motif_binary_compare):
     """
@@ -104,58 +104,90 @@ def compare_methylation_pattern(motif_binary_compare):
     return contig_bin_comparison_score
 
 
-def process_bin_contig(bin_contig, bin_motifs_from_motifs_scored_in_bins, motifs_scored_in_contigs, mode, args):
-    worker_setup_logging(log_queue)
-    logger = logging.getLogger(__name__)
-    logger.info(f"Processing {bin_contig}")
+def process_bin_contig(
+    bin_contig, 
+    bin_motifs_from_motifs_scored_in_bins, 
+    motifs_scored_in_contigs, 
+    mode, 
+    args
+):
+    """
+    This function processes a single contig and compares the methylation pattern between the contig and the bin.
+    Depending on the mode, the function will either look for contamination or include contigs.
     
-    bin = ut.get_bin(bin_contig)
+    Parameters:
+    - bin_contig: str
+        The contig to process
+    - bin_motifs_from_motifs_scored_in_bins: polars.DataFrame
+        The motifs scored in the bin
+    - motifs_scored_in_contigs: polars.DataFrame
+        The motifs scored in the contigs
+    - mode: str
+        The mode to run the comparison in. Either "contamination" or "include"
+    - args: argparse.Namespace
+        The arguments passed to the script
     
-    if mode == "contamination":
-        motif_binary_compare = bin_motifs_from_motifs_scored_in_bins \
-            .filter(pl.col("bin") == bin) \
-            .join(
-                motifs_scored_in_contigs.filter(pl.col("bin_compare") == bin_contig),
-                on="motif_mod"
-            )
-    if mode == "include":
-        motif_binary_compare = bin_motifs_from_motifs_scored_in_bins \
-            .filter(pl.col("bin") != bin) \
-            .join(
-                motifs_scored_in_contigs.filter(pl.col("bin_compare") == bin_contig),
-                on="motif_mod"
-            )
-    
-    # Define methylation thresholds
-    motif_binary_compare = define_mean_methylation_thresholds(motif_binary_compare)
-
-    if args.save_scores:
-        path = os.path.join(args.out, "scores", args.command, "binary_compare" + bin_contig + ".csv")
-        motif_binary_compare.write_csv(path)
-
-    # Calculate the comparison score regardless of methylation presence
-    contig_bin_comparison_score = compare_methylation_pattern(motif_binary_compare)
-    
-    # Check if the contig has no methylation and note it, but do not exclude it from further processing
-    contigHasNMethylation = motif_binary_compare.filter(pl.col("methylation_binary_compare") == 1).height
-    logger.info(f"Finished processing {bin_contig}. Contig has {contigHasNMethylation} positive methylation comparisons.")
-    
-    if mode == "include":
-        contig_bin_comparison_score = contig_bin_comparison_score \
-            .filter(
-                pl.col("binary_methylation_missmatch_score") == 0
-            )
-    if mode == "contamination":
-        contig_bin_comparison_score = contig_bin_comparison_score \
-            .filter(
-                pl.col("binary_methylation_missmatch_score") > 0
-            )
-            
+    Returns:
+    - contig_bin_comparison_score: polars.DataFrame
+        The comparison score for the contig
+    """
+    # worker_setup_logging(log_queue)
+    # logger = logging.getLogger(__name__)
+    # logger.info(f"Processing {bin_contig}")
+    try:
+        bin = ut.get_bin(bin_contig)
         
-    if contigHasNMethylation == 0:
-        return contig_bin_comparison_score, bin_contig
-    
-    return contig_bin_comparison_score, None
+        if mode == "contamination":
+            motif_binary_compare = bin_motifs_from_motifs_scored_in_bins \
+                .filter(pl.col("bin") == bin) \
+                .join(
+                    motifs_scored_in_contigs.filter(pl.col("bin_compare") == bin_contig),
+                    on="motif_mod"
+                )
+        if mode == "include":
+            motif_binary_compare = bin_motifs_from_motifs_scored_in_bins \
+                .filter(pl.col("bin") != bin) \
+                .join(
+                    motifs_scored_in_contigs.filter(pl.col("bin_compare") == bin_contig),
+                    on="motif_mod"
+                )
+        
+        # Define methylation thresholds
+        motif_binary_compare = define_mean_methylation_thresholds(motif_binary_compare)
+
+        if args.save_scores:
+            path = os.path.join(args.out, "scores", args.command, "binary_compare" + bin_contig + ".csv")
+            motif_binary_compare.write_csv(path)
+
+        # Calculate the comparison score regardless of methylation presence
+        contig_bin_comparison_score = compare_methylation_pattern(motif_binary_compare)
+        
+        # Check if the contig has no methylation and note it, but do not exclude it from further processing
+        contigHasNMethylation = motif_binary_compare.filter(pl.col("methylation_binary_compare") == 1).height
+        # logger.info(f"Finished processing {bin_contig}. Contig has {contigHasNMethylation} positive methylation comparisons.")
+        
+        if mode == "include":
+            contig_bin_comparison_score = contig_bin_comparison_score \
+                .filter(
+                    pl.col("binary_methylation_missmatch_score") == 0
+                )
+        if mode == "contamination":
+            contig_bin_comparison_score = contig_bin_comparison_score \
+                .filter(
+                    pl.col("binary_methylation_missmatch_score") > 0
+                )
+                
+            
+        if contigHasNMethylation == 0:
+            return contig_bin_comparison_score, bin_contig
+        
+        return contig_bin_comparison_score, None
+    except Exception as e:
+        error_log_path = os.path.join(args.out, "logs", f"{args.command}_{bin_contig}_error.err")
+        
+        with open(error_log_path, 'w') as error_file:
+            error_file.write(f"Error processing {bin_contig}: {str(e)}\n")
+        return None, None
 
 def compare_methylation_pattern_multiprocessed(motifs_scored_in_bins, bin_consensus, mode, args, num_processes=1):
     logger = logging.getLogger(__name__)
