@@ -23,20 +23,20 @@ def test_compare_methylation_pattern_contamination(loaded_data, motifs_scored_in
     )
     
     # Define the corresponding choices for each condition
-    choices = [
-        0,  # bin motif is methylated, contig motif is methylated
-        1,  # bin motif is methylated, contig motif is not methylated
-        1,  # bin motif is not methylated, contig motif is methylated
-        0,  # bin motif is not methylated, contig motif is not methylated
-        0,  # bin motif is methylated, contig motif is not observed
-        0,  # bin motif is not methylated, contig motif is not observed
-    ]
+    # choices = [
+    #     0,  # bin motif is methylated, contig motif is methylated
+    #     1,  # bin motif is methylated, contig motif is not methylated
+    #     1,  # bin motif is not methylated, contig motif is methylated
+    #     0,  # bin motif is not methylated, contig motif is not methylated
+    #     0,  # bin motif is methylated, contig motif is not observed
+    #     0,  # bin motif is not methylated, contig motif is not observed
+    # ]
     
     contig_bin_comparison_score, contigs_w_no_methylation = sc.compare_methylation_pattern_multiprocessed(
         motifs_scored_in_bins=motifs_scored_in_bins,
         bin_consensus=bin_consensus,
         mode="contamination",
-        choices=choices,
+        # choices=choices,
         args=args
     )
     contig_bin_comparison_score = split_bin_contig(contig_bin_comparison_score)
@@ -67,21 +67,10 @@ def test_compare_methylation_pattern_include(loaded_data, motifs_scored_in_bins_
         args
     )
     
-    # Define the corresponding choices for each condition
-    choices = [
-        0,  # bin motif is methylated, contig motif is methylated
-        1,  # bin motif is methylated, contig motif is not methylated
-        1,  # bin motif is not methylated, contig motif is methylated
-        0,  # bin motif is not methylated, contig motif is not methylated
-        0,  # bin motif is methylated, contig motif is not observed
-        0,  # bin motif is not methylated, contig motif is not observed
-    ]
-    
     contig_bin_comparison_score, contigs_w_no_methylation = sc.compare_methylation_pattern_multiprocessed(
         motifs_scored_in_bins=motifs_scored_in_bins,
         bin_consensus=bin_consensus,
         mode="include",
-        choices=choices,
         args=args
     )
     contig_bin_comparison_score = split_bin_contig(contig_bin_comparison_score)

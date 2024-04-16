@@ -11,6 +11,7 @@ class MockArgs:
         self.n_motif_contig_cutoff = 10
         self.ambiguous_motif_percentage_cutoff = 0.40
         self.min_motif_comparisons = 2
+        self.save_scores = False
         self.out = "tests/binnary/test_output"
         self.threads = 1
 

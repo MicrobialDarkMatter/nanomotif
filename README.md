@@ -171,8 +171,8 @@ After motif identification it is possible to identify contamination in bins usin
 
 ```
 usage: nanomotif detect_contamination [-h] --motifs_scored MOTIFS_SCORED --bin_motifs BIN_MOTIFS --contig_bins CONTIG_BINS [-t THREADS] [--mean_methylation_cutoff MEAN_METHYLATION_CUTOFF]
-                                      [--n_motif_contig_cutoff N_MOTIF_CONTIG_CUTOFF] [--n_motif_bin_cutoff N_MOTIF_BIN_CUTOFF] [--ambiguous_motif_percentage_cutoff AMBIGUOUS_MOTIF_PERCENTAGE_CUTOFF] --out
-                                      OUT
+                                      [--n_motif_contig_cutoff N_MOTIF_CONTIG_CUTOFF] [--n_motif_bin_cutoff N_MOTIF_BIN_CUTOFF] [--ambiguous_motif_percentage_cutoff AMBIGUOUS_MOTIF_PERCENTAGE_CUTOFF]
+                                      [--write_bins] [--assembly_file ASSEMBLY_FILE] --out OUT [--contamination_file CONTAMINATION_FILE]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -193,8 +193,15 @@ optional arguments:
   --ambiguous_motif_percentage_cutoff AMBIGUOUS_MOTIF_PERCENTAGE_CUTOFF
                         Percentage of ambiguous motifs defined as mean methylation between 0.05 and 0.40 in a bin. Motifs with an ambiguous methylation percentage of more than this value are removed from
                         scoring. Default is 0.40
+  --write_bins          If specified, new bins will be written to a bins folder. Requires --assembly_file to be specified.
+  --assembly_file ASSEMBLY_FILE
+                        Path to assembly.fasta file
   --out OUT             Path to output directory
+  --contamination_file CONTAMINATION_FILE
+                        Path to an existing contamination file if bins should be outputtet as a post-processing step
 ```
+
+If `detect_contamination` was run without the `--write_bins` flag, bins can be written as a post processing step if the `--contamination_file` is specified along with the `--write_bins` flag and the `--assembly_file` flag.
 
 The output is a `bin_contamination.tsv` file with the following columns:
 
@@ -207,12 +214,13 @@ The output is a `bin_contamination.tsv` file with the following columns:
 | **contig** | The contig for which the methylation pattern is compared. | 
 
 ### Include unbinned contigs
-This module tries to assign contigs in the assembly file to bins by comparing the methylation pattern of the contig to the bin consensus. the contig must have a unique perfect match to the bin consensus to be assigned to a bin. Additionally, the `include_contigs` assigns all the contigs in the `bin_contamination.tsv` file to as unbinned. If decontamination should not be performed, the `include_contigs` can be run with an empty `bin_contamination.tsv` file with just the column. 
+This module tries to assign contigs in the assembly file to bins by comparing the methylation pattern of the contig to the bin consensus. the contig must have a unique perfect match to the bin consensus to be assigned to a bin. Additionally, the `include_contigs` assigns all the contigs in the `bin_contamination.tsv` file to as unbinned. If decontamination should not be performed, the `include_contigs` can be run without the `--run_detect_contamination` flag or without the `--contamination_file` flag.
 
 ```
 usage: nanomotif include_contigs [-h] --motifs_scored MOTIFS_SCORED --bin_motifs BIN_MOTIFS --contig_bins CONTIG_BINS [-t THREADS] [--mean_methylation_cutoff MEAN_METHYLATION_CUTOFF]
-                                 [--n_motif_contig_cutoff N_MOTIF_CONTIG_CUTOFF] [--n_motif_bin_cutoff N_MOTIF_BIN_CUTOFF] [--ambiguous_motif_percentage_cutoff AMBIGUOUS_MOTIF_PERCENTAGE_CUTOFF] --out OUT
-                                 (--contamination_file CONTAMINATION_FILE | --run_detect_contamination) [--write_bins] [--assembly_file ASSEMBLY_FILE] [--min_motif_comparisons MIN_MOTIF_COMPARISONS]
+                                 [--n_motif_contig_cutoff N_MOTIF_CONTIG_CUTOFF] [--n_motif_bin_cutoff N_MOTIF_BIN_CUTOFF] [--ambiguous_motif_percentage_cutoff AMBIGUOUS_MOTIF_PERCENTAGE_CUTOFF]
+                                 [--write_bins] [--assembly_file ASSEMBLY_FILE] --out OUT [--contamination_file CONTAMINATION_FILE | --run_detect_contamination]
+                                 [--min_motif_comparisons MIN_MOTIF_COMPARISONS]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -233,14 +241,14 @@ optional arguments:
   --ambiguous_motif_percentage_cutoff AMBIGUOUS_MOTIF_PERCENTAGE_CUTOFF
                         Percentage of ambiguous motifs defined as mean methylation between 0.05 and 0.40 in a bin. Motifs with an ambiguous methylation percentage of more than this value are removed from
                         scoring. Default is 0.40
+  --write_bins          If specified, new bins will be written to a bins folder. Requires --assembly_file to be specified.
+  --assembly_file ASSEMBLY_FILE
+                        Path to assembly.fasta file
   --out OUT             Path to output directory
   --contamination_file CONTAMINATION_FILE
                         Path to an existing contamination file to include in the analysis
   --run_detect_contamination
                         Indicate that the detect_contamination workflow should be run first
-  --write_bins          If specified, new bins will be written to a bins folder. Requires --assembly_file to be specified.
-  --assembly_file ASSEMBLY_FILE
-                        Path to assembly.fasta file
   --min_motif_comparisons MIN_MOTIF_COMPARISONS
                         Minimum number of non-NA motif comparisons required to include a contig in the analysis. Default is 5
 ```
