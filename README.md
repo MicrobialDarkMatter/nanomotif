@@ -268,6 +268,7 @@ The `include_contigs.tsv` file has the following columns:
 This module tries to link methylation motifs to their corresponding MTase and, when present, their entire RM system. 
 
 The MTase-Linker module has additional dependencies that are not automatically installed with Nanomotif. Therefore, before using this module, you must manually install these dependencies using the `MTase-linker install`.
+The `MTase-linker` module requires that conda is available on your system.
 
 ```
 usage: nanomotif MTase-linker install [-h] [-d DEPENDENCY_DIR]
