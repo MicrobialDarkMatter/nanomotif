@@ -53,7 +53,7 @@ def methylated_motif_occourances(motif, sequence, methylated_positions) -> tuple
 
     return meth_occurences, nonmeth_occurences
 
-def motif_model_contig(pileup, contig: str, motif):
+def motif_model_contig(pileup, contig: str, motif, save_motif_positions=False, positions_outdir=None):
     """
     Get the posterior for a single motif. Uses number of methylated motifs as methylation count.
 
@@ -77,6 +77,14 @@ def motif_model_contig(pileup, contig: str, motif):
 
     model = BetaBernoulliModel()
     model.update(len(index_meth_fwd) + len(index_meth_rev), len(index_nonmeth_fwd) + len(index_nonmeth_rev))
+    
+    if save_motif_positions:
+        try:
+            path = f'{positions_outdir}_{motif.string}_{motif.mod_position}.npz'
+            np.savez(path, index_meth_fwd=index_meth_fwd, index_nonmeth_fwd=index_nonmeth_fwd, index_meth_rev=index_meth_rev, index_nonmeth_rev=index_nonmeth_rev)
+            return model
+        except Exception as e:
+            log.error(f"Failed to save motif positions: {e}")
 
     return model
 
