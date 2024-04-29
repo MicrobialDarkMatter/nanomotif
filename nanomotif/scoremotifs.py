@@ -9,9 +9,8 @@ from nanomotif import candidate, evaluate
 from nanomotif.parallel import update_progress_bar
 from nanomotif.logger import configure_logger
 
-def score_contig_with_motifs(contig, mod_type, pileup, sequence, motifs):
+def score_contig_with_motifs(contig, mod_type, pileup, sequence, motifs, save_motif_positions=False, positions_outdir=None):
     log.info(f"Scoring motifs in contig {contig}, modtype {mod_type}")
-
     # Ensuring motifs are in regex for searching
     motifs = motifs.with_columns([
             pl.col("motif") \
@@ -26,7 +25,6 @@ def score_contig_with_motifs(contig, mod_type, pileup, sequence, motifs):
     motifs_str = motifs.get_column("motif").to_list()
     positions = motifs.get_column("mod_position").to_list()
     types = motifs.get_column("mod_type").to_list()
-
     # Scoring motifs
     models = []
     for motif, position, mod_type in zip(motifs_str, positions, types):
@@ -34,10 +32,12 @@ def score_contig_with_motifs(contig, mod_type, pileup, sequence, motifs):
         model = evaluate.motif_model_contig(
             pileup,
             sequence, 
-            candidate.Motif(motif, position)
+            candidate.Motif(motif, position),
+            save_motif_positions=save_motif_positions,
+            positions_outdir=f'{positions_outdir}/{contig}' if save_motif_positions else None,
         )
         models.append(model)
-
+    print(model)
     # Creating a dataframe of the results
     result = pl.DataFrame({
             "motif": motifs_str,
@@ -53,7 +53,7 @@ def score_contig_with_motifs(contig, mod_type, pileup, sequence, motifs):
         ]).drop("model")
     return result
 
-def worker_function(args, counter, lock, sequence, motifs, log_dir, verbose, seed):
+def worker_function(args, counter, lock, sequence, motifs, log_dir, verbose, seed, save_motif_positions = False, positions_outdir = None):
     """
     Process a single subpileup for one contig and one modtype
 
@@ -72,9 +72,8 @@ def worker_function(args, counter, lock, sequence, motifs, log_dir, verbose, see
     process_id = os.getpid()
     log_file = f"{log_dir}/score-motifs.{process_id}.log"
     configure_logger(log_file, verbose=verbose)
-
     try:
-        result = score_contig_with_motifs(contig, modtype, subpileup, sequence, motifs)
+        result = score_contig_with_motifs(contig, modtype, subpileup, sequence, motifs, save_motif_positions=save_motif_positions, positions_outdir=positions_outdir)
         with lock:
             counter.value += 1
         return result
@@ -90,6 +89,8 @@ def score_sample_parallel(
         threshold_valid_coverage = 1,
         verbose = False,
         log_dir = None,
+        save_motif_positions = False,
+        positions_outdir = None,
         seed = None
     ):
     """
@@ -105,6 +106,8 @@ def score_sample_parallel(
     - min_cdf_score (float): Minimum score of 1 - cdf(cdf_position) for a motif to be considered valid.
     - cdf_position (float): The position to evaluate the cdf at.
     - min_motif_frequency (int): Used to get minimum number of sequences to evaluate motif at.
+    - save_motif_positions (bool): Save motif positions in the output folder.
+    - positions_outdir (str): The output directory for motif positions.
     """
     assert pileup is not None, "Pileup is None"
     assert assembly is not None, "Assembly is None"
@@ -137,7 +140,7 @@ def score_sample_parallel(
         task, 
         counter, lock, 
         assembly.assembly[task[0]].sequence, motifs,
-        log_dir, verbose, seed
+        log_dir, verbose, seed, save_motif_positions, positions_outdir
         ) for task in tasks])
     results = [result for result in results if result is not None]
 
