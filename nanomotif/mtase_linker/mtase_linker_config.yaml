@@ -1,0 +1,23 @@
+# Path to bin directory
+BINSDIR: "/home/bio.aau.dk/wy72yf/Projects/restriction-modification-annotation/data/ZymoHMW/" #Bins directory contain.fa files - full path
+
+# Path to contig_bin_tsv
+contig_bin_tsv: "/home/bio.aau.dk/wy72yf/Projects/restriction-modification-annotation/data/ZymoHMW/contig_bin.tsv"
+
+# output directory
+outputdirectory: "/home/bio.aau.dk/wy72yf/Projects/test/analysis/ZymoHMW/mtase_linker_test"
+
+# REbase database path
+REbase_db_path: "/home/bio.aau.dk/wy72yf/Projects/restriction-modification-annotation/data/REbase_RecSeq_all/REbase_RecSeq_all"
+
+# Sequence identity threshold for motif inference 
+identity: 80
+
+# Query coverage threshold for motif inference 
+qcovs: 80
+
+# PFAM hmm models path
+PFAM_HMM_path: "/home/bio.aau.dk/wy72yf/Projects/restriction-modification-annotation/data/MTaseHMMProfiles/combined_MTase_profiles.hmm"
+
+# Nanomotif bin-motifs.tsv path
+nanomotif_table: "/home/bio.aau.dk/lx38ll/dark-science/motif-identification/analysis/ZymoHMW/nanomotif/mmlong2/bin-motifs.tsv"
