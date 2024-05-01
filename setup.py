@@ -22,7 +22,7 @@ setup(
         "scipy>=1.10.1",
         "networkx>=3.1",
         "pyarrow>=15.0.2",
-        "Bio>=1.6.2",
+        "biopython>=1.6.2",
         "snakemake>=7.32.4",
         "progressbar2>=3.53.1"
     ],
