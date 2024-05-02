@@ -1,5 +1,6 @@
 import argparse
 from nanomotif._version import __version__
+import os
 
 
 def  create_parser():
@@ -101,6 +102,22 @@ def  create_parser():
         default=0.40,
         help="Percentage of ambiguous motifs defined as mean methylation between 0.05 and 0.40 in a bin. Motifs with an ambiguous methylation percentage of more than this value are removed from scoring. Default is 0.40",
     )
+    parser_binnary_shared.add_argument(
+        "--write_bins",
+        action='store_true',
+        help="If specified, new bins will be written to a bins folder. Requires --assembly_file to be specified.",
+    )
+    parser_binnary_shared.add_argument(
+        "--assembly_file",
+        type=str,
+        help="Path to assembly.fasta file"
+    )
+    parser_binnary_shared.add_argument(
+        "--save_scores",
+        action='store_true',
+        help="If specified, the scores for each comparison will be saved to a scores folder in the output directory"
+    )
+    
     parser_binnary_shared.add_argument("--out", type=str, help="Path to output directory", required=True, default="nanomotif")
     
     # Binnary contamination
@@ -110,6 +127,12 @@ def  create_parser():
         parents=[parser_binnary_shared]
     )  
     
+    parser_contamination.add_argument(
+        '--contamination_file',
+        type=str,
+        help="Path to an existing contamination file if bins should be outputtet as a post-processing step"
+    )
+    
     # Binnary inclusion
     parser_inclusion = subparsers.add_parser(
         'include_contigs', 
@@ -117,7 +140,7 @@ def  create_parser():
         parents=[parser_binnary_shared]
     )
     
-    group = parser_inclusion.add_mutually_exclusive_group(required=True)
+    group = parser_inclusion.add_mutually_exclusive_group(required=False)
     group.add_argument(
         "--contamination_file",
         type=str,
@@ -129,22 +152,44 @@ def  create_parser():
         help="Indicate that the detect_contamination workflow should be run first"
     )
     parser_inclusion.add_argument(
-        "--write_bins",
-        action='store_true',
-        help="If specified, new bins will be written to a bins folder. Requires --assembly_file to be specified.",
-    )
-    parser_inclusion.add_argument(
-        "--assembly_file",
-        type=str,
-        help="Path to assembly.fasta file"
-    )
-    parser_inclusion.add_argument(
         "--min_motif_comparisons",
         type=int,
         default=5,
         help="Minimum number of non-NA motif comparisons required to include a contig in the analysis. Default is 5",
     )
     
+    ###########################################################################
+    # MTase-linker
+    parser_mtase_linker = subparsers.add_parser(
+        'MTase-linker', 
+        help="Commands related to MTase-linker"
+    )
+
+    mtase_linker_subparsers = parser_mtase_linker.add_subparsers(
+        title="MTase-linker commands", 
+        dest="mtase_linker_command"
+    )
+
+    parser_mtase_linker_run = mtase_linker_subparsers.add_parser(
+        'run', 
+        help="Run the MTase-linker workflow"
+    )
+    parser_mtase_linker_run.add_argument("-t", "--threads", type=int, default=1, help="Number of threads to use. Default is 1")
+    parser_mtase_linker_run.add_argument("--forceall", type=bool, default=False, help="Forcerun workflow regardless of already created output (default = False)")
+    parser_mtase_linker_run.add_argument("--dryrun", type=bool, default=False, help="Dry-run the workflow. Default is False")
+    parser_mtase_linker_run.add_argument("--binsdir", type=str, required=True, help="Directory with bin files or assembly files. Needs to have the .fa extension.")
+    parser_mtase_linker_run.add_argument("--contig_bin", type=str, required=True, help="tsv file specifying which bin contigs belong.")
+    parser_mtase_linker_run.add_argument("--bin_motifs", type=str, required=True, help="bin-motifs.tsv output from nanomotif.")
+    parser_mtase_linker_run.add_argument("-d", "--dependency_dir", type=str, default=os.path.join(os.getcwd(), "ML_dependencies"), help="Same as for installation. Path to directory of the ML_dependencies directory created during installation of the MTase-linker module. Default is cwd/ML_dependencies")
+    parser_mtase_linker_run.add_argument("-o", "--outputdir", type=str, default=os.path.join(os.getcwd(), "mtase_linker"), help="Output directory. Default is cwd")
+    parser_mtase_linker_run.add_argument("--identity", type=str, default=80, help="Identity threshold for motif prediction. Default is 80")
+    parser_mtase_linker_run.add_argument("--qcovs", type=str, default=80, help="Query coverage for motif prediction. Default is 80")
+
+    parser_mtase_linker_install = mtase_linker_subparsers.add_parser(
+        'install', 
+        help="Install additional dependencies for MTase-linker"
+    )
+    parser_mtase_linker_install.add_argument("-d", "--dependency_dir", type=str, default=os.getcwd(), help="Path to the directory, where dependencies should be installed. A folder named ML_dependencies will be generated. Default is cwd.")
     
     return parser
     

@@ -64,8 +64,8 @@ def write_bins_from_contigs(new_contig_bins, assembly_dict, output_dir):
     logger = logging.getLogger(__name__)
     
     # check if the output directory exists
-    logger.info(f"Writing bins to {output_dir}/bins/...")
-    output_bins_dir = os.path.join(output_dir, "bins")
+    logger.info(f"Writing bins to {output_dir}")
+    output_bins_dir = os.path.join(output_dir)
     if not os.path.exists(output_bins_dir):
         os.makedirs(output_bins_dir)
     
@@ -192,6 +192,7 @@ def remove_ambiguous_motifs_from_bin_consensus(motifs_scored_in_bins, args):
     # Remove motifs in bins where the majority of the mean methylation of motifs is in the range of 0.05-0.4
     contig_motif_mean_density = motifs_scored_in_bins \
         .filter(pl.col("bin") != "unbinned") \
+        .filter(pl.col("n_motifs") >= args.n_motif_contig_cutoff) \
         .with_columns(
             ((pl.col("mean") > 0.05) & (pl.col("mean") < 0.4)).alias("is_ambiguous")
         )
@@ -334,7 +335,7 @@ def load_contamination_file(contamination_file):
     return contamination
 
 
-def create_contig_bin_file(contig_bins, include, contamination):
+def create_contig_bin_file(contig_bins, contamination, include=None):
     """
     Create a new contig_bin file based on the analysis results and contamination file.
     """
@@ -342,7 +343,8 @@ def create_contig_bin_file(contig_bins, include, contamination):
     contig_bins = contig_bins[~contig_bins["contig"].isin(contamination["contig"])]
     
     # Add the contigs in the include DataFrame to the contig_bins
-    contig_bins = pd.concat([contig_bins, include[["contig", "bin"]]], ignore_index=True)
+    if include is not None:
+        contig_bins = pd.concat([contig_bins, include[["contig", "bin"]]], ignore_index=True)
     
     # Sort the contig_bins by bin and contig
     contig_bins = contig_bins.sort_values(by=["bin", "contig"])

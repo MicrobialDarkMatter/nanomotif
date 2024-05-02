@@ -26,21 +26,11 @@ def detect_contamination(motifs_scored_in_bins, bin_consensus, args):
     motifs_scored_in_bins_wo_unbinned = motifs_scored_in_bins \
         .filter(~pl.col("bin_contig").str.contains("unbinned"))
     
-    # Define the corresponding choices for each condition
-    choices = [
-        0,  # bin motif is methylated, contig motif is methylated
-        1,  # bin motif is methylated, contig motif is not methylated
-        1,  # bin motif is not methylated, contig motif is methylated
-        0,  # bin motif is not methylated, contig motif is not methylated
-        0,  # bin motif is methylated, contig motif is not observed
-        0,  # bin motif is not methylated, contig motif is not observed
-    ]
 
     contig_bin_comparison_score, contigs_w_no_methylation = sc.compare_methylation_pattern_multiprocessed(
         motifs_scored_in_bins=motifs_scored_in_bins_wo_unbinned,
         bin_consensus=bin_consensus,
         mode="contamination",
-        choices=choices,
         args=args,
         num_processes=args.threads
     )
