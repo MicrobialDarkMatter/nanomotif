@@ -4,11 +4,11 @@ Nanomotif is a Python package designed to explore methylation in prokaryotic gen
 
 
 
-Nanomotif offers
-1) de novo methylated motif identification
-2) metagenomic bin contamination detection
-3) bin association of unbinned contigs (eg. plasmids)
-4) association of MTases and RM-systems to motifs.
+**Nanomotif offers**
+- de novo methylated motif identification
+- metagenomic bin contamination detection
+- bin association of unbinned contigs (eg. plasmids)
+- association of MTases and RM-systems to motifs.
 <p align="center">
   <img src="docs/figures/nanomotif_method.png" width="400"/>
 </p>
