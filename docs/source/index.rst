@@ -16,6 +16,9 @@ how to :ref:`installation` the project.
 
 
 .. toctree::
-
-   usage
+   installation
    required_files
+   usage
+   output
+   examples
+   troubleshooting
