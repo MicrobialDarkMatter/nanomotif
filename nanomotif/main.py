@@ -123,7 +123,7 @@ def find_motifs(args, pileup = None, assembly = None):
     save_motif_df(motifs, "precleanup-motifs/motifs-raw")
 
     log.info("Postprocessing motifs")
-    motifs_file_name = args.out + "precleanup-motifs/motifs"
+    motifs_file_name = "precleanup-motifs/motifs"
 
     log.info(" - Writing motifs")
     motifs = motifs.filter(pl.col("score") > 0.1)
