@@ -10,8 +10,7 @@ Nanomotif offers
 3) bin association of unbinned contigs (eg. plasmids)
 4) association of MTases and RM-systems to motifs.
 
-
-![Nanomotif Overview](docs/figures/nanomotif_method.png "Nanomotif Overview" | width=100)
+<img src="docs/figures/nanomotif_method.png" width="48">
 
 ## Documentation
 Please see the [documentation](https://nanomotif.readthedocs.io) for detailed installation and usage instructions, descriptions of required files, and analysis examples.
