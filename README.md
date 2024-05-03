@@ -27,7 +27,7 @@ Please see the [documentation](https://nanomotif.readthedocs.io) for detailed in
 
 ### Installation
 
-Using Conda for managing your Python environments, you can create a new environment and install Nanomotif as follows:
+Nanomotif can easily be installed using Conda for managing your Python environments. You can create a new environment and install Nanomotif as follows:
 ```shell
 conda create -n nanomotif  python=3.9
 conda activate nanomotif
