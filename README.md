@@ -9,8 +9,9 @@ Nanomotif offers
 2) metagenomic bin contamination detection
 3) bin association of unbinned contigs (eg. plasmids)
 4) association of MTases and RM-systems to motifs.
-
-<img src="docs/figures/nanomotif_method.png" width="48">
+<p align="center">
+  <img src="docs/figures/nanomotif_method.png" width="400"/>
+</p>
 
 ## Documentation
 Please see the [documentation](https://nanomotif.readthedocs.io) for detailed installation and usage instructions, descriptions of required files, and analysis examples.
