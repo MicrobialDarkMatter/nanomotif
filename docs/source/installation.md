@@ -22,7 +22,7 @@ source nanomotif/bin/activate
 pip install nanomotif
 ```
 
-## Check installation
+## Check Installation
 Once installed, the installation can be checked by running:
 ```shell
 nanomotif check-installation
@@ -30,7 +30,7 @@ nanomotif check-installation
 This runs a test run on a small dataset, ensuring everything works.
 
 
-## MTase-linker installation
+## MTase-linker Installation
 The MTase-Linker module has additional dependencies that are not automatically installed with Nanomotif. Therefore, before using this module, you must manually install these dependencies using the `MTase-linker install` command.
 The `MTase-linker` module requires that conda is available on your system.
 
