@@ -2,9 +2,8 @@
 
 # -- Project information
 
-project = 'MicrobialDarkMatter'
-copyright = '2024, SorenHeidelbach'
-author = 'SorenHeidelbach'
+project = 'Nanomotif'
+author = 'MicrobialDarkMatter'
 
 # -- General configuration
 
