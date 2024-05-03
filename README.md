@@ -2,6 +2,21 @@
 
 Nanomotif is a Python package designed to explore methylation in prokaryotic genomes using Nanopore sequencing. Nanomotif is a fast, scalable, and sensitive tool for identification and utilization of methylation motifs in monocultures and metagenomic samples.
 
+- [Nanomotif](#nanomotif)
+  - [Documentation](#documentation)
+  - [Skip the Documentation: Your Quickstart Guide to Nanomotif](#skip-the-documentation-your-quickstart-guide-to-nanomotif)
+    - [Installation](#installation)
+    - [Check installation](#check-installation)
+    - [Required files](#required-files)
+    - [Usage](#usage)
+      - [Motif discovery](#motif-discovery)
+      - [Bin contamination](#bin-contamination)
+      - [Include unbinned contigs](#include-unbinned-contigs)
+      - [Associating MTases and RM-systems to motifs](#associating-mtases-and-rm-systems-to-motifs)
+  - [Citation](#citation)
+  - [License](#license)
+  - [Acknowledgments](#acknowledgments)
+
 
 
 **Nanomotif offers**
