@@ -11,7 +11,7 @@ Nanomotif offers
 4) association of MTases and RM-systems to motifs.
 
 
-![Nanomotif Overview](docs/figures/nanomotif_method.png "Nanomotif Overview")
+![Nanomotif Overview](docs/figures/nanomotif_method.png "Nanomotif Overview" | width=100)
 
 ## Documentation
 Please see the [documentation](https://nanomotif.readthedocs.io) for detailed installation and usage instructions, descriptions of required files, and analysis examples.
