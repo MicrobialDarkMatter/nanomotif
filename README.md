@@ -1,10 +1,9 @@
 # Nanomotif
 
 Nanomotif is a Python package designed to explore methylation in prokaryotic genomes using Nanopore sequencing. Nanomotif is a fast, scalable, and sensitive tool for identification and utilization of methylation motifs in monocultures and metagenomic samples.
-   - [Overview](#nanomotif-offers)
+  - [Overview](#nanomotif-offers)
   - [Documentation](#documentation)
   - [Installation](#installation)
-  - [Required files](#required-files)
   - [Usage](#usage)
   - [Citation](#citation)
 
@@ -35,7 +34,7 @@ conda activate nanomotif
 conda install -c bioconda nanomotif
 ```
 
-### Check installation
+#### Check installation
 Once installed, the installation can be checked by running:
 ```shell
 nanomotif check-installation
@@ -44,7 +43,9 @@ This runs a test run on a small dataset, ensuring everything works.
 
 For further details, check out the [installation guidelines]().
 
-### Required files
+
+### Usage
+#### Required files
 
 To identify methylated motifs, the following files are required: 
 - Assembly (fasta file)
@@ -53,7 +54,7 @@ To identify methylated motifs, the following files are required:
 
 For further details, check out the [required files]() documentation.
 
-### Usage
+
 #### Motif discovery
 
 Whether you are interested in finding methylated motifs in monoculture samples or metagenomic samples, we recomment just running `find_motifs`
