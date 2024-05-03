@@ -123,44 +123,59 @@ def find_motifs(args, pileup = None, assembly = None):
     save_motif_df(motifs, "precleanup-motifs/motifs-raw")
 
     log.info("Postprocessing motifs")
+    motifs_file_name = args.out + "precleanup-motifs/motifs"
 
     log.info(" - Writing motifs")
     motifs = motifs.filter(pl.col("score") > 0.1)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
-    save_motif_df(motifs, "precleanup-motifs/motifs-score")
+    
+    motifs_file_name = motifs_file_name + "-score"
+    save_motif_df(motifs, motifs_file_name)
 
-    log.info(" - Removing sub motifs")
-    motifs = nm.postprocess.remove_sub_motifs(motifs)
-    if len(motifs) == 0:
-        log.info("No motifs found")
-        return
-    save_motif_df(motifs, "precleanup-motifs/motifs-score-sub")
+    #log.info(" - Removing sub motifs")
+    #motifs = nm.postprocess.remove_sub_motifs(motifs)
+    #if len(motifs) == 0:
+    #    log.info("No motifs found")
+    #    return
+    #motifs_file_name = motifs_file_name +   "-sub"
+    #save_motif_df(motifs, motifs_file_name)
 
     log.info(" - Removing noisy motifs")
     motifs = nm.postprocess.remove_noisy_motifs(motifs)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
-    save_motif_df(motifs, "precleanup-motifs/motifs-score-sub-noise")
+    motifs_file_name = motifs_file_name +   "-noise"
+    save_motif_df(motifs, motifs_file_name)
 
     log.info(" - Merging motifs")
     motifs = nm.postprocess.merge_motifs_in_df(motifs, pileup, assembly)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
-    save_motif_df(motifs, "precleanup-motifs/motifs-score-sub-noise-merge")
+    motifs_file_name = motifs_file_name +   "-merge"
+    save_motif_df(motifs, motifs_file_name)
 
     log.info(" - Joining motif complements")
     motifs = nm.postprocess.join_motif_complements(motifs)
-    save_motif_df(motifs, "precleanup-motifs/motifs-score-sub-noise-merge-complement")
+    if len(motifs) == 0:
+        log.info("No motifs found")
+        return
+    motifs_file_name = motifs_file_name +   "-complement"
+    save_motif_df(motifs, motifs_file_name)
 
     log.info(" - Removing motifs observed less than min count")
     motifs = motifs.filter(pl.col("n_mod") + pl.col("n_nomod") > 1)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
+    motifs_file_name = motifs_file_name +   "-mincount"
+    save_motif_df(motifs, motifs_file_name)
+
+
+
     save_motif_df(motifs, "motifs")
 
     log.info("Done finding motifs")
