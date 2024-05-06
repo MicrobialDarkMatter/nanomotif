@@ -452,7 +452,7 @@ def main():
     elif args.command == "bin-consensus":
         shared_setup(args, args.out)
         bin_consensus(args)
-    elif args.command == "complete-workflow":
+    elif args.command == "find_motifs":
         shared_setup(args, args.out)
         metagenomic_workflow(args)
     elif args.command == "check-installation":
