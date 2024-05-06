@@ -277,7 +277,7 @@ def bin_consensus(args, pileup = None, assembly = None, motifs = None, motifs_sc
     output = output.sort(["bin", "mod_type", "motif"])
     output.write_csv(args.out + "/bin-motifs.tsv", separator="\t")
 
-def metagenomic_workflow(args):
+def motif_discovery(args):
     # Check if output directory exists
     log.info("Loading required files")
     pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)
@@ -442,19 +442,9 @@ def main():
         args.verbose = False
         args.seed = 1
     
-    
-    if args.command == "find-motifs":
+    if args.command == "find_motifs":
         shared_setup(args, args.out)
-        find_motifs(args)
-    elif args.command == "score-motifs":
-        shared_setup(args, args.out)
-        score_motifs(args)
-    elif args.command == "bin-consensus":
-        shared_setup(args, args.out)
-        bin_consensus(args)
-    elif args.command == "find_motifs":
-        shared_setup(args, args.out)
-        metagenomic_workflow(args)
+        motif_discovery(args)
     elif args.command == "check-installation":
         args.out = "nanomotif_install_check"
         shared_setup(args, args.out)
