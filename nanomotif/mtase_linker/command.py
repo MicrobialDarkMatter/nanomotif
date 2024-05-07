@@ -19,22 +19,14 @@ def run_MTase_linker(args):
         sys.exit(1)
 
     # Bins directory
-    a1 = os.path.join(cwd, args.binsdir)
-    a2 = os.path.join(args.binsdir)
-    if os.path.exists(a1) and os.path.isdir(a1) and glob.glob(os.path.join(a1, '*.fa')):
-        binsdir = a1
-    elif os.path.exists(a2) and os.path.isdir(a2) and glob.glob(os.path.join(a2, '*.fa')):
-        binsdir = a2
-    elif os.path.exists(a1) and os.path.isdir(a1):
-        msg = 'Error: directory {} does not contain .fa files '.format(b1)
-        sys.stderr.write(msg)
-        sys.exit(1)
-    elif os.path.exists(a2) and os.path.isdir(a2):
-        msg = 'Error: directory {} does not contain .fa files '.format(a2)
-        sys.stderr.write(msg)
-        sys.exit(1)
+    a1 = os.path.join(cwd, args.assembly)
+    a2 = os.path.join(args.assembly)
+    if os.path.exists(a1):
+        assembly_path = a1
+    elif os.path.exists(a2):
+        assembly_path = a2
     else:
-        msg = 'Error: cannot find bins directory in paths {} or {} '.format(a1,a2)
+        msg = 'Error: cannot find assembly files in paths {} or {} '.format(a1,a2)
         sys.stderr.write(msg)
         sys.exit(1)
 
@@ -110,7 +102,7 @@ def run_MTase_linker(args):
 
     workflow = None
     workflow = {"THREADS": args.threads,
-                "BINSDIR": binsdir,
+                "ASSEMBLY": assembly_path,
                 "CONTIG_BIN": contig_bin,
                 "OUTPUTDIRECTORY": args.outputdir,
                 "DEPENDENCY_PATH": dependency_dir,
