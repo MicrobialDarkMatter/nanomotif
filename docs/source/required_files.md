@@ -53,7 +53,7 @@ Caling head on the generated pileup file should show a table similair to the one
 
 - When demultiplexing, trimming of reads may result in errors downstream. We therefore recommend using untrimmed reads for mapping
 
-- Running `modkit pileup` with default parameters results in modkit estimating the threshold for calling a methylation. This can result in very low methylation calling score threshold such as 0.6 or even lower. This is detrimental to Nanomotif motif identification, but can include a high degree of noise, and loss of some motifs. We generally recommend a `--filter-threshold` of 0.7. 
+- Running `modkit pileup` with default parameters results in modkit estimating the threshold for calling a methylation. This can result in very low methylation calling score threshold such as 0.6 or even lower. This is not detrimental to Nanomotif motif identification, but may result in inclusion of a high degree of noise, and loss of some motifs. We generally recommend a `--filter-threshold` of 0.7. 
 
 ## Contig-bin
 File describing which contigs belongs to which bins. It should be headerless, tab-separated file with contig id in the first column and bin in the second column. 
@@ -73,13 +73,13 @@ Caling head on the generated contig-bin file should show a table similair to the
 
 | | |
 |-|-|
-| contig_1 |        b1 |
-| contig_2 |        b1 |
-| contig_3 |        b1 |
-| contig_4 |        b2 |
-| contig_5 |        b2 |
-| contig_6 |        b3 |
-| contig_7 |        b3 |
-| contig_8 |        b3 |
-| contig_9 |        b3 |
-| contig_10 |       b1 |
+| contig_1 |        bin1 |
+| contig_2 |        bin1 |
+| contig_3 |        bin1 |
+| contig_4 |        bin2 |
+| contig_5 |        bin2 |
+| contig_6 |        bin3 |
+| contig_7 |        bin3 |
+| contig_8 |        bin3 |
+| contig_9 |        bin3 |
+| contig_10 |       bin1 |
