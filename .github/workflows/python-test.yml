@@ -34,4 +34,4 @@ jobs:
         pytest
     - name: Test CLI
       run: |
-        nanomotif check-installation
+        nanomotif check_installation

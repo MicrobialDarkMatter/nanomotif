@@ -14,7 +14,7 @@ Nanomotif is a Python package designed to explore methylation in prokaryotic gen
 - bin association of unbinned contigs (eg. plasmids)
 - association of MTases and RM-systems to motifs.
 <p align="center">
-  <img src="docs/figures/nanomotif_method.png" width="400"/>
+  <img src="docs/figures/nanomotif_method.png" width="400" style="background-color:white;"/>
 </p>
 
 
@@ -37,7 +37,7 @@ conda install -c bioconda nanomotif
 #### Check installation
 Once installed, the installation can be checked by running:
 ```shell
-nanomotif check-installation
+nanomotif check_installation
 ```
 This runs a test run on a small dataset, ensuring everything works.
 
@@ -57,10 +57,10 @@ For further details, check out the [required files]() documentation.
 
 #### Motif discovery
 
-Whether you are interested in finding methylated motifs in monoculture samples or metagenomic samples, we recomment just running `find_motifs`
+Whether you are interested in finding methylated motifs in monoculture samples or metagenomic samples, we recomment just running `motif_discovery`
 
 ```
-nanomotif find_motifs ASSEMBLY.fasta PILEUP.bed CONTIG_BIN.tsv -t THREADS --out OUT
+nanomotif motif_discovery ASSEMBLY.fasta PILEUP.bed CONTIG_BIN.tsv -t THREADS --out OUT
 ```
 
 This will create three files: `motifs.tsv`,`motif-scored.tsv`, and `bin-motifs.tsv`. Highly methylated motifs are found in `bin-motifs.tsv`.

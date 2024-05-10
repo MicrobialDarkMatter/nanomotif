@@ -4,9 +4,10 @@ import os
 
 
 def  create_parser():
-    parser = argparse.ArgumentParser(description="Motif identification and utilisation commands")
+    formatter = lambda prog: argparse.HelpFormatter(prog,max_help_position=28)
+    parser = argparse.ArgumentParser(description="Motif identification and utilisation commands", formatter_class=formatter)
     parser.add_argument("--version", action="version", version="%(prog)s {}".format(__version__))
-    subparsers = parser.add_subparsers(help="Command descriptions", dest="command")
+    subparsers = parser.add_subparsers(help="-- Command descriptions --", dest="command")
 
     ###########################################################################
     # Shared sub-command arguments
@@ -28,42 +29,38 @@ def  create_parser():
     parser_shared_find_motifs.add_argument("--threshold_methylation_confident", type=float, default=0.80, help="minimum fraction of reads that must be methylated at a position for the position to be considered confiently methylated. These position are used to search for candidate motifs. Default: %(default)s")
     parser_shared_find_motifs.add_argument("--threshold_valid_coverage", type=int, default=5, help="minimum valid base coverage for a position to be considered. Default: %(default)s")
     parser_shared_find_motifs.add_argument("--minimum_kl_divergence", type=float, default=0.05, help="minimum KL-divergence for a position to considered for expansion in  motif search. Higher value means less exhaustive, but faster search. Default: %(default)s")
-    #parser_find_motifs = subparsers.add_parser(
-    #    'find-motifs', 
-    #    parents=[parser_positional, parser_optional, parser_shared_find_motifs], 
-    #    help="identifies motifs in contigs"
-    #)
+    parser_find_motifs = subparsers.add_parser(
+        'find_motifs', 
+        parents=[parser_positional, parser_optional, parser_shared_find_motifs], 
+        help="Finds motifs directly on contig level in provided assembly"
+    )
 
     ###########################################################################
     # Score motifs
-    #parser_score_motifs = subparsers.add_parser(
-    #    'score-motifs', 
-    #    parents=[parser_positional, parser_optional],
-    #    help="generate feature complete output"
-    #)
-    #parser_score_motifs.add_argument("motifs", type=str, help="path to the motifs file.")
+    parser_score_motifs = subparsers.add_parser(
+        'score_motifs', 
+        parents=[parser_positional, parser_optional],
+        help="Find motifs indirectly in contigs by scoring with motifs found in other contigs"
+    )
+    parser_score_motifs.add_argument("motifs", type=str, help="path to the motifs file.")
     
     ###########################################################################
     # Bin consensus
     parser_shared_bin_consensus = argparse.ArgumentParser(add_help=False, conflict_handler="resolve")
     parser_shared_bin_consensus.add_argument("bins", type=str, help="tsv file specifying which bin contigs belong.")
-    #parser_bin_consensus = subparsers.add_parser(
-    #    'bin-consensus', 
-    #    parents=[parser_positional, parser_optional, parser_shared_bin_consensus],
-    #    help="generate consensus set of motif for each bin"
-    #)
-    #parser_bin_consensus.add_argument("motifs", type=str, help="path to the motifs file.")
-    #parser_bin_consensus.add_argument("motifs_scored", metavar="motifs-scored", type=str, help="path to the motif-scored file.")
+    parser_bin_consensus = subparsers.add_parser(
+        'bin_consensus', 
+        parents=[parser_positional, parser_optional, parser_shared_bin_consensus],
+        help="Indentifies highly methylated motifs in bins"
+    )
+    parser_bin_consensus.add_argument("motifs", type=str, help="path to the motifs file.")
+    parser_bin_consensus.add_argument("motifs_scored", metavar="motifs-scored", type=str, help="path to the motif-scored file.")
 
     ###########################################################################
     # Complete workflow
-    parser_complete_workflow = subparsers.add_parser('find_motifs', help='Identify methylated motifs on and contig and bin level', parents=[parser_positional, parser_optional, parser_shared_find_motifs, parser_shared_bin_consensus], conflict_handler="resolve")
+    parser_complete_workflow = subparsers.add_parser('motif_discovery', help='Runs find_motifs, score_motifs and bin_consensus', parents=[parser_positional, parser_optional, parser_shared_find_motifs, parser_shared_bin_consensus], conflict_handler="resolve")
 
-    ###########################################################################
-    # Check installation
-    parser_check_installation = subparsers.add_parser('check-installation', parents=[parser_optional, parser_shared_find_motifs], add_help=False)
-    
-    
+
     ###########################################################################
     # Bin contamination and inclusion
     parser_binnary_shared = argparse.ArgumentParser(description="Contamination DNA Methylation Pattern", add_help=False)
@@ -189,6 +186,13 @@ def  create_parser():
         help="Install additional dependencies for MTase-linker"
     )
     parser_mtase_linker_install.add_argument("-d", "--dependency_dir", type=str, default=os.getcwd(), help="Path to the directory, where dependencies should be installed. A folder named ML_dependencies will be generated. Default is cwd.")
+    
+
+
+    ###########################################################################
+    # Check installation
+    parser_check_installation = subparsers.add_parser('check_installation', parents=[parser_optional, parser_shared_find_motifs], add_help=False, help="Performs small test run to verify that the installation is correct.")
+    
     
     return parser
     
