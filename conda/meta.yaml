@@ -1,6 +1,6 @@
 package:
   name: nanomotif
-  version: "0.1.0"
+  version: "0.4.0"
 
 source:
   url: https://files.pythonhosted.org/packages/b3/5a/67118f55445066a8b27b92837fe1d4ef8c92936dff4ef2459fe36bc598dd/nanomotif-0.1.0.tar.gz
@@ -9,6 +9,11 @@ source:
 build:
   number: 0
   script: "{{ PYTHON }} -m pip install . --no-deps -vv"
+
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
 
 requirements:
   host:
