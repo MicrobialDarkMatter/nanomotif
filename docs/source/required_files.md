@@ -5,14 +5,14 @@ To identify methylated motifs, the following files are required:
 - methylation pileup
 - contig-bin relationship
 
-### Assembly
+## Assembly
 
 Assembly file containing all the conting for evaluation.
 Assembly from any assembler can be used. 
 The assembly files should be in the standard fasta format. Nanomotif was developed using assemblies made with [metaFlye](https://github.com/fenderglass/Flye). 
 
 
-### Methylation pileup
+## Methylation pileup
 File containing the number of reads methylated at each position on a contig.
 Gerated by mapping reads with methylation calls in the header to the assembly mentioned in [Assembly](####Assembly). Then, using ONT [modkit](https://github.com/nanoporetech/modkit/blob/master/book/src/advanced_usage.md#pileup) generate the methylation pileup. 
 
@@ -55,7 +55,7 @@ Caling head on the generated pileup file should show a table similair to the one
 
 - Running `modkit pileup` with default parameters results in modkit estimating the threshold for calling a methylation. This can result in very low methylation calling score threshold such as 0.6 or even lower. This is detrimental to Nanomotif motif identification, but can include a high degree of noise, and loss of some motifs. We generally recommend a `--filter-threshold` of 0.7. 
 
-### Contig-bin
+## Contig-bin
 File describing which contigs belongs to which bins. It should be headerless, tab-separated file with contig id in the first column and bin in the second column. 
 
 
