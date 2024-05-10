@@ -321,7 +321,7 @@ def check_install(args):
     log.info("Finding bin consensus motifs")
     args.bins = nm.datasets.geobacillus_plasmids_bin_path()
     bin_consensus(args, pileup=pileup, assembly=assembly, motifs=motifs, motifs_scored=scored_all)
-
+    
     log.info("Done")
     shutil.rmtree(args.out)
 
@@ -487,11 +487,16 @@ def main():
     
     if args.command == "find_motifs":
         shared_setup(args, args.out)
-        motif_discovery(args)
-    elif args.command == "check-installation":
-        args.out = "nanomotif_install_check"
+        find_motifs(args)
+    elif args.command == "score_motifs":
         shared_setup(args, args.out)
-        check_install(args)
+        score_motifs(args)
+    elif args.command == "bin_consensus":
+        shared_setup(args, args.out)
+        bin_consensus(args)
+    elif args.command == "motif_discovery":
+        shared_setup(args, args.out)
+        motif_discovery(args)
 
     elif args.command in ["detect_contamination", "include_contigs"]:
         shared_setup(args, args.out)
@@ -500,6 +505,10 @@ def main():
     elif args.command == "MTase-linker":
         mtase_linker(args)
 
+    elif args.command == "check_installation":
+        args.out = "nanomotif_install_check"
+        shared_setup(args, args.out)
+        check_install(args)
 
     else:
         parser.print_help()
