@@ -52,7 +52,7 @@ To identify methylated motifs, the following files are required:
 - [modkit](https://github.com/nanoporetech/modkit/blob/master/book/src/advanced_usage.md#pileup) methylation pileup
 - tab-separated file describing `contig-bin` relationship.
 
-For further details, check out the [required files]() documentation.
+For further details, check out the [required files](https://nanomotif.readthedocs.io/en/latest/required_files.html) documentation.
 
 
 #### Motif discovery
@@ -65,7 +65,7 @@ nanomotif motif_discovery ASSEMBLY.fasta PILEUP.bed CONTIG_BIN.tsv -t THREADS --
 
 This will create three files: `motifs.tsv`,`motif-scored.tsv`, and `bin-motifs.tsv`. Highly methylated motifs are found in `bin-motifs.tsv`.
 
-See [usage]() and [output]() for detailed usage and output information.
+See [usage](https://nanomotif.readthedocs.io/en/latest/usage.html) and [output](https://nanomotif.readthedocs.io/en/latest/output.html) for detailed usage and output information.
 
 #### Bin contamination
 After motif identification it is possible to identify contamination in bins using the `bin-motifs.tsv`, `contig-bin.tsv` and `motif-scored.tsv` files.
@@ -77,7 +77,7 @@ This will generate a bin_contamination.tsv specifying the contigs, which is flag
 
 If the --write_bins and the --assembly_file flags are specified new de-contaminated bins will be written to a bins folder.
 
-See [usage]() and [output]() for detailed usage and output information.
+See [usage](https://nanomotif.readthedocs.io/en/latest/usage.html) and [output](https://nanomotif.readthedocs.io/en/latest/output.html) for detailed usage and output information.
 
 #### Include unbinned contigs
 The `include_contigs` command assigns unbinned contigs in the assembly file to bins by comparing the methylation pattern of the contig to the bin consensus pattern. The contig must have a unique perfect match to the bin consensus pattern to be assigned to a bin. Additionally, the `include_contigs` assigns all the contigs in the `bin_contamination.tsv` file as unbinned. 
