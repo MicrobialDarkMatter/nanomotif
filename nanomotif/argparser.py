@@ -173,7 +173,7 @@ def  create_parser():
     parser_mtase_linker_run.add_argument("-t", "--threads", type=int, default=1, help="Number of threads to use. Default is 1")
     parser_mtase_linker_run.add_argument("--forceall", type=bool, default=False, help="Forcerun workflow regardless of already created output (default = False)")
     parser_mtase_linker_run.add_argument("--dryrun", type=bool, default=False, help="Dry-run the workflow. Default is False")
-    parser_mtase_linker_run.add_argument("--binsdir", type=str, required=True, help="Directory with bin files or assembly files. Needs to have the .fa extension.")
+    parser_mtase_linker_run.add_argument("--assembly", type=str, required=True, help="Path to assembly file.")
     parser_mtase_linker_run.add_argument("--contig_bin", type=str, required=True, help="tsv file specifying which bin contigs belong.")
     parser_mtase_linker_run.add_argument("--bin_motifs", type=str, required=True, help="bin-motifs.tsv output from nanomotif.")
     parser_mtase_linker_run.add_argument("-d", "--dependency_dir", type=str, default=os.path.join(os.getcwd(), "ML_dependencies"), help="Same as for installation. Path to directory of the ML_dependencies directory created during installation of the MTase-linker module. Default is cwd/ML_dependencies")

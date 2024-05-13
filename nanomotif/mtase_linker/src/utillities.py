@@ -144,12 +144,13 @@ def mod_predictions_hmm(df, pfam_hmm_acc_column):
     Returns:
     - Return the df with the new mod type column added.
     """
+
     a_interpro_acc = ["PF01555", "PF02384", "PF12161", "PF05869", "PF02086", "PF07669", "PF13651"]
     m_interpro_acc = ["PF00145"]
 
     def classify_mod(x):
         if x.split('.')[0] in a_interpro_acc:
-            return "a"
+            return "ac"
         elif x.split('.')[0] in m_interpro_acc:
             return "m"
         else:
@@ -159,3 +160,11 @@ def mod_predictions_hmm(df, pfam_hmm_acc_column):
 
     return df
 # %%
+#Function to recode nanomotif bin-motifs modtype values.
+def recode_mod_type(value):
+    if value == 'm':
+        return 'm'
+    elif value == 'a' or value == '21839':
+        return 'ac'
+    else:
+        return value

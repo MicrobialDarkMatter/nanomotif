@@ -105,10 +105,8 @@ The installation requires conda to generate a few environments.
 When the additional dependencies are installed you can run the workflow using `MTase-linker run`
 
 ```
-nanomotif MTase-linker run -t 10 --binsdir bins_directory --contig_bin contig_bin.tsv --bin_motifs nanomotif/bin_motifs.tsv -d ML_dependencies -o mtase_linker
+nanomotif MTase-linker run -t 10 --assembly ASSEMBLY.fasta --contig_bin contig_bin.tsv --bin_motifs nanomotif/bin_motifs.tsv -d ML_dependencies -o mtase_linker
 ```
-
-Please be aware that the `--binsdir` flag should be followed by the path leading to the parent directory of the assembly og bin files, and that these files should have a .fa extension.
 
 Running the nanomotif MTase-linker run command will generate two primary output files: mtase_assignment_table.tsv and nanomotif_assignment_table.tsv. The first file lists all predicted MTase genes in the genome along with their predicted methylation characteristics and whether the module was able to unambiguously assign any detected motifs to the MTase (`linked` = (True/False)).
 The second file includes data from the bin-motifs.tsv of the nanomotif output with two additional columns `linked` and `candidate_genes`. The `linked` variable is a boolean indicator if the motif could be unambiguously linked to a MTase in the bin/genome (TRUE/FALSE). If True the gene_id of the MTase is provided in `candidate_gene`. If False, the `candidate_gene` variable lists feasible candidate facilitators of the modification based on motif type and modification type predictions.
