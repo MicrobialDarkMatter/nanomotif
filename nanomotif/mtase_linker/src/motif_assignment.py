@@ -236,7 +236,7 @@ for (bin_name, assign_mod_type), nanomotif_group in grouped_nanomotif:
                 nanomotif_table_mm50.loc[idx, 'candidate_genes'] = genes_str
 # %%
 MTase_table_assigned = MTase_table_assigned[['bin name', 'gene_id', 'contig', 'mod_type', 'sub_type', 'RM_system', 'motif_type', 'REbase_ID', 'motif_guess', 'linked', 'detected_motif']]
-MTase_table_assigned.columns = ['bin', 'gene_id', 'contig', 'mod_type', 'sub_type', 'RM_system', 'motif_type', 'REbase_ID', 'motif_pred', 'linked', 'detected_motif']
+MTase_table_assigned.columns = ['bin', 'gene_id', 'contig', 'mod_type_pred', 'sub_type', 'RM_system', 'motif_type_pred', 'REbase_ID', 'motif_pred', 'linked', 'detected_motif']
 nanomotif_table_mm50 = nanomotif_table_mm50[['bin', 'mod_type', 'motif', 'mod_position', 'n_mod_bin', 'n_nomod_bin', 'motif_type', 'motif_complement', 'mod_position_complement', 'n_mod_complement', 'n_nomod_complement', 'linked', 'candidate_genes']]
 #%%
 MTase_table_assigned.to_csv(snakemake.output['MTase_assignment_table'] , sep='\t', index=False)
