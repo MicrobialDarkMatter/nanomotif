@@ -6,7 +6,7 @@ Motif discovery is meant for identifying motif at contig and bin level. It consi
 
 We recommend always using `motif_discovery` unless there is a specific reason for using the seperate commands. 
 
-QUICK START
+**QUICK START**
 ```shell
 ASSEMBLY="path/to/assembly.fasta"
 PILEUP="path/to/pileup.tsv"
@@ -51,9 +51,127 @@ optional arguments:
 
 ## Bin improvement
 
-COMING SOON
+### Bin contamination
+After motif identification it is possible to identify contamination in bins using the `bin-motifs.tsv`, `contig-bin.tsv` and `motif-scored.tsv` files.
+
+**QUICK START**
+```shell
+MOTIFS_SCORED="path/to/nanomotif/motifs-scored.tsv"
+BIN_MOTIFS="path/to/nanomotif/bin-motifs.tsv"
+CONTIG_BIN="path/to/contig_bin.tsv"
+OUT="path/to/output"
+nanomotif detect_contamination --motifs_scored $MOTIFS_SCORED --bin_motifs $BIN_MOTIFS --contig_bins $CONTIG_BIN --out $OUT
+```
+
+This will generate a bin_contamination.tsv specifying the contigs, which is flagged as contamination.
+
+If the `--write_bins` and the `--assembly_file` flags are specified new de-contaminated bins will be written to a bins folder.
+
+If `detect_contamination` was run without the `--write_bins` flag, bins can be written as a post processing step if the `--contamination_file` is specified along with the `--write_bins` flag and the `--assembly_file` flag.
 
 
-## MTase linking
+```
+usage: nanomotif detect_contamination [-h] --motifs_scored MOTIFS_SCORED --bin_motifs BIN_MOTIFS --contig_bins
+                                      CONTIG_BINS [-t THREADS] [--mean_methylation_cutoff MEAN_METHYLATION_CUTOFF]
+                                      [--n_motif_contig_cutoff N_MOTIF_CONTIG_CUTOFF]
+                                      [--n_motif_bin_cutoff N_MOTIF_BIN_CUTOFF]
+                                      [--ambiguous_motif_percentage_cutoff AMBIGUOUS_MOTIF_PERCENTAGE_CUTOFF]
+                                      [--write_bins] [--assembly_file ASSEMBLY_FILE] [--save_scores] --out OUT
+                                      [--contamination_file CONTAMINATION_FILE]
 
-COMING SOON
+optional arguments:
+  -h, --help            show this help message and exit
+  --motifs_scored MOTIFS_SCORED
+                        Path to motifs-scored.tsv from nanomotif
+  --bin_motifs BIN_MOTIFS
+                        Path to bin-motifs.tsv file
+  --contig_bins CONTIG_BINS
+                        Path to bins.tsv file for contig bins
+  -t THREADS, --threads THREADS
+                        Number of threads to use for multiprocessing
+  --mean_methylation_cutoff MEAN_METHYLATION_CUTOFF
+                        Cutoff value for considering a motif as methylated
+  --n_motif_contig_cutoff N_MOTIF_CONTIG_CUTOFF
+                        Number of motifs that needs to be observed in a contig before it is considered valid for scoring
+  --n_motif_bin_cutoff N_MOTIF_BIN_CUTOFF
+                        Number of motifs that needs to be observed in a bin to be considered valid for scoring
+  --ambiguous_motif_percentage_cutoff AMBIGUOUS_MOTIF_PERCENTAGE_CUTOFF
+                        Percentage of ambiguous motifs defined as mean methylation between 0.05 and 0.40 in a bin.
+                        Motifs with an ambiguous methylation percentage of more than this value are removed from
+                        scoring. Default is 0.40
+  --write_bins          If specified, new bins will be written to a bins folder. Requires --assembly_file to be
+                        specified.
+  --assembly_file ASSEMBLY_FILE
+                        Path to assembly.fasta file
+  --save_scores         If specified, the scores for each comparison will be saved to a scores folder in the output
+                        directory
+  --out OUT             Path to output directory
+  --contamination_file CONTAMINATION_FILE
+                        Path to an existing contamination file if bins should be outputtet as a post-processing step
+
+```
+
+### Include unbinned contigs
+The `include_contigs` command assigns unbinned contigs in the assembly file to bins by comparing the methylation pattern of the contig to the bin consensus pattern. The contig must have a unique perfect match to the bin consensus pattern to be assigned to a bin. Additionally, the `include_contigs` assigns all the contigs in the `bin_contamination.tsv` file as unbinned. 
+
+**QUICK START**
+```shell
+MOTIFS_SCORED="path/to/nanomotif/motifs-scored.tsv"
+BIN_MOTIFS="path/to/nanomotif/bin-motifs.tsv"
+CONTIG_BIN="path/to/contig_bin.tsv"
+OUT="path/to/output"
+nanomotif include_contigs --motifs_scored $MOTIFS_SCORED --bin_motifs $BIN_MOTIFS --contig_bins $CONTIG_BIN --run_detect_contamination --out $OUT
+```
+
+The output is two files: `include_contigs.tsv` and `new_contig_bin.tsv`. The `include_contigs.tsv` file is the contigs that were assigned based on the methylation pattern and the `new_contig_bin.tsv` is the updated contig_bin file.
+
+If decontamination should not be performed, the `include_contigs` can be run without the `--run_detect_contamination` flag or without the `--contamination_file` flag.
+
+
+## Associating MTases and RM-systems to motifs
+
+This module links methylation motifs to their corresponding MTase and, when present, their entire RM system.
+
+The MTase-Linker module has additional dependencies that are not automatically installed with Nanomotif. Therefore, before using this module, you must manually install these dependencies using the `MTase-linker install` command.
+The `MTase-linker` module requires that conda is available on your system.
+
+```
+nanomotif MTase-linker install
+```
+
+This will create a folder named `ML_dependencies` in your current working directory, containing the required dependencies for the MTase-linker module. You can use the `--dependency_dir` flag to change the installation location of the `ML_dependencies` folder.
+
+The installation requires conda to generate a few environments. 
+
+When the additional dependencies are installed you can run the workflow using `MTase-linker run`
+
+**QUICK START**
+```shell
+ASSEMBLY="path/to/assembly.fasta"
+CONTIG_BIN="path/to/contig_bin.tsv"
+BIN_MOTIFS="path/to/nanomotif/bin-motifs.tsv"
+ML_DEPENDICIES="path/to/ML_dependencies"
+OUT="path/to/output"
+nanomotif MTase-linker run --asembly $ASSEMBLY --contig_bin $CONTIG_BIN --bin_motifs $BIN_MOTIFS -d $ML_DEPENDICIES --out $OUT
+```
+
+```
+usage: nanomotif MTase-linker run [-h] [-t THREADS] [--forceall FORCEALL] [--dryrun DRYRUN] --assembly ASSEMBLY --contig_bin CONTIG_BIN --bin_motifs BIN_MOTIFS [-d DEPENDENCY_DIR] [-o OUT] [--identity IDENTITY] [--qcovs QCOVS]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -t THREADS, --threads THREADS
+                        Number of threads to use. Default is 1
+  --forceall FORCEALL   Flag for snakemake. Forcerun workflow regardless of already created output (default = False)
+  --dryrun DRYRUN       Flag for snakemake. Dry-run the workflow. Default is False
+  --assembly ASSEMBLY   Path to assembly file.
+  --contig_bin CONTIG_BIN
+                        tsv file specifying which bin contigs belong.
+  --bin_motifs BIN_MOTIFS
+                        bin-motifs.tsv output from nanomotif.
+  -d DEPENDENCY_DIR, --dependency_dir DEPENDENCY_DIR
+                        Path to the ML_dependencies directory created during installation of the MTase-linker module. Default is cwd/ML_dependencies
+  -o OUT, --out OUT     Path to output directory. Default is cwd
+  --identity IDENTITY   Identity threshold for motif prediction. Default is 80
+  --qcovs QCOVS         Query coverage for motif prediction. Default is 80
+```
