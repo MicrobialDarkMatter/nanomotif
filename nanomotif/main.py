@@ -269,6 +269,8 @@ def bin_consensus(args, pileup = None, assembly = None, motifs = None, motifs_sc
 
 
     output = nm.bin_consensus.within_bin_motifs_consensus(pileup.pileup, assembly, motifs, motifs_scored, bins)
+    output = nm.bin_consensus.merge_bin_motifs(output, bins, pileup, assembly)
+
     output = output.rename({"bin":"contig", "n_mod_bin":"n_mod", "n_nomod_bin":"n_nomod"})
 
     output = nm.postprocess.join_motif_complements(output)
