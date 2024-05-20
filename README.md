@@ -1,6 +1,6 @@
 # Nanomotif
 
-** Bioconda is currently down for pushing new versions, we therefore recommend using pip for installing Nanomotif, see (here)[https://nanomotif.readthedocs.io/en/latest/installation.html#local-environment] **
+Bioconda is currently down for pushing new versions, we therefore recommend using pip for installing Nanomotif, see [here](https://nanomotif.readthedocs.io/en/latest/installation.html#local-environment)
 
 Nanomotif is a Python package designed to explore methylation in prokaryotic genomes using Nanopore sequencing. Nanomotif is a fast, scalable, and sensitive tool for identification and utilization of methylation motifs in monocultures and metagenomic samples.
   - [Overview](#nanomotif-offers)
