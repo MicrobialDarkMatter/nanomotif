@@ -13,11 +13,12 @@ class Motif(str):
     def __init__(self, _, mod_position):
         self.mod_position = mod_position
         self.string = self.__str__()
-
-    def from_iupac(iupac_motif):
+    def from_iupac(self):
         """
-        Generate Motif from IUPAC seqeunce
+        Create a motif from an IUPAC string.
         """
+        regex = iupac_to_regex(self.string)
+        return Motif(regex, self.mod_position)
     def iupac(self):
         """
         Get IUPAC sequence of motif
@@ -223,15 +224,16 @@ class Motif(str):
 
         motif_right = len(motif_split) - mod_pos 
         other_right = len(other_split) - mod_pos_other
+
         # Pad the shorter motif with '.' to ensure equal lengths for merging
         if mod_pos < mod_pos_other:
             motif_split = ['.'] * abs(offset) + motif_split
-        else:
+        elif mod_pos > mod_pos_other:
             other_split = ['.'] * abs(offset) + other_split
 
         if motif_right < other_right:
             motif_split = motif_split + ['.'] * (other_right - motif_right)
-        else:
+        elif motif_right > other_right:
             other_split = other_split + ['.'] * (motif_right - other_right)
         # Merge the motifs base by base, keeping the modification position aligned
         merged_motif_string = ''.join([self.merge_bases(base, base_other) for base, base_other in zip(motif_split, other_split)])

@@ -8,6 +8,7 @@ from pathlib import Path
 import json
 os.environ["POLARS_MAX_THREADS"] = "1"
 import polars as pl
+from polars import col
 import numpy as np
 import random
 import warnings
@@ -87,24 +88,29 @@ def find_motifs(args, pileup = None, assembly = None):
             log_dir = args.out + "/logs",
             seed = args.seed
         )
-
+    motifs = pl.DataFrame(motifs)
     if motifs is None:
         log.info("No motifs found")
         return
 
     log.info("Writing motifs")
-
+    pl.show_versions()
     def format_motif_df(df):
         if "model" in df.columns:
-            df = df.with_columns(
-                pl.col("model").apply(lambda x: x._alpha).alias("n_mod"),
-                pl.col("model").apply(lambda x: x._beta).alias("n_nomod")
-            )
+            n_mod = [x._alpha for x in df["model"]]
+            n_nomod = [x._beta for x in df["model"]]
+        motif_iupac = [nm.seq.regex_to_iupac(x) for x in df["motif"]]
+        motif_type = [nm.utils.motif_type(x) for x in motif_iupac]
+
         df_out = df.with_columns([
-            pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif")
-        ]).with_columns([
-            pl.col("motif").apply(lambda x: nm.utils.motif_type(x)).alias("motif_type")
-        ]).unique(["motif", "contig", "mod_type", "mod_position"])
+            pl.Series("motif", motif_iupac),
+            pl.Series("motif_type", motif_type)
+        ])
+        if "model" in df.columns:
+            df_out = df_out.with_columns([
+                pl.Series("n_mod", n_mod),
+                pl.Series("n_nomod", n_nomod)
+            ])
         try:
             df_out = df_out.select([
                 "contig", "motif", "mod_position", "mod_type", "n_mod", "n_nomod", "motif_type",
@@ -126,7 +132,7 @@ def find_motifs(args, pileup = None, assembly = None):
     motifs_file_name = "precleanup-motifs/motifs"
 
     log.info(" - Writing motifs")
-    motifs = motifs.filter(pl.col("score") > 0.1)
+    motifs = motifs.filter(col("score") > 0.1)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
@@ -269,6 +275,8 @@ def bin_consensus(args, pileup = None, assembly = None, motifs = None, motifs_sc
 
 
     output = nm.bin_consensus.within_bin_motifs_consensus(pileup.pileup, assembly, motifs, motifs_scored, bins)
+    output = nm.bin_consensus.merge_bin_motifs(output, bins, pileup, assembly)
+
     output = output.rename({"bin":"contig", "n_mod_bin":"n_mod", "n_nomod_bin":"n_nomod"})
 
     output = nm.postprocess.join_motif_complements(output)
