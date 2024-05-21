@@ -376,7 +376,7 @@ def process_sample_parallel(
 
     if len(results) == 0:
         return None
-    motifs = pl.concat(results)
+    motifs = pl.concat(results, rechunk=True, parallel=False)
 
     model_col = []
     for a, b in zip(motifs.get_column("alpha").to_list(), motifs.get_column("beta").to_list()):
