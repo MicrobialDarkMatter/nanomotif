@@ -8,12 +8,14 @@ import nanomotif as nm
 from nanomotif import candidate, evaluate
 from nanomotif.parallel import update_progress_bar
 from nanomotif.logger import configure_logger
+import numpy as np
 
-def score_contig_with_motifs(contig, mod_type, pileup, sequence, motifs):
+def score_contig_with_motifs(contig, mod_type, pileup, sequence, motifs, save_motif_positions=False, positions_outdir=None):
     log.info(f"Scoring motifs in contig {contig}, modtype {mod_type}")
-
     # Ensuring motifs are in regex for searching
-    motifs = motifs.with_columns([
+    motifs = motifs\
+        .with_columns(motif_iupac = pl.col("motif"))\
+        .with_columns([
             pl.col("motif") \
                 .map_elements(lambda x: nm.seq.regex_to_iupac(x)) \
                 .map_elements(lambda x: nm.seq.iupac_to_regex(x)) \
@@ -21,23 +23,43 @@ def score_contig_with_motifs(contig, mod_type, pileup, sequence, motifs):
         ])
     
     # Getting motifs for scoring
-    motifs = motifs.select("motif", "mod_position", "mod_type").unique()
-    motifs = motifs.filter(pl.col("mod_type") == mod_type)
+    motifs = motifs.select("motif", "motif_iupac", "mod_position", "mod_type").unique()
+    motifs = motifs.filter(pl.col("mod_type") == mod_type)    
     motifs_str = motifs.get_column("motif").to_list()
     positions = motifs.get_column("mod_position").to_list()
     types = motifs.get_column("mod_type").to_list()
+    motifs_iupac = motifs.get_column("motif_iupac").to_list()
 
     # Scoring motifs
     models = []
-    for motif, position, mod_type in zip(motifs_str, positions, types):
+    all_motif_data = {}
+    for motif, position, mod_type, motif_iupac in zip(motifs_str, positions, types, motifs_iupac):
         log.debug(f"Scoring motif {motif}, {position}")
-        model = evaluate.motif_model_contig(
-            pileup,
-            sequence, 
-            candidate.Motif(motif, position)
-        )
-        models.append(model)
-
+        if save_motif_positions:
+            model, motif_data =evaluate.motif_model_contig(
+                pileup,
+                sequence, 
+                candidate.Motif(motif, position),
+                save_motif_positions=save_motif_positions
+            )
+            models.append(model)
+            all_motif_data[f"{motif_iupac}_{position}_{mod_type}"] = motif_data
+        else:
+            model = evaluate.motif_model_contig(
+                pileup,
+                sequence, 
+                candidate.Motif(motif, position)
+            )
+            models.append(model)
+    
+    # Saving all motifs' positions in one file per contig if required
+    if save_motif_positions:
+        try:
+            path = f'{positions_outdir}/{contig}_{mod_type}_motifs_positions.npz'
+            np.savez(path, **all_motif_data)
+        except Exception as e:
+            log.error(f"Failed to save motif positions for contig {contig}: {e}")
+            
     # Creating a dataframe of the results
     result = pl.DataFrame({
             "motif": motifs_str,
@@ -53,7 +75,7 @@ def score_contig_with_motifs(contig, mod_type, pileup, sequence, motifs):
         ]).drop("model")
     return result
 
-def worker_function(args, counter, lock, sequence, motifs, log_dir, verbose, seed):
+def worker_function(args, counter, lock, sequence, motifs, log_dir, verbose, seed, save_motif_positions = False, positions_outdir = None):
     """
     Process a single subpileup for one contig and one modtype
 
@@ -72,9 +94,8 @@ def worker_function(args, counter, lock, sequence, motifs, log_dir, verbose, see
     process_id = os.getpid()
     log_file = f"{log_dir}/score-motifs.{process_id}.log"
     configure_logger(log_file, verbose=verbose)
-
     try:
-        result = score_contig_with_motifs(contig, modtype, subpileup, sequence, motifs)
+        result = score_contig_with_motifs(contig, modtype, subpileup, sequence, motifs, save_motif_positions=save_motif_positions, positions_outdir=positions_outdir)
         with lock:
             counter.value += 1
         return result
@@ -90,6 +111,8 @@ def score_sample_parallel(
         threshold_valid_coverage = 1,
         verbose = False,
         log_dir = None,
+        save_motif_positions = False,
+        positions_outdir = None,
         seed = None
     ):
     """
@@ -105,6 +128,8 @@ def score_sample_parallel(
     - min_cdf_score (float): Minimum score of 1 - cdf(cdf_position) for a motif to be considered valid.
     - cdf_position (float): The position to evaluate the cdf at.
     - min_motif_frequency (int): Used to get minimum number of sequences to evaluate motif at.
+    - save_motif_positions (bool): Save motif positions in the output folder.
+    - positions_outdir (str): The output directory for motif positions.
     """
     assert pileup is not None, "Pileup is None"
     assert assembly is not None, "Assembly is None"
@@ -137,7 +162,7 @@ def score_sample_parallel(
         task, 
         counter, lock, 
         assembly.assembly[task[0]].sequence, motifs,
-        log_dir, verbose, seed
+        log_dir, verbose, seed, save_motif_positions, positions_outdir
         ) for task in tasks])
     results = [result for result in results if result is not None]
 

@@ -43,6 +43,7 @@ def  create_parser():
         help="Find motifs indirectly in contigs by scoring with motifs found in other contigs"
     )
     parser_score_motifs.add_argument("motifs", type=str, help="path to the motifs file.")
+    parser_score_motifs.add_argument("--save-motif-positions", action="store_true", help="save motif positions in the output folder")
     
     ###########################################################################
     # Bin consensus
@@ -58,9 +59,12 @@ def  create_parser():
 
     ###########################################################################
     # Complete workflow
+
     parser_complete_workflow = subparsers.add_parser('motif_discovery', help='Runs find_motifs, score_motifs and bin_consensus', parents=[parser_positional, parser_optional, parser_shared_find_motifs, parser_shared_bin_consensus], conflict_handler="resolve")
-
-
+ ###########################################################################
+    # Check installation
+    parser_check_installation = subparsers.add_parser('check-installation', parents=[parser_optional, parser_shared_find_motifs], add_help=False)
+    
     ###########################################################################
     # Bin contamination and inclusion
     parser_binnary_shared = argparse.ArgumentParser(description="Contamination DNA Methylation Pattern", add_help=False)
