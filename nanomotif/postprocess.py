@@ -113,10 +113,14 @@ def merge_motifs_in_df(motif_df, pileup, assembly, mean_shift_threshold = -0.2):
 
 def join_motif_complements(motif_df):
     if "model" in motif_df.columns:
-        motif_df = motif_df.with_columns(
-            pl.col("model").map_elements(lambda x: x._alpha).alias("n_mod"),
-            pl.col("model").map_elements(lambda x: x._beta).alias("n_nomod")
-        ).drop("model")
+        if "model" in motif_df.columns:
+            n_mod = [x._alpha for x in motif_df["model"]]
+            n_nomod = [x._beta for x in motif_df["model"]]
+
+            motif_df = motif_df.with_columns([
+                pl.Series("n_mod", n_mod),
+                pl.Series("n_nomod", n_nomod)
+            ]).drop(["model"])
     motif_df = motif_df.select([
         "contig", "mod_type", "motif", "mod_position", "n_mod", "n_nomod"
     ])

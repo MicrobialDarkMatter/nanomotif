@@ -11,7 +11,7 @@ setup(
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     include_package_data=True,
-    package_data={'nanomotif': ['datasets/*']},
+    package_data={'nanomotif': ['datasets/*'], 'snakemake':['.smk']},
     zip_safe=False,
     install_requires=[
         "wheel",
@@ -23,6 +23,7 @@ setup(
         "networkx>=3.1",
         "pyarrow>=15.0.2",
         "Bio>=1.6.2",
+        "snakemake>=7.32.4",
         "progressbar2>=3.53.1"
     ],
     entry_points={

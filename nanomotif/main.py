@@ -8,6 +8,7 @@ from pathlib import Path
 import json
 os.environ["POLARS_MAX_THREADS"] = "1"
 import polars as pl
+from polars import col
 import numpy as np
 import random
 import warnings
@@ -87,7 +88,7 @@ def find_motifs(args, pileup = None, assembly = None):
             log_dir = args.out + "/logs",
             seed = args.seed
         )
-
+    motifs = pl.DataFrame(motifs)
     if motifs is None:
         log.info("No motifs found")
         return
@@ -96,15 +97,20 @@ def find_motifs(args, pileup = None, assembly = None):
 
     def format_motif_df(df):
         if "model" in df.columns:
-            df = df.with_columns(
-                pl.col("model").apply(lambda x: x._alpha).alias("n_mod"),
-                pl.col("model").apply(lambda x: x._beta).alias("n_nomod")
-            )
+            n_mod = [x._alpha for x in df["model"]]
+            n_nomod = [x._beta for x in df["model"]]
+        motif_iupac = [nm.seq.regex_to_iupac(x) for x in df["motif"]]
+        motif_type = [nm.utils.motif_type(x) for x in motif_iupac]
+
         df_out = df.with_columns([
-            pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif")
-        ]).with_columns([
-            pl.col("motif").apply(lambda x: nm.utils.motif_type(x)).alias("motif_type")
-        ]).unique(["motif", "contig", "mod_type", "mod_position"])
+            pl.Series("motif", motif_iupac),
+            pl.Series("motif_type", motif_type)
+        ])
+        if "model" in df.columns:
+            df_out = df_out.with_columns([
+                pl.Series("n_mod", n_mod),
+                pl.Series("n_nomod", n_nomod)
+            ])
         try:
             df_out = df_out.select([
                 "contig", "motif", "mod_position", "mod_type", "n_mod", "n_nomod", "motif_type",
@@ -123,44 +129,59 @@ def find_motifs(args, pileup = None, assembly = None):
     save_motif_df(motifs, "precleanup-motifs/motifs-raw")
 
     log.info("Postprocessing motifs")
+    motifs_file_name = "precleanup-motifs/motifs"
 
     log.info(" - Writing motifs")
-    motifs = motifs.filter(pl.col("score") > 0.1)
+    motifs = motifs.filter(col("score") > 0.1)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
-    save_motif_df(motifs, "precleanup-motifs/motifs-score")
+    
+    motifs_file_name = motifs_file_name + "-score"
+    save_motif_df(motifs, motifs_file_name)
 
     log.info(" - Removing sub motifs")
     motifs = nm.postprocess.remove_sub_motifs(motifs)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
-    save_motif_df(motifs, "precleanup-motifs/motifs-score-sub")
+    motifs_file_name = motifs_file_name +   "-sub"
+    save_motif_df(motifs, motifs_file_name)
 
     log.info(" - Removing noisy motifs")
     motifs = nm.postprocess.remove_noisy_motifs(motifs)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
-    save_motif_df(motifs, "precleanup-motifs/motifs-score-sub-noise")
+    motifs_file_name = motifs_file_name +   "-noise"
+    save_motif_df(motifs, motifs_file_name)
 
     log.info(" - Merging motifs")
     motifs = nm.postprocess.merge_motifs_in_df(motifs, pileup, assembly)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
-    save_motif_df(motifs, "precleanup-motifs/motifs-score-sub-noise-merge")
+    motifs_file_name = motifs_file_name +   "-merge"
+    save_motif_df(motifs, motifs_file_name)
 
     log.info(" - Joining motif complements")
     motifs = nm.postprocess.join_motif_complements(motifs)
-    save_motif_df(motifs, "precleanup-motifs/motifs-score-sub-noise-merge-complement")
-
-    log.info(" - Removing motifs observed less than min count")
-    motifs = motifs.filter(pl.col("n_mod") + pl.col("n_nomod") > 50)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
+    motifs_file_name = motifs_file_name +   "-complement"
+    save_motif_df(motifs, motifs_file_name)
+
+    log.info(" - Removing motifs observed less than min count")
+    motifs = motifs.filter(pl.col("n_mod") + pl.col("n_nomod") > 1)
+    if len(motifs) == 0:
+        log.info("No motifs found")
+        return
+    motifs_file_name = motifs_file_name +   "-mincount"
+    save_motif_df(motifs, motifs_file_name)
+
+
+
     save_motif_df(motifs, "motifs")
 
     log.info("Done finding motifs")
@@ -258,6 +279,8 @@ def bin_consensus(args, pileup = None, assembly = None, motifs = None, motifs_sc
 
 
     output = nm.bin_consensus.within_bin_motifs_consensus(pileup.pileup, assembly, motifs, motifs_scored, bins)
+    output = nm.bin_consensus.merge_bin_motifs(output, bins, pileup, assembly)
+
     output = output.rename({"bin":"contig", "n_mod_bin":"n_mod", "n_nomod_bin":"n_nomod"})
 
     output = nm.postprocess.join_motif_complements(output)
@@ -266,7 +289,7 @@ def bin_consensus(args, pileup = None, assembly = None, motifs = None, motifs_sc
     output = output.sort(["bin", "mod_type", "motif"])
     output.write_csv(args.out + "/bin-motifs.tsv", separator="\t")
 
-def metagenomic_workflow(args):
+def motif_discovery(args):
     # Check if output directory exists
     log.info("Loading required files")
     pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)
@@ -310,7 +333,7 @@ def check_install(args):
     log.info("Finding bin consensus motifs")
     args.bins = nm.datasets.geobacillus_plasmids_bin_path()
     bin_consensus(args, pileup=pileup, assembly=assembly, motifs=motifs, motifs_scored=scored_all)
-
+    
     log.info("Done")
     shutil.rmtree(args.out)
 
@@ -449,6 +472,19 @@ def binnary(args):
     print("Analysis Completed. Results are saved to:", args.out)
 
 
+from nanomotif.mtase_linker.dependencies import snakemake_create_environments, get_models, defensefinder_update
+from nanomotif.mtase_linker.command import run_MTase_linker
+
+def mtase_linker(args):
+    if args.mtase_linker_command == "install":
+        snakemake_create_environments(args)
+        get_models(args)
+        defensefinder_update(args)
+    elif args.mtase_linker_command == "run":
+        run_MTase_linker(args)
+    else:
+        print(f"Unknown MTase-linker command: {args.mtase_linker_command}")
+       
 
 
 
@@ -457,31 +493,35 @@ def main():
     parser = nm.argparser.create_parser()
     args = parser.parse_args()
     
-    if args.command in ["detect_contamination", "include_contigs"]:
+    if args.command in ["detect_contamination", "include_contigs", "MTase-linker"]:
         args.verbose = False
         args.seed = 1
     
-    
-    if args.command == "find-motifs":
+    if args.command == "find_motifs":
         shared_setup(args, args.out)
         find_motifs(args)
-    elif args.command == "score-motifs":
+    elif args.command == "score_motifs":
         shared_setup(args, args.out)
         score_motifs(args)
-    elif args.command == "bin-consensus":
+    elif args.command == "bin_consensus":
         shared_setup(args, args.out)
         bin_consensus(args)
-    elif args.command == "complete-workflow":
+    elif args.command == "motif_discovery":
         shared_setup(args, args.out)
-        metagenomic_workflow(args)
-    elif args.command == "check-installation":
-        args.out = "nanomotif_install_check"
-        shared_setup(args, args.out)
-        check_install(args)
+        motif_discovery(args)
 
     elif args.command in ["detect_contamination", "include_contigs"]:
         shared_setup(args, args.out)
         binnary(args)
+
+    elif args.command == "MTase-linker":
+        mtase_linker(args)
+
+    elif args.command == "check_installation":
+        args.out = "nanomotif_install_check"
+        shared_setup(args, args.out)
+        check_install(args)
+
     else:
         parser.print_help()
         exit()

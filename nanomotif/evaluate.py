@@ -41,7 +41,6 @@ def methylated_motif_occourances(motif, sequence, methylated_positions) -> tuple
     """
     assert len(motif) > 0, "Motif is empty"
     assert len(sequence) > 0, "Sequence is empty"
-    assert len(methylated_positions) > 0, "Methylated positions is empty"
     assert type(motif) == Motif, "Motif is not a Motif type"
     # Get the index of the methylation in the motif in the contig
     motif_index = subseq_indices(motif.string, sequence) + motif.mod_position
@@ -386,7 +385,7 @@ def process_sample_parallel(
 
     if len(results) == 0:
         return None
-    motifs = pl.concat(results)
+    motifs = pl.concat(results, rechunk=True, parallel=False)
 
     model_col = []
     for a, b in zip(motifs.get_column("alpha").to_list(), motifs.get_column("beta").to_list()):

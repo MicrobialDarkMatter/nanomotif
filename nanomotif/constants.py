@@ -30,5 +30,6 @@ BASE_TO_INT = {"A":1, "T":2, "G":3, "C":4, "N":5, "R":6, "Y":7, "S":8, "W":9, "K
 INT_TO_BASE = {i: n for n, i in BASE_TO_INT.items()}
 MOD_TYPE_TO_CANONICAL = {
     "m":"C",
-    "a":"A"
+    "a":"A",
+    "21839":"C"
 }
