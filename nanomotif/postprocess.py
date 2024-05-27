@@ -5,6 +5,9 @@ from polars import col
 import logging as log
 
 def remove_noisy_motifs(motif_df):
+    """
+    Remove motifs that have isolated bases
+    """
     motif_df_clean = []
     for contig, df in motif_df.groupby("contig"):
         motif_strings = df.get_column("motif").to_list()
