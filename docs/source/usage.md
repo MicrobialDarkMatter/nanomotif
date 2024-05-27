@@ -128,7 +128,7 @@ The output is two files: `include_contigs.tsv` and `new_contig_bin.tsv`. The `in
 If decontamination should not be performed, the `include_contigs` can be run without the `--run_detect_contamination` flag or without the `--contamination_file` flag.
 
 
-## Associating MTases and RM-systems to motifs
+## MTase-linker
 
 This module links methylation motifs to their corresponding MTase and, when present, their entire RM system.
 
