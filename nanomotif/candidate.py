@@ -38,6 +38,8 @@ class Motif(str):
         """
         assert isinstance(other_motif, Motif)
         # Strip for redundant posititons (flanking .)
+        if self.identical(other_motif):
+            return False
         self_stripped = self.new_stripped_motif()
         other_stripped = other_motif.new_stripped_motif()
 
@@ -132,7 +134,7 @@ class Motif(str):
             if motif_split[pos] == ".":
                 continue
             index_start = max(pos - isolation_size, 0)
-            index_end = min(pos + isolation_size, len(motif_split) - 1)
+            index_end = min(pos + isolation_size + 1, len(motif_split) - 1)
             # If all surrounding positions are ".", it is isolated
             if set(motif_split[index_start:pos] + motif_split[pos+1:index_end]) == set(["."]):
                 isolated = True

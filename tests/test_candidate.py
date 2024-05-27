@@ -65,7 +65,7 @@ class TestMotif:
     def test_sub_motif_of(self):
         motif1 = Motif("ATCG", 2)
         motif2 = Motif("ATCG", 2)
-        assert motif1.sub_motif_of(motif2) == True
+        assert motif1.sub_motif_of(motif2) == False
 
         motif1 = Motif("ATCG", 0)
         motif2 = Motif("AT", 0)
