@@ -94,7 +94,6 @@ def find_motifs(args, pileup = None, assembly = None):
         return
 
     log.info("Writing motifs")
-    pl.show_versions()
     def format_motif_df(df):
         if "model" in df.columns:
             n_mod = [x._alpha for x in df["model"]]
