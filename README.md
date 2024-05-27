@@ -90,7 +90,7 @@ nanomotif include_contigs --motifs_scored MOTIFS_SCORED.tsv --bin_motifs BIN_MOT
 
 If decontamination should not be performed, the `include_contigs` can be run without the `--run_detect_contamination` flag or without the `--contamination_file` flag.
 
-#### Associating MTases and RM-systems to motifs
+#### MTase-linker
 This module tries to link methylation motifs to their corresponding MTase and, when present, their entire RM system. 
 
 The MTase-Linker module has additional dependencies that are not automatically installed with Nanomotif. Therefore, before using this module, you must manually install these dependencies using the `MTase-linker install` command.
