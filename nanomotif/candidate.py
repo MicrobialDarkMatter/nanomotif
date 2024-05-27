@@ -38,6 +38,8 @@ class Motif(str):
         """
         assert isinstance(other_motif, Motif)
         # Strip for redundant posititons (flanking .)
+        if self.identical(other_motif):
+            return False
         self_stripped = self.new_stripped_motif()
         other_stripped = other_motif.new_stripped_motif()
 
