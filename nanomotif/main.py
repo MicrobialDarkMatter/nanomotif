@@ -178,7 +178,7 @@ def find_motifs(args, pileup = None, assembly = None):
     save_motif_df(motifs, motifs_file_name)
 
     log.info(" - Removing motifs observed less than min count")
-    motifs = motifs.filter(pl.col("n_mod") + pl.col("n_nomod") > 1)
+    motifs = motifs.filter((pl.col("n_mod") + pl.col("n_nomod")) > args.min_motifs_contig)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
