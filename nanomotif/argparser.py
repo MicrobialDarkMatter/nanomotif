@@ -193,7 +193,7 @@ def  create_parser():
 
     ###########################################################################
     # Check installation
-    parser_check_installation = subparsers.add_parser('check_installation', parents=[parser_optional, parser_shared_find_motifs], add_help=False, help="Performs small test run to verify that the installation is correct.")
+    parser_check_installation = subparsers.add_parser('check_installation', parents=[parser_optional, parser_shared_find_motifs, parser_shared_bin_consensus], add_help=False, help="Performs small test run to verify that the installation is correct.")
     
     
     return parser
