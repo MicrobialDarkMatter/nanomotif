@@ -29,6 +29,7 @@ def  create_parser():
     parser_shared_find_motifs.add_argument("--threshold_methylation_confident", type=float, default=0.80, help="minimum fraction of reads that must be methylated at a position for the position to be considered confiently methylated. These position are used to search for candidate motifs. Default: %(default)s")
     parser_shared_find_motifs.add_argument("--threshold_valid_coverage", type=int, default=5, help="minimum valid base coverage for a position to be considered. Default: %(default)s")
     parser_shared_find_motifs.add_argument("--minimum_kl_divergence", type=float, default=0.05, help="minimum KL-divergence for a position to considered for expansion in  motif search. Higher value means less exhaustive, but faster search. Default: %(default)s")
+    parser_shared_find_motifs.add_argument("--min_motifs_contig", type=int, default=20, help="minimum number of times a motif has to have been oberserved in a contig. Default: %(default)s")
     parser_find_motifs = subparsers.add_parser(
         'find_motifs', 
         parents=[parser_positional, parser_optional, parser_shared_find_motifs], 
@@ -48,6 +49,7 @@ def  create_parser():
     # Bin consensus
     parser_shared_bin_consensus = argparse.ArgumentParser(add_help=False, conflict_handler="resolve")
     parser_shared_bin_consensus.add_argument("bins", type=str, help="tsv file specifying which bin contigs belong.")
+    parser_shared_bin_consensus.add_argument("--min_motifs_bin", type=int, default=50, help="minimum number of times a motif has to have been oberserved in a bin. Default: %(default)s")
     parser_bin_consensus = subparsers.add_parser(
         'bin_consensus', 
         parents=[parser_positional, parser_optional, parser_shared_bin_consensus],
