@@ -48,7 +48,6 @@ def  create_parser():
     ###########################################################################
     # Bin consensus
     parser_shared_bin_consensus = argparse.ArgumentParser(add_help=False, conflict_handler="resolve")
-    parser_shared_bin_consensus.add_argument("bins", type=str, help="tsv file specifying which bin contigs belong.")
     parser_shared_bin_consensus.add_argument("--min_motifs_bin", type=int, default=50, help="minimum number of times a motif has to have been oberserved in a bin. Default: %(default)s")
     parser_bin_consensus = subparsers.add_parser(
         'bin_consensus', 
@@ -56,12 +55,13 @@ def  create_parser():
         help="Indentifies highly methylated motifs in bins"
     )
     parser_bin_consensus.add_argument("motifs", type=str, help="path to the motifs file.")
+    parser_bin_consensus.add_argument("bins", type=str, help="tsv file specifying which bin contigs belong.")
     parser_bin_consensus.add_argument("motifs_scored", metavar="motifs-scored", type=str, help="path to the motif-scored file.")
 
     ###########################################################################
     # Complete workflow
     parser_complete_workflow = subparsers.add_parser('motif_discovery', help='Runs find_motifs, score_motifs and bin_consensus', parents=[parser_positional, parser_optional, parser_shared_find_motifs, parser_shared_bin_consensus], conflict_handler="resolve")
-
+    parser_complete_workflow.add_argument("bins", type=str, help="tsv file specifying which bin contigs belong.")
 
     ###########################################################################
     # Bin contamination and inclusion
