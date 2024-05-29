@@ -11,7 +11,7 @@ setup(
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     include_package_data=True,
-    package_data={'nanomotif': ['datasets/*'], '':['*.smk']},
+    package_data={'nanomotif': ['datasets/*'], '':['*.smk'], '':['*.yaml']},
     zip_safe=False,
     install_requires=[
         "wheel",
