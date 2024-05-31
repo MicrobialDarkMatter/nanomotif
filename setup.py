@@ -11,7 +11,13 @@ setup(
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     include_package_data=True,
-    package_data={'nanomotif': ['datasets/*'], '':['*.smk'], '':['*.yaml']},
+    package_data={'nanomotif': [
+        'datasets/*',
+        '*.smk',
+        '*.yaml',
+        "mtase_linker/envs/*",
+        "mtase_linker/src/*"
+    ]},
     zip_safe=False,
     install_requires=[
         "wheel",

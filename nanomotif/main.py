@@ -119,6 +119,12 @@ def find_motifs(args, pileup = None, assembly = None):
             df_out = df_out.select([
                 "contig", "motif", "mod_position", "mod_type", "n_mod", "n_nomod", "motif_type",
             ])
+        # Subtract prior alpha and beta from n_mod and n_nomod
+        if "model" in df.columns:
+            df_out = df_out.with_columns([
+                pl.col("n_mod") - nm.model.DEFAULT_PRIOR_BETA,
+                pl.col("n_nomod") - nm.model.DEFAULT_PRIOR_ALPHA
+            ])
         return df_out
     def save_motif_df(df, name):
         df = format_motif_df(df)
@@ -172,7 +178,7 @@ def find_motifs(args, pileup = None, assembly = None):
     save_motif_df(motifs, motifs_file_name)
 
     log.info(" - Removing motifs observed less than min count")
-    motifs = motifs.filter(pl.col("n_mod") + pl.col("n_nomod") > 1)
+    motifs = motifs.filter((pl.col("n_mod") + pl.col("n_nomod")) > args.min_motifs_contig)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
@@ -282,6 +288,8 @@ def bin_consensus(args, pileup = None, assembly = None, motifs = None, motifs_sc
 
     output = output.rename({"contig":"bin", "n_mod":"n_mod_bin", "n_nomod":"n_nomod_bin"})
     output = output.sort(["bin", "mod_type", "motif"])
+
+    output = output.filter(pl.col("n_mod_bin") + pl.col("n_nomod_bin") > args.min_motifs_bin)
     output.write_csv(args.out + "/bin-motifs.tsv", separator="\t")
 
 def motif_discovery(args):

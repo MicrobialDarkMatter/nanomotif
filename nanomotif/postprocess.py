@@ -15,7 +15,7 @@ def remove_noisy_motifs(motif_df):
         motifs = [nm.candidate.Motif(motif_string, pos) for motif_string, pos in zip(motif_strings, positions)]
         clean_motifs = []
         for motif in motifs:
-            if not motif.have_isolated_bases():
+            if not motif.have_isolated_bases(isolation_size = 3):
                 clean_motifs.append(motif)
         df_clean = df.filter(col("motif").is_in(clean_motifs))
         motif_df_clean.append(df_clean)
