@@ -37,3 +37,6 @@ jobs:
       with:
         user: __token__
         password: ${{ secrets.PYPI_API_TOKEN }}
+    - name: action-camo-purge
+      uses: kevincobain2000/action-camo-purge@v1
+            
