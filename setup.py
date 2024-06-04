@@ -13,7 +13,7 @@ setup(
     include_package_data=True,
     package_data={'nanomotif': [
         'datasets/*',
-        '*.smk',
+        'mtase_linker/*.smk',
         '*.yaml',
         "mtase_linker/envs/*",
         "mtase_linker/src/*"
