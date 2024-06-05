@@ -104,7 +104,7 @@ def run_MTase_linker(args):
     workflow = {"THREADS": args.threads,
                 "ASSEMBLY": assembly_path,
                 "CONTIG_BIN": contig_bin,
-                "OUTPUTDIRECTORY": args.outputdir,
+                "OUTPUTDIRECTORY": args.out,
                 "DEPENDENCY_PATH": dependency_dir,
                 "IDENTITY": args.identity,
                 "QCOVS": args.qcovs,
