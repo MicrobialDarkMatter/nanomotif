@@ -138,6 +138,8 @@ class Motif(str):
             # If all surrounding positions are ".", it is isolated
             if set(motif_split[index_start:pos] + motif_split[pos+1:index_end]) == set(["."]):
                 isolated = True
+            if set(motif_split[index_start:pos] + motif_split[pos+1:index_end]) == set(["N"]):
+                isolated = True
         return isolated
         
 
