@@ -1,5 +1,6 @@
 from nanomotif.candidate import *
 from nanomotif.constants import *
+from nanomotif.utils import *
 import pytest
 from hypothesis import given, strategies as st
 import itertools
@@ -214,7 +215,32 @@ class TestMotif:
         assert motif.iupac() == "CNNCGNNNS"
 
         
-        
 
+def test_has_n_character_stretches_of_length_m():
+    assert has_n_character_stretches_of_length_m("NNA", 1, 2, "N") == True
+    assert has_n_character_stretches_of_length_m("NNA", 2, 1, "N") == False
+    assert has_n_character_stretches_of_length_m("NNA", 2, 2, "N") == False
+    assert has_n_character_stretches_of_length_m("NNANN", 2, 2, "N") == True
+    assert has_n_character_stretches_of_length_m("NNANN", 1, 2, "N") == True
+    assert has_n_character_stretches_of_length_m("NNANN", 2, 1, "N") == True
+    assert has_n_character_stretches_of_length_m("NNANN", 1, 1, "N") == True
+    assert has_n_character_stretches_of_length_m("NNANN", 3, 1, "N") == False
+    assert has_n_character_stretches_of_length_m("NNANN", 4, 1, "N") == False
+    assert has_n_character_stretches_of_length_m("NNANN", 3, 2, "N") == False
+    assert has_n_character_stretches_of_length_m("NNANN", 4, 2, "N") == False
+    assert has_n_character_stretches_of_length_m("NNANN", 3, 3, "N") == False
+    assert has_n_character_stretches_of_length_m("NNANN", 4, 3, "N") == False
+    assert has_n_character_stretches_of_length_m("NaNNaNNNaNNNN", 4, 1, "N") == True
+    assert has_n_character_stretches_of_length_m("NaNNaNNNaNNNN", 4, 2, "N") == False
+    assert has_n_character_stretches_of_length_m("NaNNaNNNaNNNN", 4, 3, "N") == False
+    assert has_n_character_stretches_of_length_m("NaNNaNNNaNNNN", 4, 4, "N") == False
+    assert has_n_character_stretches_of_length_m("NaNNaNNNaNNNN", 3, 1, "N") == True
+    assert has_n_character_stretches_of_length_m("NaNNaNNNaNNNN", 3, 2, "N") == True
+    assert has_n_character_stretches_of_length_m("NaNNaNNNaNNNN", 3, 3, "N") == False
+    assert has_n_character_stretches_of_length_m("NaNNaNNNaNNNN", 3, 4, "N") == False
+    assert has_n_character_stretches_of_length_m("NaNNaNNNaNNNN", 2, 1, "N") == True
+    assert has_n_character_stretches_of_length_m("NaNNaNNNaNNNN", 2, 2, "N") == True
+    assert has_n_character_stretches_of_length_m("NaNNaNNNaNNNN", 2, 3, "N") == True
+    assert has_n_character_stretches_of_length_m("NaNNaNNNaNNNN", 2, 4, "N") == False
 
 
