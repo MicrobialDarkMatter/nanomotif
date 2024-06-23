@@ -33,3 +33,9 @@ MOD_TYPE_TO_CANONICAL = {
     "a":"A",
     "21839":"C"
 }
+MOD_CODE_TO_PRETTY = {
+    "m":"5mC",
+    "a":"6mA",
+    "21839":"4mC"
+}
+MOD_PRETTY_TO_CODE = {v: k for k, v in MOD_CODE_TO_PRETTY.items()}
