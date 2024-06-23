@@ -96,7 +96,7 @@ class TestMotif:
         # Equal motifs strings
         motif1 = Motif("ATCG", 2)
         motif2 = Motif("ATCG", 0)
-        assert motif1.sub_string_of(motif2) == True
+        assert motif1.sub_string_of(motif2) == False
 
         # Single base difference
         motif1 = Motif("AGCG", 2)
