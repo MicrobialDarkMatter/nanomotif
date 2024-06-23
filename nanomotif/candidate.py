@@ -75,6 +75,8 @@ class Motif(str):
 
         if self_stripped.length() < other_stripped.length():
             return False
+        if self_stripped.string == other_stripped.string:
+            return False
         size_difference = self_stripped.length() - other_stripped.length()
 
         # Split into list of bases
