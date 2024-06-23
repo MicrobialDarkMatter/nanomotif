@@ -75,6 +75,8 @@ class Motif(str):
 
         if self_stripped.length() < other_stripped.length():
             return False
+        if self_stripped.string == other_stripped.string:
+            return False
         size_difference = self_stripped.length() - other_stripped.length()
 
         # Split into list of bases
@@ -137,6 +139,8 @@ class Motif(str):
             index_end = min(pos + isolation_size + 1, len(motif_split) - 1)
             # If all surrounding positions are ".", it is isolated
             if set(motif_split[index_start:pos] + motif_split[pos+1:index_end]) == set(["."]):
+                isolated = True
+            if set(motif_split[index_start:pos] + motif_split[pos+1:index_end]) == set(["N"]):
                 isolated = True
         return isolated
         

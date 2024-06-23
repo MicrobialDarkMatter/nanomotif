@@ -8,19 +8,21 @@ def remove_noisy_motifs(motif_df):
     """
     Remove motifs that have isolated bases
     """
-    motif_df_clean = []
-    for contig, df in motif_df.groupby("contig"):
-        motif_strings = df.get_column("motif").to_list()
-        positions = df.get_column("mod_position").to_list()
-        motifs = [nm.candidate.Motif(motif_string, pos) for motif_string, pos in zip(motif_strings, positions)]
-        clean_motifs = []
-        for motif in motifs:
-            if not motif.have_isolated_bases(isolation_size = 3):
-                clean_motifs.append(motif)
-        df_clean = df.filter(col("motif").is_in(clean_motifs))
-        motif_df_clean.append(df_clean)
-    motif_df_clean = pl.concat(motif_df_clean)
-    return motif_df_clean
+    assert "motif" in motif_df.columns
+    assert "mod_position" in motif_df.columns
+    assert len(motif_df) > 0
+    motif_strings = motif_df.get_column("motif").to_list()
+    positions = motif_df.get_column("mod_position").to_list()
+    motifs = [nm.candidate.Motif(motif_string, pos) for motif_string, pos in zip(motif_strings, positions)]
+    clean_motifs = []
+    for motif in motifs:
+        if not motif.have_isolated_bases(isolation_size = 3):
+            clean_motifs.append(motif.string)
+    if len(clean_motifs) == 0:
+        raise ValueError("All identified motifs were noisy, stopping.")
+    else: 
+        motif_df_clean = motif_df.filter(pl.col("motif").is_in(clean_motifs))
+        return motif_df_clean
 
 def remove_child_motifs(motifs):
     parent_motifs = []
