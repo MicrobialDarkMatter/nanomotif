@@ -65,7 +65,7 @@ def test_motifs_scored_in_bins(loaded_data):
         bin_motif_binary.select("motif_mod").unique()["motif_mod"],
         contig_bins
     )
-
+    print(motifs_scored_in_bins)
     # motifs_scored_in_bins
     assert sorted(bin_motif_binary.select("motif_mod").unique()["motif_mod"]) == sorted(
         motifs_scored_in_bins.select("motif_mod").unique()["motif_mod"]
