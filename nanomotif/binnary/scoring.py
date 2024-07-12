@@ -1,29 +1,13 @@
 from nanomotif.binnary import data_processing as dp
 from nanomotif.binnary import utils as ut
+from nanomotif.parallel import update_progress_bar
 import os
 import polars as pl
-from multiprocessing import Pool, Queue, Process, get_context
+import multiprocessing
+from multiprocessing import get_context
 import logging
 from logging.handlers import QueueHandler, QueueListener
 
-# Set up logging
-## Create queue for logging
-# log_queue = Queue()
-
-# ## Set up a listener to handle logs from the queue
-# def setup_logging_queue(queue):
-#     while True:
-#         record = queue.get()
-#         if record is None:  # Use None as a sentinel to stop the listener
-#             break
-#         logger = logging.getLogger(record.name)
-#         logger.handle(record)
-
-# def worker_setup_logging(queue):
-#     q_handler = QueueHandler(queue)
-#     logger = logging.getLogger()
-#     logger.setLevel(logging.INFO)
-#     logger.addHandler(q_handler)
 
 def define_mean_methylation_thresholds(motif_binary_compare):
     """
@@ -95,7 +79,7 @@ def compare_methylation_pattern(motif_binary_compare):
     
     # Group by bin and bin_compare and calculate the sum of the motif_comparison_score and the count of non-NA values
     contig_bin_comparison_score = motif_binary_compare \
-        .group_by(["bin", "bin_compare"]) \
+        .group_by(["bin", "bin_compare", "contig_bin"]) \
         .agg([
             pl.sum("motif_comparison_score").alias("binary_methylation_missmatch_score"),
             pl.count("motif_comparison_score").alias("non_na_comparisons")
@@ -105,11 +89,13 @@ def compare_methylation_pattern(motif_binary_compare):
 
 
 def process_bin_contig(
-    bin_contig, 
+    task, 
     bin_motifs_from_motifs_scored_in_bins, 
     motifs_scored_in_contigs, 
     mode, 
-    args
+    args,
+    counter,
+    lock
 ):
     """
     This function processes a single contig and compares the methylation pattern between the contig and the bin.
@@ -131,24 +117,22 @@ def process_bin_contig(
     - contig_bin_comparison_score: polars.DataFrame
         The comparison score for the contig
     """
-    # worker_setup_logging(log_queue)
-    # logger = logging.getLogger(__name__)
-    # logger.info(f"Processing {bin_contig}")
+    
+    bin, bin_contig = task
+    
     try:
-        bin = ut.get_bin(bin_contig)
-        
         if mode == "contamination":
             motif_binary_compare = bin_motifs_from_motifs_scored_in_bins \
                 .filter(pl.col("bin") == bin) \
                 .join(
-                    motifs_scored_in_contigs.filter(pl.col("bin_compare") == bin_contig),
+                    ut.add_compare_df(motifs_scored_in_contigs, bin_contig),# motifs_scored_in_contigs.filter(pl.col("bin_compare") == bin_contig),
                     on="motif_mod"
                 )
         if mode == "include":
             motif_binary_compare = bin_motifs_from_motifs_scored_in_bins \
                 .filter(pl.col("bin") != bin) \
                 .join(
-                    motifs_scored_in_contigs.filter(pl.col("bin_compare") == bin_contig),
+                    ut.add_compare_df(motifs_scored_in_contigs, bin_contig),# motifs_scored_in_contigs.filter(pl.col("bin_compare") == bin_contig),
                     on="motif_mod"
                 )
         
@@ -164,7 +148,7 @@ def process_bin_contig(
         
         # Check if the contig has no methylation and note it, but do not exclude it from further processing
         contigHasNMethylation = motif_binary_compare.filter(pl.col("methylation_binary_compare") == 1).height
-        # logger.info(f"Finished processing {bin_contig}. Contig has {contigHasNMethylation} positive methylation comparisons.")
+        
         
         if mode == "include":
             contig_bin_comparison_score = contig_bin_comparison_score \
@@ -177,12 +161,17 @@ def process_bin_contig(
                     pl.col("binary_methylation_missmatch_score") > 0
                 )
                 
+        with lock:
+            counter.value += 1
             
         if contigHasNMethylation == 0:
             return contig_bin_comparison_score, bin_contig
         
         return contig_bin_comparison_score, None
     except Exception as e:
+        with lock:
+            counter.value += 1
+            
         error_log_path = os.path.join(args.out, "logs", f"{args.command}_{bin_contig}_error.err")
         
         with open(error_log_path, 'w') as error_file:
@@ -194,27 +183,57 @@ def compare_methylation_pattern_multiprocessed(motifs_scored_in_bins, bin_consen
     logger.info("Starting comparison of methylation patterns")
     
     motifs_scored_in_contigs = motifs_scored_in_bins \
-        .filter(pl.col("n_motifs") >= args.n_motif_contig_cutoff) \
-        .select(["bin_contig", "motif_mod", "mean"]) \
+        .filter(pl.col("n_motifs") >= args.n_motif_contig_cutoff)
+    
+    unique_tasks = motifs_scored_in_contigs.select(["bin", "bin_contig"]).unique()
+    
+    tasks = [(row['bin'], row['bin_contig']) for row in unique_tasks.iter_rows(named = True)]
+    
+    motifs_scored_in_contigs = motifs_scored_in_bins \
+        .select(["bin", "bin_contig", "motif_mod", "mean"]) \
         .rename({"bin_contig": "bin_compare"})
+    
+    # Create a progress manager
+    manager = multiprocessing.Manager()
+    counter = manager.Value('i', 0)
+    lock = manager.Lock()
+
+    # Create a pool of workers
+    pool = get_context("spawn").Pool(processes=num_processes)
+
+    # Create a process for the progress bar
+    progress_bar_process = multiprocessing.Process(target=update_progress_bar, args=(counter, len(tasks), True))
+    progress_bar_process.start()
+    
+    
     
     if args.save_scores:
         dir = os.path.join(args.out, "scores", args.command)
         if not os.path.exists(dir):
             os.makedirs(dir)
 
+    # Put them workers to work
+    results = pool.starmap(process_bin_contig, [(
+        task, 
+        bin_consensus, 
+        motifs_scored_in_contigs, 
+        mode, 
+        args,
+        counter,
+        lock
+        ) for task in tasks])
+    results = [result for result in results if result is not None] #TODO: Check if this is necessary
+
+    # Close the pool
+    pool.close()
+    pool.join()
+
+    # Close the progress bar
+    progress_bar_process.join()
+    
     comparison_score = pl.DataFrame()
     contigs_w_no_methylation = []
-
-    with get_context("spawn").Pool(processes=num_processes) as pool:
-        results = pool.starmap(
-            process_bin_contig,
-            [
-                (bin_contig, bin_consensus, motifs_scored_in_contigs, mode, args)
-                for bin_contig in motifs_scored_in_contigs.select("bin_compare").unique()["bin_compare"]
-            ]
-        )
-        
+    
     for result, no_methylation in results:
         if result is not None:
             comparison_score = pl.concat([comparison_score, result])
