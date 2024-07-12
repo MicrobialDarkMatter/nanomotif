@@ -16,13 +16,20 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins, m
     motifs_scored = motifs_scored \
         .join(bins, on="contig", how = "left") \
         .filter(pl.col("bin").is_not_null())
+    
     motifs_scored = motifs_scored.join(
         motifs.select("contig", "motif", "mod_type", "mod_position", "directly_detected"), on=["contig", "motif", "mod_type", "mod_position"], how="left"
     ).with_columns(
         pl.col("directly_detected").fill_null(False)
-    ).group_by("bin", "motif", "mod_position", "mod_type") \
-            .apply(lambda group: group.filter(pl.col("directly_detected").any()))
+    )
     
+    motifs_scored = motifs_scored\
+        .with_columns(
+            pl.col("directly_detected").any().over(["bin", "motif", "mod_type", "mod_position"]).alias("keep")
+        )\
+        .filter(pl.col("keep"))\
+        .drop("keep")
+
     methylated_contig_mass = motifs_scored.filter(
             ((pl.col("n_mod") / (pl.col("n_mod") + pl.col("n_nomod"))) > minimum_contig_motif_methylation)
         ).group_by(["bin", "motif", "mod_type", "mod_position"]).agg([
@@ -43,7 +50,7 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins, m
     #contig_motifs = nm.postprocess.remove_sub_motifs(motifs_scored_filt)
 
     contig_motifs = motifs_scored_filt.with_columns(
-            pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif"),
+            pl.col("motif").map_elements(lambda x: nm.seq.regex_to_iupac(x)).alias("motif"),
             (pl.col("n_mod")  / (pl.col("n_mod") + pl.col("n_nomod"))).alias("mean")
         )
     bin_motifs = contig_motifs.group_by("bin", "motif", "mod_position", "mod_type") \
@@ -52,7 +59,7 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins, m
             pl.col("n_nomod").sum().alias("n_nomod_bin"),
             pl.col("contig").count().alias("contig_count")
         ).with_columns( 
-            pl.col("motif").apply(lambda x: nm.utils.motif_type(x)).alias("motif_type"),
+            pl.col("motif").map_elements(lambda x: nm.utils.motif_type(x)).alias("motif_type"),
             (pl.col("n_mod_bin") / (pl.col("n_mod_bin") + pl.col("n_nomod_bin"))).alias("mean_methylation")
         )
     return bin_motifs
