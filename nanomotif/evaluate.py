@@ -169,7 +169,7 @@ def motif_model_read(pileup, contig: str, motif):
 #    widgets=[
 #        progressbar.Timer(), ' | ',progressbar.Counter(), ' of ', str(total_tasks),' - ', progressbar.Percentage(), ' ',progressbar.Bar(),' (', progressbar.ETA(), ') '
 #    ]
-#    for (contig, modtype), subpileup in progressbar.progressbar(pileup.groupby(["contig", "mod_type"]), widgets=widgets, max_value=total_tasks, redirect_stdout=True):
+#    for (contig, modtype), subpileup in progressbar.progressbar(pileup.group_by(["contig", "mod_type"]), widgets=widgets, max_value=total_tasks, redirect_stdout=True):
 #        log.info(f"Processing {contig} {modtype}")
 #
 #        contig_sequence = assembly.assembly[contig]

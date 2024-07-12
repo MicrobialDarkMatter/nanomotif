@@ -36,7 +36,6 @@ def detect_contamination(motifs_scored_in_bins, bin_consensus, args):
     )
     
     logger.info("Finding contamination in bins")
-    print(contig_bin_comparison_score)
     contig_bin_comparison_score = split_bin_contig(contig_bin_comparison_score)
     
     # Filter contig_bin == bin and contig_bin_comparison_score > 0

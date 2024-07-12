@@ -118,7 +118,7 @@ def score_sample_parallel(
             .sort("contig") 
     
     # Create a list of tasks (TODO: not have a list of all data)
-    tasks = [(contig, modtype, subpileup) for (contig, modtype), subpileup in pileup.groupby(["contig", "mod_type"])]
+    tasks = [(contig, modtype, subpileup) for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])]
 
     # Create a progress manager
     manager = multiprocessing.Manager()

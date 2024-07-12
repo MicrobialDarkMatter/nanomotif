@@ -60,7 +60,7 @@ def find_motifs(args, pileup = None, assembly = None):
     log.info("Filtering pileup")
     # Filter pileup to contigs with mods, minimum 1 mod per 10kb
     contigs_with_mods = pileup.pileup \
-        .groupby(["contig", "mod_type"]) \
+        .group_by(["contig", "mod_type"]) \
         .agg(pl.count()) \
         .join(assm_lengths, on = "contig") \
         .filter(pl.col("count") > pl.col("length")/10000) \

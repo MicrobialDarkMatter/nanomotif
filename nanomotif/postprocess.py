@@ -9,7 +9,7 @@ def remove_noisy_motifs(motif_df):
     Remove motifs that have isolated bases
     """
     motif_df_clean = []
-    for contig, df in motif_df.groupby("contig"):
+    for contig, df in motif_df.group_by("contig"):
         motif_strings = df.get_column("motif").to_list()
         positions = df.get_column("mod_position").to_list()
         motifs = [nm.candidate.Motif(motif_string, pos) for motif_string, pos in zip(motif_strings, positions)]
@@ -38,7 +38,7 @@ def remove_child_motifs(motifs):
 
 def remove_sub_motifs(motif_df):
     motif_df_clean = []
-    for contig, df in motif_df.groupby("contig"):
+    for contig, df in motif_df.group_by("contig"):
         motif_strings = df.get_column("motif").to_list()
         positions = df.get_column("mod_position").to_list()
         motifs = [nm.candidate.Motif(motif_string, pos) for motif_string, pos in zip(motif_strings, positions)]
@@ -50,7 +50,7 @@ def remove_sub_motifs(motif_df):
 
 def merge_motifs_in_df(motif_df, pileup, assembly, mean_shift_threshold = -0.2):
     new_df = []
-    for (contig, mod_type), df in motif_df.groupby("contig", "mod_type"):
+    for (contig, mod_type), df in motif_df.group_by("contig", "mod_type"):
         # Get list of motifs
         motif_seq = df["motif"].to_list()
         motif_pos = df["mod_position"].to_list()
