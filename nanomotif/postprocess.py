@@ -128,11 +128,11 @@ def join_motif_complements(motif_df):
         "contig", "mod_type", "motif", "mod_position", "n_mod", "n_nomod"
     ])
     motif_df = motif_df.with_columns([
-        pl.col("motif").apply(lambda x: nm.candidate.regex_to_iupac(x)).alias("motif")
+        pl.col("motif").map_elements(lambda x: nm.candidate.regex_to_iupac(x)).alias("motif")
     ]).with_columns([
-        pl.col("motif").apply(lambda x: nm.utils.motif_type(x)).alias("motif_type")
+        pl.col("motif").map_elements(lambda x: nm.utils.motif_type(x)).alias("motif_type")
     ]).with_columns([
-        pl.col("motif").apply(lambda x: nm.candidate.reverse_compliment(x)).alias("motif_complement")
+        pl.col("motif").map_elements(lambda x: nm.candidate.reverse_compliment(x)).alias("motif_complement")
     ])
     
     
