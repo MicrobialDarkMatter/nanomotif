@@ -7,13 +7,14 @@ from nanomotif.binnary import utils as ut
 def test_split_bin_contig():
     # Input DataFrame
     input_data = pl.DataFrame({
+        "contig_bin": ["bin1", "bin1", "bin_c1"],
         "bin_compare": ["bin1_contig_23", "bin1_contig_40", "bin_c1_contig_23"]
     })
 
     # Expected output DataFrame
     expected_output = pd.DataFrame({
-        "bin_compare": ["bin1_contig_23", "bin1_contig_40", "bin_c1_contig_23"],
         "contig_bin": ["bin1", "bin1", "bin_c1"],
+        "bin_compare": ["bin1_contig_23", "bin1_contig_40", "bin_c1_contig_23"],
         "contig": ["contig_23", "contig_40", "contig_23"]
     })
 

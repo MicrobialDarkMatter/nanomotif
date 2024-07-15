@@ -26,7 +26,7 @@ def test_detect_contamination(loaded_data, motifs_scored_in_bins_and_bin_motifs)
         bin_motifs_from_motifs_scored_in_bins,
         args
     )
-    
+    print(contaminated_contigs)
     contaminated_contigs = contaminated_contigs.to_pandas()
     
     assert contaminated_contigs is not None
