@@ -24,7 +24,7 @@ setup(
         "requests",
         "numpy>=1.24.4",
         "pandas>=2.0.2",
-        "polars>=0.19,<=0.20.31",
+        "polars>=0.19,<=0.20.23",
         "scipy>=1.10.1",
         "networkx>=3.1",
         "pyarrow>=15.0.2",
