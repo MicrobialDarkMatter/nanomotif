@@ -189,7 +189,7 @@ def compare_methylation_pattern_multiprocessed(motifs_scored_in_bins, bin_consen
     
     tasks = [(row['bin'], row['bin_contig']) for row in unique_tasks.iter_rows(named = True)]
     
-    motifs_scored_in_contigs = motifs_scored_in_bins \
+    motifs_scored_in_contigs = motifs_scored_in_contigs \
         .select(["bin", "bin_contig", "motif_mod", "mean"]) \
         .rename({"bin_contig": "bin_compare"})
     
