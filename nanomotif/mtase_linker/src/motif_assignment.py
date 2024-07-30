@@ -18,15 +18,15 @@ gene_mod_df = pd.read_csv(gene_mod_tsv_path, sep = '\t', header = 0)
 DefenseFinder_df_tsv_path = snakemake.input['DefenseFinder_path']
 DefenseFinder_df = pd.read_csv(DefenseFinder_df_tsv_path, sep = "\t", header = 0)
 DefenseFinder_df = RM_type_converter(DefenseFinder_df, "gene_name") # Converting 'gene name' column to 'sub_type'
-DefenseFinder_df = DefenseFinder_df[["hit_id", "replicon", "sub_type", "RM_system"]] #Selecting only relevant columns
+DefenseFinder_df = DefenseFinder_df[["hit_id", "replicon", "sub_type", "RM_system"]] 
 DefenseFinder_df.columns = ["gene_id", "contig", "sub_type", "RM_system"]
 
 
 #%% Importing BLASTP table
 BLASTP_df_tsv_path = snakemake.input['BLASTP_path']
 BLASTP_df = pd.read_csv(BLASTP_df_tsv_path, sep = "\t", header = 0, index_col=False)
-BLASTP_df = BLASTP_df[["qseqid", "REbase_id", "motif"]] #Selecting only relevant columns
-BLASTP_df.columns = ['gene_id', 'REbase_ID', 'motif_guess'] # Renaming columns
+BLASTP_df = BLASTP_df[["qseqid", "REbase_id", "motif"]]
+BLASTP_df.columns = ['gene_id', 'REbase_ID', 'motif_guess']
 
 DefenseFinder_blastp_df = DefenseFinder_df.merge(BLASTP_df, on = 'gene_id', how = 'left')
 
@@ -83,7 +83,7 @@ for index, entry in nan_genes.iterrows():
         new_entry_ac['mod_type'] = 'ac'
         new_entry_m['mod_type'] = 'm'
 
-        # Append entries to extra_rows  
+
         extra_entries.append(new_entry_ac)
         extra_entries.append(new_entry_m)
 

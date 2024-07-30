@@ -17,22 +17,19 @@ if os.path.getsize(pfam_hit_tsv_path) > 0:
     #Adding modtype prediction to pfam hits
     pfam_hit_mod_df = mod_predictions_hmm(pfam_hit_df, 'HMM_acc')
 
-    #Function to concatenate and remove duplicate letters
     def process_mod_type(group):
-    # Concatenate all the mod types with comma separation
+
         mod_types_concatenated = ', '.join(group['mod_type'])
     
-    # Split the concatenated string into a set to remove duplicates, then sort it
         mod_types_condensed = ', '.join(sorted(set(mod_types_concatenated.split(', '))))
     
     # Check if both 'm' and 'a' are present, if so, choose 'm' only
         if 'm' in mod_types_condensed and 'ac' in mod_types_condensed:
             mod_types_condensed = mod_types_condensed.replace('ac, ', '').replace(', ac', '').replace('ac', '')
     
-    # Return the processed mod types
+
         return mod_types_condensed
 
-    # Group by 'gene_id' and apply the function
     protein_acc_mod_df = pfam_hit_mod_df.groupby('gene_id').apply(process_mod_type).reset_index()
     protein_acc_mod_df.columns = ['gene_id', 'mod_type']
 #%%

@@ -54,7 +54,5 @@ identifiers = df_hmmer_MTase_filtered['hit_id'].tolist()
 
 with open(MTase_sequence_file, 'w') as output_file:
     for record in SeqIO.parse(prodigal_sequence_file, 'fasta'):
-        # Check if the identifier is in the list
         if record.id.split(' ')[0] in identifiers:
-            # Write the sequence to the new FASTA file
             SeqIO.write(record, output_file, 'fasta')
