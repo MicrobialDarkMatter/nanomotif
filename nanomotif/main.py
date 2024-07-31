@@ -203,6 +203,8 @@ def score_motifs(args, pileup = None, assembly = None, motifs = None):
     if motifs is None:
         log.info("Loading motifs")
         motifs = pl.read_csv(args.motifs, separator="\t")
+    if args.save_motif_positions:
+        os.makedirs(args.out + "/motif-positions", exist_ok=True)
     
     # Ensure motif are iupac
     motifs.with_columns([
@@ -233,6 +235,8 @@ def score_motifs(args, pileup = None, assembly = None, motifs = None):
         threshold_valid_coverage = 1,
         verbose = args.verbose,
         log_dir = args.out + "/logs",
+        save_motif_positions = args.save_motif_positions,
+        positions_outdir = args.out + "/motif-positions",
         seed = args.seed
         )
     scored_all = nm.postprocess.join_motif_complements(scored_all)
@@ -320,6 +324,7 @@ def check_install(args):
     # Check if output directory exists
     log.info("Loading required files")
     args.out = "nanomotif_install_check"
+    args.save_motif_positions = False
 
     pileup = nm.datasets.geobacillus_plasmids_pileup()
     assembly = nm.datasets.geobacillus_plasmids_assembly()
