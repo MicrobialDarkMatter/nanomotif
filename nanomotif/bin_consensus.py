@@ -61,20 +61,22 @@ def merge_bin_motifs(bin_motifs, bins, pileup, assembly):
     assert list(bin_motifs.schema.keys()) == ['bin', 'motif', 'mod_position', 'mod_type', 'n_mod_bin', 'n_nomod_bin', 'contig_count', 'motif_type', 'mean_methylation']
 
     for (bin, mod_type), df in bin_motifs.groupby("bin", "mod_type"):
+        log.debug(f"Starting motif merge for bin {bin} and mod_type {mod_type}")
         contig_count = df.get_column("contig_count").max()
         
         # Get list of motifs
         motif_seq = df["motif"].to_list()
         motif_pos = df["mod_position"].to_list()
         motifs = [nm.candidate.Motif(nm.candidate.iupac_to_regex(seq), pos) for seq, pos in zip(motif_seq, motif_pos)]
-        
+        new_bin_motifs = bin_motifs
         merged_motifs = nm.candidate.merge_motifs(motifs)
         for cluster, motifs in merged_motifs.items():
+            log.debug(f"Starting merge for cluster {cluster}")
             merged_motif = motifs[0]
             premerge_motifs = motifs[1]
 
             premerge_motifs_iupac = [motif.iupac() for motif in premerge_motifs]
-            previous_motif_mean_max = bin_motifs.filter(pl.col("motif").is_in(premerge_motifs_iupac)).get_column("mean_methylation").max()
+            previous_motif_mean_max = df.filter(pl.col("motif").is_in(premerge_motifs_iupac)).get_column("mean_methylation").max()
 
             merge_motif_n_mod = 0
             merge_motif_n_nomod = 0
@@ -90,9 +92,13 @@ def merge_bin_motifs(bin_motifs, bins, pileup, assembly):
             merge_motif_mean = merge_motif_n_mod / (merge_motif_n_mod + merge_motif_n_nomod)
 
             if merge_motif_mean - previous_motif_mean_max > -0.1:
-                bin_motifs = bin_motifs.filter(pl.col("motif").is_in(premerge_motifs_iupac).not_())
-                bin_motifs = pl.concat(
-                    [bin_motifs,
+                log.debug(f"Removing motifs {premerge_motifs_iupac} from bin {bin}")
+                new_bin_motifs = new_bin_motifs.filter(
+                    pl.col("motif").is_in(premerge_motifs_iupac).not_() | (pl.col("bin") != bin)
+                )
+                log.debug(f"Adding motif {merged_motif.iupac()} to bin {bin}")
+                new_bin_motifs = pl.concat(
+                    [new_bin_motifs,
                     pl.DataFrame(
                         {
                             "bin": bin,
@@ -105,7 +111,9 @@ def merge_bin_motifs(bin_motifs, bins, pileup, assembly):
                             "motif_type": nm.utils.motif_type(merged_motif.iupac()),
                             "mean_methylation": merge_motif_mean
                         },
-                        schema=bin_motifs.schema
+                        schema=new_bin_motifs.schema
                     )]
                 )
-    return bin_motifs
+            else:
+                log.debug(f"Skipping motif {merged_motif.iupac()} for bin {bin} and mod_type {mod_type} as it has a lower mean methylation than the previous motifs")
+    return new_bin_motifs
