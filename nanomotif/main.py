@@ -89,7 +89,7 @@ def find_motifs(args, pileup = None, assembly = None):
             seed = args.seed
         )
     motifs = pl.DataFrame(motifs)
-    if motifs is None:
+    if motifs is None or len(motifs) == 0:
         log.info("No motifs found")
         return
 
@@ -297,6 +297,17 @@ def bin_consensus(args, pileup = None, assembly = None, motifs = None, motifs_sc
     output.write_csv(args.out + "/bin-motifs.tsv", separator="\t")
 
 def motif_discovery(args):
+    # Check if all required files exist
+    if not os.path.exists(args.pileup):
+        log.error(f"File {args.pileup} does not exist")
+        return
+    if not os.path.exists(args.assembly):
+        log.error(f"File {args.assembly} does not exist")
+        return
+    if not os.path.exists(args.bins):
+        log.error(f"File {args.bins} does not exist")
+        return
+
     # Check if output directory exists
     log.info("Loading required files")
     pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)

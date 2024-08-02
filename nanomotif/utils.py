@@ -8,7 +8,7 @@ import random
 import nanomotif as nm
 np.random.seed(1)
 
-def has_n_character_stretches(sequence, n, character):
+def has_n_character_stretches_of_length_m(sequence, n, m, character):
     """
     Check if the given sequence has a segment of three or more consecutive dots.
 
@@ -18,24 +18,12 @@ def has_n_character_stretches(sequence, n, character):
     Returns:
     bool: True if there is a segment of three or more consecutive dots, False otherwise.
     """
-    count = 0
-    previous_char = ""
-    for char in sequence:
-        if char == character:
-            if previous_char ==character:
-                previous_char = char
-                continue
-            else:
-                previous_char = char
-                count += 1
-        else:
-            previous_char = char
-    if count >= n:
-        return True
-    else:
-        return False
+    regex_str = rf"({character}){{{m},}}"
+    matches = re.findall(regex_str, sequence)
+    return len(matches) >= n
+
 def motif_type(motif_str):
-    if has_n_character_stretches(motif_str, 2, "N"):
+    if has_n_character_stretches_of_length_m(motif_str, 2, 2, "N"):
         return "ambiguous"
     elif re.search(r"(N){3,}", motif_str):
         return "bipartite"
@@ -96,3 +84,5 @@ def all_lengths_equal(iterator):
     except StopIteration:
         return True
     return all(first == len(x) for x in iterator)
+
+
