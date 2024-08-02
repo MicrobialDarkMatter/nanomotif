@@ -44,6 +44,7 @@ def  create_parser():
         help="Find motifs indirectly in contigs by scoring with motifs found in other contigs"
     )
     parser_score_motifs.add_argument("motifs", type=str, help="path to the motifs file.")
+    parser_score_motifs.add_argument("--save-motif-positions", action="store_true", help="save motif positions in the output folder")
     
     ###########################################################################
     # Bin consensus
@@ -63,15 +64,21 @@ def  create_parser():
     parser_complete_workflow = subparsers.add_parser('motif_discovery', help='Runs find_motifs, score_motifs and bin_consensus', parents=[parser_positional, parser_optional, parser_shared_find_motifs, parser_shared_bin_consensus], conflict_handler="resolve")
     parser_complete_workflow.add_argument("bins", type=str, help="tsv file specifying which bin contigs belong.")
 
+    parser_complete_workflow.add_argument("--save-motif-positions", action="store_true", help="save motif positions in the output folder")
+    
     ###########################################################################
-    # Bin contamination and inclusion
+    # Bin contamination and inclusion   
     parser_binnary_shared = argparse.ArgumentParser(description="Contamination DNA Methylation Pattern", add_help=False)
     """Function to add common arguments to a subparser."""
-    parser_binnary_shared.add_argument(
+    
+    parser_binnary_shared_mandatory = parser_binnary_shared.add_argument_group("Mandatory Arguments")
+    
+    
+    parser_binnary_shared_mandatory.add_argument(
         "--motifs_scored", type=str, help="Path to motifs-scored.tsv from nanomotif", required=True
     )
-    parser_binnary_shared.add_argument("--bin_motifs", type=str, help="Path to bin-motifs.tsv file", required=True)
-    parser_binnary_shared.add_argument(
+    parser_binnary_shared_mandatory.add_argument("--bin_motifs", type=str, help="Path to bin-motifs.tsv file", required=True)
+    parser_binnary_shared_mandatory.add_argument(
         "--contig_bins", type=str, help="Path to bins.tsv file for contig bins", required=True
     )
     parser_binnary_shared.add_argument("-t", "--threads", type=int, default=1, help="Number of threads to use for multiprocessing")
@@ -116,7 +123,7 @@ def  create_parser():
         help="If specified, the scores for each comparison will be saved to a scores folder in the output directory"
     )
     
-    parser_binnary_shared.add_argument("--out", type=str, help="Path to output directory", required=True, default="nanomotif")
+    parser_binnary_shared_mandatory.add_argument("--out", type=str, help="Path to output directory", required=True, default="nanomotif")
     
     # Binnary contamination
     parser_contamination = subparsers.add_parser(
