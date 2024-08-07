@@ -6,6 +6,7 @@ import numpy as np
 import re
 import random
 import nanomotif as nm
+import os
 np.random.seed(1)
 
 def has_n_character_stretches_of_length_m(sequence, n, m, character):
@@ -85,4 +86,23 @@ def all_lengths_equal(iterator):
         return True
     return all(first == len(x) for x in iterator)
 
+
+def concatenate_motif_position_files(path):
+    files = [os.path.join(path, f) for f in os.listdir(path) if f.endswith(".npz")]
+    
+    combined_data = {}
+    for f in files:
+        contig_name = os.path.basename(f).split("_")[0:-3]
+        contig_name = "_".join(contig_name)
+        
+        with np.load(files[0], allow_pickle=True) as data:
+            combined_data[contig_name] = data
+    
+    np.savez(os.path.join(path, "combined_motif_positions.npz"), **combined_data)
+    
+    return files
+
+def clean_up_motif_positions_files(files):
+    for f in files:
+        os.remove(f)
 

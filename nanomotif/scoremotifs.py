@@ -8,8 +8,8 @@ import nanomotif as nm
 from nanomotif import candidate, evaluate
 from nanomotif.parallel import update_progress_bar
 from nanomotif.logger import configure_logger
+from nanomotif.utils import concatenate_motif_position_files, clean_up_motif_positions_files
 import numpy as np
-
 def score_contig_with_motifs(contig, mod_type, pileup, sequence, motifs, save_motif_positions=False, positions_outdir=None):
     log.info(f"Scoring motifs in contig {contig}, modtype {mod_type}")
     # Ensuring motifs are in regex for searching
@@ -176,6 +176,11 @@ def score_sample_parallel(
     if len(results) == 0:
         return None
     motifs_all_scored = pl.concat(results)
+    
+    if save_motif_positions:
+        files = concatenate_motif_position_files(positions_outdir)
+        clean_up_motif_positions_files(files)
+    
     return motifs_all_scored
 
 
