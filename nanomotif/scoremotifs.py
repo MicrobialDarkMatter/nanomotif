@@ -178,7 +178,8 @@ def score_sample_parallel(
     motifs_all_scored = pl.concat(results)
     
     if save_motif_positions:
-        files = concatenate_motif_position_files(positions_outdir)
+        files = [os.path.join(positions_outdir, f) for f in os.listdir(positions_outdir) if f.endswith("_motifs_positions.npz")]
+        concatenate_motif_position_files(files, positions_outdir)
         clean_up_motif_positions_files(files)
     
     return motifs_all_scored

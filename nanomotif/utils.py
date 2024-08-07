@@ -87,20 +87,22 @@ def all_lengths_equal(iterator):
     return all(first == len(x) for x in iterator)
 
 
-def concatenate_motif_position_files(path):
-    files = [os.path.join(path, f) for f in os.listdir(path) if f.endswith(".npz")]
-    
+def concatenate_motif_position_files(files, path):
     combined_data = {}
     for f in files:
         contig_name = os.path.basename(f).split("_")[0:-3]
         contig_name = "_".join(contig_name)
-        
-        with np.load(files[0], allow_pickle=True) as data:
-            combined_data[contig_name] = data
+        mod_type = os.path.basename(f).split("_")[-3]
+
+        with np.load(f, allow_pickle=True) as data:
+            motif_data = {key: data[key].item() for key in data.files}
+            
+            if contig_name not in combined_data:
+                combined_data[contig_name] = {}
+            
+            combined_data[contig_name][mod_type] = motif_data
     
-    np.savez(os.path.join(path, "combined_motif_positions.npz"), **combined_data)
-    
-    return files
+    np.savez(os.path.join(path, "motif_positions_combined.npz"), **combined_data)
 
 def clean_up_motif_positions_files(files):
     for f in files:
