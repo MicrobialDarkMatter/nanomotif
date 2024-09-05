@@ -29,7 +29,7 @@ setup(
         "networkx>=3.1",
         "pyarrow>=15.0.2",
         "Bio>=1.6.2",
-        "snakemake>=7.32.4",
+        "snakemake=7.32.4",
         "progressbar2>=3.53.1"
     ],
     entry_points={
