@@ -150,13 +150,14 @@ def find_motifs(args, pileup = None, assembly = None) -> pl.DataFrame:
         df = df.sort(["contig", "mod_type", "motif"])
         df.write_csv(args.out + "/" + name + ".tsv", separator="\t")
     os.makedirs(args.out + "/precleanup-motifs/", exist_ok=True)
+    motifs.drop("model").write_csv(args.out + "/precleanup-motifs/motifs-raw-unformatted.tsv", separator="\t")
     save_motif_df(motifs, "precleanup-motifs/motifs-raw")
 
     log.info("Postprocessing motifs")
     motifs_file_name = "precleanup-motifs/motifs"
 
     log.info(" - Writing motifs")
-    motifs = motifs.filter(col("score") > 0.1)
+    motifs = motifs.filter(col("score") > 0.25)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
