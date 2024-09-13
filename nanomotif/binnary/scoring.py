@@ -121,7 +121,6 @@ def process_bin_contig(
     
     bin, bin_contig = task
     
-    # try:
     if mode == "contamination":
         motif_binary_compare = bin_motifs_from_motifs_scored_in_bins \
             .filter(pl.col("bin") == bin) \
@@ -173,15 +172,6 @@ def process_bin_contig(
     if contigHasNMethylation == 0:
         return contig_bin_comparison_score, bin_contig   
     return contig_bin_comparison_score, None
-    # except Exception as e:
-    #     with lock:
-    #         counter.value += 1
-            
-    #     error_log_path = os.path.join(args.out, "logs", f"{args.command}_{bin_contig}_error.err")
-        
-    #     with open(error_log_path, 'w') as error_file:
-    #         error_file.write(f"Error processing {bin_contig}: {str(e)}\n")
-    #     return None, None
 
 def create_dir_if_not_exists(path):
     if not os.path.exists(path):
