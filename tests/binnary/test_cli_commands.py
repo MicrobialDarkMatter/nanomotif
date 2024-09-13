@@ -299,7 +299,7 @@ def test_contamination_with_output_scores():
     # Check that the output directory was created
     assert os.path.isdir(outdir), "Output directory was not created"
     
-    bins_in_dir = glob.glob(f"{outdir}/scores/detect_contamination/*.csv")
+    bins_in_dir = glob.glob(f"{outdir}/scores/contamination/*.csv")
     assert len(bins_in_dir) == 13, "No scores were written"
     
     csvs = glob.glob(f"{outdir}/scores/*/*.csv")
