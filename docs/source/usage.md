@@ -127,6 +127,23 @@ The output is two files: `include_contigs.tsv` and `new_contig_bin.tsv`. The `in
 
 If decontamination should not be performed, the `include_contigs` can be run without the `--run_detect_contamination` flag or without the `--contamination_file` flag.
 
+#### save_scores
+Save scores will create a csv file for each contig, which contains all the information for scoring the contig. Columns are:
+- bin: The bin the contig is compared to
+- motif_mod: The motif being compared `motif_string + "_" + mod_type + "-" + mod_position`
+- n_mod: The number of modified motifs in bin
+- n_nomod: The number of unmodified motifs in bin
+- n_motifs_bin: The total number of motifs in bin
+- mean_methylation: n_mod / n_motifs_bin
+- mean_methylation_bin: If the motif is methylated, this number represent the mean methylation degree only for contigs where the mean mean_methylation was above 0.25
+- std_methylation_bin: The std deviation for the above calculation
+- n_contigs: The number of contigs used in above calculation
+- methylation_binary: Indicates if the bin is methylated or not
+- contig_bin: The bin where the contig originally was assigned
+- bin_compare: `bin + "_" + contig` for where the contig was originally assigned
+- mean: The mean methylation degree for the contig
+- methylation_mean_theshold: The threshold for assigning the contig as methylated or not. This depends on the variation of the bin methylation for the given motif
+- methylation_binary_compare: The binary methylation for the contig
 
 ## MTase-linker
 
