@@ -35,7 +35,7 @@ class TestProcessSubpileup:
         padding = 20
         minimum_methylation_fraction_confident = 0.75
 
-        result = nm.evaluate.process_subpileup(contig, modtype ,subpileup, assembly, min_kl_divergence, padding, minimum_methylation_fraction_confident)
+        result = nm.evaluate.process_subpileup(contig, modtype ,subpileup, assembly, min_kl_divergence, padding, minimum_methylation_fraction_confident, False)
         return result
 
     def test_no_errors(self):
