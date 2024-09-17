@@ -277,7 +277,7 @@ def score_motifs(args, pileup = None, assembly = None, motifs = None):
     return scored_all
 
 def bin_consensus(args, pileup = None, assembly = None, motifs = None, motifs_scored = None):
-    bins = pl.read_csv(args.bins, separator="\t", has_header=False) \
+    bins = pl.read_csv(args.bins, separator="\t", has_header=False, infer_schema_length=10000) \
         .rename({"column_1":"contig", "column_2":"bin"})
     if motifs is None:
         log.info("Loading motifs-scored")
