@@ -21,7 +21,7 @@ def shared_setup(args, working_dir):
     if not os.path.exists(args.out):
         os.makedirs(args.out)
     else:
-        log.warn(f"Output directory {args.out} already exists")
+        log.warning(f"Output directory {args.out} already exists")
 
     # Set up logging
     LOG_DIR = working_dir + "/logs"
@@ -66,6 +66,9 @@ def find_motifs(args, pileup = None, assembly = None) -> pl.DataFrame:
             pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = 0)
         else:
             pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)
+        
+    # Load low coverage positions
+    low_coverage_positions = nm.load_low_coverage_positions(args.pileup, min_coverage = args.threshold_valid_coverage)
     if assembly is None:
         log.info("Loading assembly")
         assembly = nm.load_assembly(args.assembly)
@@ -96,6 +99,7 @@ def find_motifs(args, pileup = None, assembly = None) -> pl.DataFrame:
     log.info("Identifying motifs")
     motifs = nm.evaluate.process_sample_parallel(
             assembly, pileup, 
+            low_coverage_positions = low_coverage_positions,
             read_level_methylation = args.read_level_methylation,
             threads = args.threads,
             search_frame_size = args.search_frame_size,
@@ -226,6 +230,8 @@ def score_motifs(args, pileup = None, assembly = None, motifs = None):
     if args.save_motif_positions:
         os.makedirs(args.out + "/motif-positions", exist_ok=True)
     
+    na_position = nm.load_low_coverage_positions(args.pileup, min_coverage = args.threshold_valid_coverage)
+
     # Ensure motif are iupac
     motifs.with_columns([
         pl.col("motif").map_elements(lambda x: nm.seq.regex_to_iupac(x)).alias("motif")
@@ -250,6 +256,7 @@ def score_motifs(args, pileup = None, assembly = None, motifs = None):
     log.info("Scoring motifs")
     scored_all = nm.scoremotifs.score_sample_parallel(
         assembly, pileup.pileup, motifs,
+        na_position = na_position,
         threads = args.threads,
         threshold_methylation_general = args.threshold_methylation_general,
         threshold_valid_coverage = 1,
