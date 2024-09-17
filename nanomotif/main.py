@@ -368,6 +368,7 @@ def check_install(args):
     log.info("Loading required files")
     args.out = "nanomotif_install_check"
     args.save_motif_positions = False
+    args.pileup = nm.datasets.geobacillus_plasmids_pileup_path()
 
     pileup = nm.datasets.geobacillus_plasmids_pileup()
     assembly = nm.datasets.geobacillus_plasmids_assembly()
