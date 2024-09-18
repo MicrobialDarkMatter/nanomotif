@@ -161,7 +161,7 @@ def find_motifs(args, pileup = None, assembly = None) -> pl.DataFrame:
     motifs_file_name = "precleanup-motifs/motifs"
 
     log.info(" - Writing motifs")
-    motifs = motifs.filter(col("score") > 0.25)
+    motifs = motifs.filter(col("score") > args.min_motif_score)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
@@ -232,6 +232,7 @@ def score_motifs(args, pileup = None, assembly = None, motifs = None):
     
     na_position = nm.load_low_coverage_positions(args.pileup, min_coverage = args.threshold_valid_coverage)
 
+    pileup = pileup.pileup.filter(pl.col("fraction_mod") > args.threshold_methylation_general)
     # Ensure motif are iupac
     motifs.with_columns([
         pl.col("motif").map_elements(lambda x: nm.seq.regex_to_iupac(x)).alias("motif")
@@ -255,7 +256,7 @@ def score_motifs(args, pileup = None, assembly = None, motifs = None):
 
     log.info("Scoring motifs")
     scored_all = nm.scoremotifs.score_sample_parallel(
-        assembly, pileup.pileup, motifs,
+        assembly, pileup, motifs,
         na_position = na_position,
         threads = args.threads,
         threshold_methylation_general = args.threshold_methylation_general,
@@ -352,8 +353,6 @@ def motif_discovery(args):
 
     # Score all motifs
     log.info("Scoring motifs")
-    if args.read_level_methylation:
-        pileup = pileup.filter(pl.col("fraction_mod") > args.threshold_methylation_general)
     scored_all = score_motifs(args, pileup=pileup, assembly=assembly, motifs=motifs)
 
     # Bin consensus

@@ -61,8 +61,7 @@ def motif_model_contig(
         pileup, 
         contig: str, 
         motif, 
-        save_motif_positions=False,
-        na_positions: dict=None
+        save_motif_positions=False
     ):
     """
     Get the posterior for a single motif. Uses number of methylated motifs as methylation count.
@@ -84,14 +83,6 @@ def motif_model_contig(
 
     index_meth_fwd, index_nonmeth_fwd = methylated_motif_occourances(motif_stripped, contig, meth_positions_fwd)
     index_meth_rev, index_nonmeth_rev = methylated_motif_occourances(motif_stripped.reverse_compliment(), contig, meth_positions_rev)
-
-    if na_positions is not None:
-        na_positions_fwd = na_positions["fwd"]
-        index_meth_fwd = np.setdiff1d(index_meth_fwd, na_positions_fwd)
-        index_nonmeth_fwd = np.setdiff1d(index_nonmeth_fwd, na_positions_fwd)
-        na_positions_rev = na_positions["rev"]
-        index_meth_rev = np.setdiff1d(index_meth_rev, na_positions_rev)
-        index_nonmeth_rev = np.setdiff1d(index_nonmeth_rev, na_positions_rev)
 
     model = BetaBernoulliModel()
     model.update(len(index_meth_fwd) + len(index_meth_rev), len(index_nonmeth_fwd) + len(index_nonmeth_rev))
@@ -193,13 +184,7 @@ def worker_function(
     """
     set_seed(seed=seed)
     warnings.filterwarnings("ignore")
-    contig, modtype, subpileup, low_coverage_positions = args
-
-    if low_coverage_positions is not None:
-        low_coverage_positions = {
-            "fwd": low_coverage_positions.filter(pl.col("strand") == "+")["position"].to_numpy(),
-            "rev": low_coverage_positions.filter(pl.col("strand") == "-")["position"].to_numpy()
-        }
+    contig, modtype, subpileup = args
     
     process_id = os.getpid()
     if log_dir is not None:
@@ -215,8 +200,7 @@ def worker_function(
             min_kl_divergence, 
             padding, 
             minimum_methylation_fraction_confident, 
-            read_level_methylation,
-            na_positions = low_coverage_positions
+            read_level_methylation
         )
         with lock:
             counter.value += 1
@@ -235,8 +219,7 @@ def process_subpileup(
         min_kl_divergence, 
         padding, 
         minimum_methylation_fraction_confident,
-        read_level_methylation,
-        na_positions: dict = None
+        read_level_methylation
     ):
     """
     Process a single subpileup for one contig and one modtype
@@ -264,7 +247,6 @@ def process_subpileup(
         modtype,
         minimum_methylation_fraction_confident,
         padding,
-        na_positions = na_positions,
         read_level_methylation = read_level_methylation,
         min_kl = min_kl_divergence,
         max_dead_ends = 25,
@@ -289,7 +271,6 @@ def process_subpileup(
 
 def process_sample_parallel(
         assembly, pileup, 
-        low_coverage_positions = None,
         read_level_methylation = False,
         threads = 2,
         search_frame_size = 40,
@@ -333,10 +314,8 @@ def process_sample_parallel(
             .sort("contig") 
     
     # Create a list of tasks (TODO: not have a list of all data)
-    if low_coverage_positions is not None:
-        tasks = [(contig, modtype, subpileup, low_coverage_positions.filter((pl.col("contig")==contig) & (pl.col("mod_type") == modtype))) for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])]
-    else:
-        tasks = [(contig, modtype, subpileup, None) for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])]
+    tasks = [(contig, modtype, subpileup) for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])]
+
     # Create a progress manager
     manager = multiprocessing.Manager()
     counter = manager.Value('i', 0)
@@ -393,7 +372,6 @@ def find_best_candidates(
         mod_type: str,
         minimum_methylation_fraction_confident: float,
         padding: int,
-        na_positions: dict = None,
         read_level_methylation: bool = False,
         min_kl: float = 0.2, 
         max_dead_ends: int = 25, 
@@ -454,7 +432,6 @@ def find_best_candidates(
             methylation_sequences_clone, 
             padding,
             read_level_methylation = read_level_methylation,
-            na_positions = na_positions,
             motif_graph = motif_graph,
             min_kl = min_kl,
             max_rounds_since_new_best = max_rounds_since_new_best
@@ -812,51 +789,23 @@ class MotifSearcher:
 
 
 
-def count_periods_at_start(string: str) -> int:
-    """
-    Count the number of periods at the start of a string
-
-    Parameters:
-    - string (str): The string to be processed.
-
-    Returns:
-    - int: The number of periods at the start of the string.
-
-    Example:
-    >>> count_periods_at_start("...ACGT")
-    3
-    """
+def count_periods_at_start(s):
     count = 0
-    for char in string:
+    for char in s:
         if char == '.':
             count += 1
         else:
             break
     return count
-
-def count_periods_at_end(string: str) -> int:
-    """
-    Count the number of periods at the end of a string
-
-    Parameters:
-    - string (str): The string to be processed.
-
-    Returns:
-    - int: The number of periods at the end of the string.
-
-    Example:
-    >>> count_periods_at_end("ACGT...")
-    3
-    """
-    string = string[::-1]
+def count_periods_at_end(s):
+    s = s[::-1]
     count = 0
-    for char in string:
+    for char in s:
         if char == '.':
             count += 1
         else:
             break
     return count
-
 def nxgraph_to_dataframe(graph):
     return pl.DataFrame({
         "sequence":[i for i in graph.nodes],
