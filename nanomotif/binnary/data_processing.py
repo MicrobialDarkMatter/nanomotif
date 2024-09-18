@@ -23,7 +23,7 @@ def load_data(args):
     bin_motifs = pl.read_csv(args.bin_motifs, separator="\t")
     
     # Polars automatically infers headers; if args.contig_bins file doesn't have headers, you need to specify it
-    contig_bins = pl.read_csv(args.contig_bins, separator="\t", has_header=False) \
+    contig_bins = pl.read_csv(args.contig_bins, separator="\t", has_header=False, infer_schema_length=10000) \
         .rename({
             "column_1": "contig",
             "column_2": "bin"
