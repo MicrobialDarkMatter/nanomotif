@@ -507,7 +507,7 @@ class MotifSearcher:
         methylation_sequences: EqualLengthDNASet,
         padding: int,
         read_level_methylation: bool = False,
-        na_positions: Optional[List[int]] = None,
+        na_positions: Optional[dict] = None,
         motif_graph: Optional[MotifTree] = None,
         min_kl: float = 0.1,
         freq_threshold: float = 0.25,
