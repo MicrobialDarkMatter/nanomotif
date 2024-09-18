@@ -161,7 +161,7 @@ def find_motifs(args, pileup = None, assembly = None) -> pl.DataFrame:
     motifs_file_name = "precleanup-motifs/motifs"
 
     log.info(" - Writing motifs")
-    motifs = motifs.filter(col("score") > 0.25)
+    motifs = motifs.filter(col("score") > args.min_motif_score)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
@@ -352,8 +352,6 @@ def motif_discovery(args):
 
     # Score all motifs
     log.info("Scoring motifs")
-    if args.read_level_methylation:
-        pileup = pileup.filter(pl.col("fraction_mod") > args.threshold_methylation_general)
     scored_all = score_motifs(args, pileup=pileup, assembly=assembly, motifs=motifs)
 
     # Bin consensus
