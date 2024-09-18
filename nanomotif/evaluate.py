@@ -12,7 +12,7 @@ import progressbar
 from nanomotif.constants import *
 from nanomotif.model import BetaBernoulliModel
 from nanomotif.utils import subseq_indices, calculate_match_length
-from nanomotif.seq import EqualLengthDNASet, DNAsequence
+from nanomotif.seq import EqualLengthDNASet, DNAsequence, DNAarray
 from nanomotif.candidate import Motif, MotifTree
 from nanomotif.logger import configure_logger
 from nanomotif.parallel import update_progress_bar
@@ -62,7 +62,7 @@ def motif_model_contig(
         contig: str, 
         motif, 
         save_motif_positions=False,
-        na_positions: dict=None
+        na_positions = None
     ):
     """
     Get the posterior for a single motif. Uses number of methylated motifs as methylation count.
@@ -393,14 +393,14 @@ def find_best_candidates(
         mod_type: str,
         minimum_methylation_fraction_confident: float,
         padding: int,
-        na_positions: dict = None,
+        na_positions = None,
         read_level_methylation: bool = False,
         min_kl: float = 0.2, 
         max_dead_ends: int = 25, 
         max_rounds_since_new_best: int = 15,
         score_threshold: float = 0.2,
         remaining_sequences_threshold: float = 0.01
-    ) -> tuple:
+    ) -> tuple[MotifTree, list[Motif]]:
     """
     Find the best motif candidates in a sequence.
 
@@ -446,7 +446,6 @@ def find_best_candidates(
             log.debug("Stopping search, too many low scoring candidates")
             break
         # Find the initial guess within the tree
-
         searcher = MotifSearcher(
             root_motif, 
             contig_sequence, 
@@ -504,10 +503,10 @@ class MotifSearcher:
         root_motif: Motif,
         contig_sequence: DNAsequence,
         contig_pileup: pl.DataFrame,
-        methylation_sequences: EqualLengthDNASet,
+        methylation_sequences: DNAarray,
         padding: int,
         read_level_methylation: bool = False,
-        na_positions: Optional[dict] = None,
+        na_positions = None,
         motif_graph: Optional[MotifTree] = None,
         min_kl: float = 0.1,
         freq_threshold: float = 0.25,
@@ -532,14 +531,8 @@ class MotifSearcher:
             max_motif_length (int): Maximum allowed motif length.
         """
         # Input validation
-        if not root_motif:
-            raise ValueError("root_motif cannot be empty.")
-        if not contig_sequence:
-            raise ValueError("contig_sequence cannot be empty.")
-        if not contig_pileup:
+        if contig_pileup.is_empty():
             raise ValueError("contig_pileup cannot be empty.")
-        if not methylation_sequences:
-            raise ValueError("methylation_sequences cannot be empty.")
         if padding < 0:
             raise ValueError("padding must be non-negative.")
 
@@ -657,7 +650,7 @@ class MotifSearcher:
                 new_motif_str = "".join(new_motif_sequence)
                 yield Motif(new_motif_str, motif.mod_position)
 
-    def run(self) -> tuple[MotifTree, Motif]:
+    def run(self) -> tuple[MotifTree, list[Motif]]:
         """
         Execute the motif search algorithm.
 
@@ -708,14 +701,14 @@ class MotifSearcher:
                 continue
             if len(current_motif.strip()) > self.max_motif_length:
                 log.debug(
-                    f"{current_motif.sequence}, Skipping due to length > {self.max_motif_length}"
+                    f"{current_motif.string}, Skipping due to length > {self.max_motif_length}"
                 )
                 continue
 
             current_model = self.motif_graph.nodes[current_motif]["model"]
             visited_nodes.add(current_motif)
             log.debug(
-                f"{current_motif.sequence} | Model: {current_model} | "
+                f"{current_motif.string} | Model: {current_model} | "
                 f"Score: {self.motif_graph.nodes[current_motif]['score']:.2f} | "
                 f"Queue size: {len(priority_queue)}"
             )
