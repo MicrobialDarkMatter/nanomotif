@@ -10,7 +10,8 @@ from nanomotif.parallel import update_progress_bar
 from nanomotif.logger import configure_logger
 from nanomotif.utils import concatenate_motif_position_files, clean_up_motif_positions_files
 import numpy as np
-def score_contig_with_motifs(contig, mod_type, pileup, sequence, motifs, save_motif_positions=False, positions_outdir=None):
+def score_contig_with_motifs(contig, mod_type, pileup, sequence, motifs, na_positions=None, save_motif_positions=False, positions_outdir=None):
+
     log.info(f"Scoring motifs in contig {contig}, modtype {mod_type}")
     # Ensuring motifs are in regex for searching
     motifs = motifs\
@@ -40,6 +41,7 @@ def score_contig_with_motifs(contig, mod_type, pileup, sequence, motifs, save_mo
                 pileup,
                 sequence, 
                 candidate.Motif(motif, position),
+                na_positions=na_positions,
                 save_motif_positions=save_motif_positions
             )
             models.append(model)
@@ -48,7 +50,8 @@ def score_contig_with_motifs(contig, mod_type, pileup, sequence, motifs, save_mo
             model = evaluate.motif_model_contig(
                 pileup,
                 sequence, 
-                candidate.Motif(motif, position)
+                candidate.Motif(motif, position),
+                na_positions=na_positions
             )
             models.append(model)
     
@@ -89,13 +92,19 @@ def worker_function(args, counter, lock, sequence, motifs, log_dir, verbose, see
     """
     warnings.filterwarnings("ignore")
     nm.seed.set_seed(seed)
-    contig, modtype, subpileup = args
+    contig, modtype, subpileup, na_positions = args
+
+    if na_positions is not None:
+        na_positions = {
+            "fwd": na_positions.filter(pl.col("strand") == "+")["position"].to_numpy(),
+            "rev": na_positions.filter(pl.col("strand") == "-")["position"].to_numpy()
+        }
     
     process_id = os.getpid()
     log_file = f"{log_dir}/score-motifs.{process_id}.log"
     configure_logger(log_file, verbose=verbose)
     try:
-        result = score_contig_with_motifs(contig, modtype, subpileup, sequence, motifs, save_motif_positions=save_motif_positions, positions_outdir=positions_outdir)
+        result = score_contig_with_motifs(contig, modtype, subpileup, sequence, motifs, save_motif_positions=save_motif_positions, positions_outdir=positions_outdir, na_positions=na_positions)
         with lock:
             counter.value += 1
         return result
@@ -106,6 +115,7 @@ def worker_function(args, counter, lock, sequence, motifs, log_dir, verbose, see
 
 def score_sample_parallel(
         assembly, pileup, motifs,
+        na_position = None,
         threads = 2,
         threshold_methylation_general = 0.5,
         threshold_valid_coverage = 1,
@@ -143,8 +153,10 @@ def score_sample_parallel(
             .sort("contig") 
     
     # Create a list of tasks (TODO: not have a list of all data)
-    tasks = [(contig, modtype, subpileup) for (contig, modtype), subpileup in pileup.groupby(["contig", "mod_type"])]
-
+    if na_position is not None:
+        tasks = [(contig, modtype, subpileup, na_position.filter((pl.col("contig")==contig) & (pl.col("mod_type") == modtype))) for (contig, modtype), subpileup in pileup.groupby(["contig", "mod_type"])]
+    else:
+        tasks = [(contig, modtype, subpileup, None) for (contig, modtype), subpileup in pileup.groupby(["contig", "mod_type"])]
     # Create a progress manager
     manager = multiprocessing.Manager()
     counter = manager.Value('i', 0)

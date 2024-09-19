@@ -43,7 +43,7 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins, m
     #contig_motifs = nm.postprocess.remove_sub_motifs(motifs_scored_filt)
 
     contig_motifs = motifs_scored_filt.with_columns(
-            pl.col("motif").apply(lambda x: nm.seq.regex_to_iupac(x)).alias("motif"),
+            pl.col("motif").map_elements(lambda x: nm.seq.regex_to_iupac(x), return_dtype = pl.Utf8).alias("motif"),
             (pl.col("n_mod")  / (pl.col("n_mod") + pl.col("n_nomod"))).alias("mean")
         )
     bin_motifs = contig_motifs.groupby("bin", "motif", "mod_position", "mod_type") \

@@ -30,6 +30,8 @@ def  create_parser():
     parser_shared_find_motifs.add_argument("--threshold_valid_coverage", type=int, default=5, help="minimum valid base coverage for a position to be considered. Default: %(default)s")
     parser_shared_find_motifs.add_argument("--minimum_kl_divergence", type=float, default=0.05, help="minimum KL-divergence for a position to considered for expansion in  motif search. Higher value means less exhaustive, but faster search. Default: %(default)s")
     parser_shared_find_motifs.add_argument("--min_motifs_contig", type=int, default=20, help="minimum number of times a motif has to have been oberserved in a contig. Default: %(default)s")
+    parser_shared_find_motifs.add_argument("--read_level_methylation", action="store_true", help="If specified, methylation is calculated on read level instead of contig level. This is slower but produces more stable motifs.")
+    parser_shared_find_motifs.add_argument("--min_motif_score", type=float, default=0.2, help="minimum score for a motif to be kept after identification considered valid. Default: %(default)s")
     parser_find_motifs = subparsers.add_parser(
         'find_motifs', 
         parents=[parser_positional, parser_optional, parser_shared_find_motifs], 

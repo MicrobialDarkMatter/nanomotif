@@ -39,6 +39,22 @@ def load_pileup(path: str, threads: int = 1, min_fraction: float = 0):
     pileup = pileup.rename({"column_1":"contig", "column_2": "position", "column_4": "mod_type", "column_6": "strand", "column_11": "fraction_mod", "column_10":"Nvalid_cov"})
     return Pileup(pileup)
 
+def load_low_coverage_positions(path_pileup: str, threads: int = 1, min_coverage: float = 5):
+    """
+    Load pileup file from path to pileup.bed output of modkit pileup
+    """
+    pileup = (
+        pl.scan_csv(path_pileup, separator = "\t", has_header = False)
+        .filter(pl.col("column_10") <= min_coverage)
+        .filter(pl.col("column_10") / (pl.col("column_10") + pl.col("column_17")) > 0.3)
+        .select(["column_1", "column_2","column_4", "column_6", "column_11", "column_10"])
+        .with_columns(pl.col("column_11") / 100)
+        .collect()
+    )
+    pileup = pileup.rename({"column_1":"contig", "column_2": "position", "column_4": "mod_type", "column_6": "strand", "column_11": "fraction_mod", "column_10":"Nvalid_cov"})
+    return pileup
+
+
 def load_assembly(path: str):
     """
     Load assembly from path to fasta file

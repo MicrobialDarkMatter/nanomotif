@@ -21,7 +21,7 @@ def shared_setup(args, working_dir):
     if not os.path.exists(args.out):
         os.makedirs(args.out)
     else:
-        log.warn(f"Output directory {args.out} already exists")
+        log.warning(f"Output directory {args.out} already exists")
 
     # Set up logging
     LOG_DIR = working_dir + "/logs"
@@ -44,20 +44,41 @@ def shared_setup(args, working_dir):
 
 
 
-def find_motifs(args, pileup = None, assembly = None):
-    # Run nanomotif
+def find_motifs(args, pileup = None, assembly = None) -> pl.DataFrame:
+    """
+    Nanomotif motif finder module
+
+    Args:
+        args (argparse.Namespace): Arguments
+        pileup (pandas.DataFrame): Pileup data
+        assembly (nanomotif.Assembly): Assembly data
+    
+    Returns:
+        pandas.DataFrame: Motif data
+    """
     log.info("Starting nanomotif motif finder")
     if pileup is None:
         log.info("Loading pileup")
-        pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)
+        if not os.path.exists(args.pileup):
+            log.error(f"File {args.pileup} does not exist")
+            return None
+        if args.read_level_methylation:
+            pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = 0)
+        else:
+            pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)
+        
+    # Load low coverage positions
+    low_coverage_positions = nm.load_low_coverage_positions(args.pileup, min_coverage = args.threshold_valid_coverage)
     if assembly is None:
         log.info("Loading assembly")
         assembly = nm.load_assembly(args.assembly)
+    
     assm_lengths = pl.DataFrame({
         "contig": list(assembly.assembly.keys()),
         "length": [len(contig) for contig in assembly.assembly.values()]
     })
     log.info("Filtering pileup")
+
     # Filter pileup to contigs with mods, minimum 1 mod per 10kb
     contigs_with_mods = pileup.pileup \
         .groupby(["contig", "mod_type"]) \
@@ -78,6 +99,8 @@ def find_motifs(args, pileup = None, assembly = None):
     log.info("Identifying motifs")
     motifs = nm.evaluate.process_sample_parallel(
             assembly, pileup, 
+            low_coverage_positions = low_coverage_positions,
+            read_level_methylation = args.read_level_methylation,
             threads = args.threads,
             search_frame_size = args.search_frame_size,
             threshold_methylation_confident = args.threshold_methylation_confident,
@@ -131,13 +154,14 @@ def find_motifs(args, pileup = None, assembly = None):
         df = df.sort(["contig", "mod_type", "motif"])
         df.write_csv(args.out + "/" + name + ".tsv", separator="\t")
     os.makedirs(args.out + "/precleanup-motifs/", exist_ok=True)
+    motifs.drop("model").write_csv(args.out + "/precleanup-motifs/motifs-raw-unformatted.tsv", separator="\t")
     save_motif_df(motifs, "precleanup-motifs/motifs-raw")
 
     log.info("Postprocessing motifs")
     motifs_file_name = "precleanup-motifs/motifs"
 
     log.info(" - Writing motifs")
-    motifs = motifs.filter(col("score") > 0.1)
+    motifs = motifs.filter(col("score") > args.min_motif_score)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
@@ -206,6 +230,9 @@ def score_motifs(args, pileup = None, assembly = None, motifs = None):
     if args.save_motif_positions:
         os.makedirs(args.out + "/motif-positions", exist_ok=True)
     
+    na_position = nm.load_low_coverage_positions(args.pileup, min_coverage = args.threshold_valid_coverage)
+
+    pileup = pileup.pileup.filter(pl.col("fraction_mod") > args.threshold_methylation_general)
     # Ensure motif are iupac
     motifs.with_columns([
         pl.col("motif").map_elements(lambda x: nm.seq.regex_to_iupac(x)).alias("motif")
@@ -229,7 +256,8 @@ def score_motifs(args, pileup = None, assembly = None, motifs = None):
 
     log.info("Scoring motifs")
     scored_all = nm.scoremotifs.score_sample_parallel(
-        assembly, pileup.pileup, motifs,
+        assembly, pileup, motifs,
+        na_position = na_position,
         threads = args.threads,
         threshold_methylation_general = args.threshold_methylation_general,
         threshold_valid_coverage = 1,
@@ -310,7 +338,10 @@ def motif_discovery(args):
 
     # Check if output directory exists
     log.info("Loading required files")
-    pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)
+    if args.read_level_methylation:
+        pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = 0)
+    else:
+        pileup = nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)
     assembly = nm.load_assembly(args.assembly)
 
     # Find motifs
@@ -336,6 +367,7 @@ def check_install(args):
     log.info("Loading required files")
     args.out = "nanomotif_install_check"
     args.save_motif_positions = False
+    args.pileup = nm.datasets.geobacillus_plasmids_pileup_path()
 
     pileup = nm.datasets.geobacillus_plasmids_pileup()
     assembly = nm.datasets.geobacillus_plasmids_assembly()

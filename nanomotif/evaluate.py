@@ -12,7 +12,7 @@ import progressbar
 from nanomotif.constants import *
 from nanomotif.model import BetaBernoulliModel
 from nanomotif.utils import subseq_indices, calculate_match_length
-from nanomotif.seq import EqualLengthDNASet, DNAsequence
+from nanomotif.seq import EqualLengthDNASet, DNAsequence, DNAarray
 from nanomotif.candidate import Motif, MotifTree
 from nanomotif.logger import configure_logger
 from nanomotif.parallel import update_progress_bar
@@ -21,13 +21,17 @@ import heapq as hq
 import networkx as nx
 import warnings
 import time
-
+from typing import Generator, Optional, List, Tuple
 
 ##########################################
 # Motif candidate scoring
 ##########################################
 
-def methylated_motif_occourances(motif, sequence, methylated_positions) -> tuple:
+def methylated_motif_occourances(
+        motif, 
+        sequence, 
+        methylated_positions
+    ) -> tuple:
     """
     Get occourances of a motif in a contig
 
@@ -53,7 +57,13 @@ def methylated_motif_occourances(motif, sequence, methylated_positions) -> tuple
 
     return meth_occurences, nonmeth_occurences
 
-def motif_model_contig(pileup, contig: str, motif, save_motif_positions=False):
+def motif_model_contig(
+        pileup, 
+        contig: str, 
+        motif, 
+        save_motif_positions=False,
+        na_positions = None
+    ):
     """
     Get the posterior for a single motif. Uses number of methylated motifs as methylation count.
 
@@ -75,6 +85,14 @@ def motif_model_contig(pileup, contig: str, motif, save_motif_positions=False):
     index_meth_fwd, index_nonmeth_fwd = methylated_motif_occourances(motif_stripped, contig, meth_positions_fwd)
     index_meth_rev, index_nonmeth_rev = methylated_motif_occourances(motif_stripped.reverse_compliment(), contig, meth_positions_rev)
 
+    if na_positions is not None:
+        na_positions_fwd = na_positions["fwd"]
+        index_meth_fwd = np.setdiff1d(index_meth_fwd, na_positions_fwd)
+        index_nonmeth_fwd = np.setdiff1d(index_nonmeth_fwd, na_positions_fwd)
+        na_positions_rev = na_positions["rev"]
+        index_meth_rev = np.setdiff1d(index_meth_rev, na_positions_rev)
+        index_nonmeth_rev = np.setdiff1d(index_nonmeth_rev, na_positions_rev)
+
     model = BetaBernoulliModel()
     model.update(len(index_meth_fwd) + len(index_meth_rev), len(index_nonmeth_fwd) + len(index_nonmeth_rev))
     
@@ -90,7 +108,22 @@ def motif_model_contig(pileup, contig: str, motif, save_motif_positions=False):
         return model
 
 
-def methylated_reads_counts(pileup: list, sequence: str, motif: str) -> tuple:
+def methylated_reads_counts(
+        pileup: pl.DataFrame, 
+        sequence: str, 
+        motif: Motif
+    ) -> tuple:
+    """
+    Get the number of methylated and non-methylated reads for a motif.
+
+    Parameters:
+    - pileup (Pileup): The pileup to be processed. 
+    - sequence (str): The sequence to be processed.
+    - motif (Motif): The motif to be processed.
+
+    Returns:
+    - tuple: A tuple of two integers, the first containing the number of methylated reads, the second containing the number of non-methylated reads.
+    """
     motif_index = subseq_indices(motif.string, sequence) + motif.mod_position
 
     pileup = pileup.filter(pl.col("position").is_in(motif_index))
@@ -102,7 +135,7 @@ def methylated_reads_counts(pileup: list, sequence: str, motif: str) -> tuple:
     return n_mod, n_nonmod
 
 
-def motif_model_read(pileup, contig: str, motif):
+def motif_model_read(pileup: pl.DataFrame, contig: str, motif: Motif) -> BetaBernoulliModel:
     """
     Get the posterior for a single motif. Uses number of methylated reads as methylation count.
 
@@ -134,94 +167,19 @@ def motif_model_read(pileup, contig: str, motif):
 # Motif candidate state space search
 ##########################################
 
-
-
-
-#
-#def process_sample(assembly, pileup, 
-#                   max_candidate_size = 40,
-#                   min_read_methylation_fraction = 0.8,
-#                   min_valid_coverage = 1,
-#                   min_kl_divergence = 0.1
-#                   ):
-#    """
-#    Process a single sample
-#    
-#    Parameters:
-#    - assembly (Assembly): The assembly to be processed.
-#    - pileup (Pileup): The pileup to be processed.
-#    - max_candidate_size (int): The maximum size of the candidate motifs.
-#    - min_read_methylation_fraction (float): The minimum fraction of reads that must be methylated for a position to be considered methylated.
-#    - min_valid_coverage (int): The minimum number of reads that must cover a position for it to be considered valid.
-#    - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
-#    - min_cdf_score (float): Minimum score of 1 - cdf(cdf_position) for a motif to be considered valid.
-#    - cdf_position (float): The position to evaluate the cdf at.
-#    - min_motif_frequency (int): Used to get minimum number of sequences to evaluate motif at.
-#    """
-#    assert pileup is not None, "Pileup is None"
-#    assert len(pileup) > 0, "Pileup is empty" 
-#    assert assembly is not None, "Assembly is None"
-#    assert max_candidate_size > 0, "max_candidate_size must be greater than 0"
-#    assert min_read_methylation_fraction >= 0 and min_read_methylation_fraction <= 1, "min_read_methylation_fraction must be between 0 and 1"
-#    assert min_valid_coverage >= 0, "min_valid_coverage must be greater than 0"
-#    assert min_kl_divergence >= 0, "min_kl_divergence must be greater than 0"
-#
-#    padding = max_candidate_size // 2
-#    result = []
-#    pileup = pileup \
-#            .filter(pl.col("Nvalid_cov") > min_valid_coverage) \
-#            .filter(pl.col("fraction_mod") >= min_read_methylation_fraction) \
-#            .sort("contig") 
-#    total_tasks = pileup.select(pl.struct(["contig", "mod_type"]).n_unique()).item()
-#
-#    #
-#    widgets=[
-#        progressbar.Timer(), ' | ',progressbar.Counter(), ' of ', str(total_tasks),' - ', progressbar.Percentage(), ' ',progressbar.Bar(),' (', progressbar.ETA(), ') '
-#    ]
-#    for (contig, modtype), subpileup in progressbar.progressbar(pileup.groupby(["contig", "mod_type"]), widgets=widgets, max_value=total_tasks, redirect_stdout=True):
-#        log.info(f"Processing {contig} {modtype}")
-#
-#        contig_sequence = assembly.assembly[contig]
-#        index_plus = subpileup.filter(pl.col("strand") == "+").get_column("position").to_list()
-#        index_minus = subpileup.filter(pl.col("strand") == "-").get_column("position").to_list()
-#        if len(index_minus) <= 1 or len(index_plus) <= 1:
-#            log.info("Too few methylated positions")
-#            continue
-#
-#        sequences_plus = contig_sequence.sample_at_indices(index_plus, padding)
-#        sequences_minus = contig_sequence.sample_at_indices(index_minus, padding).reverse_compliment()
-#        sequences = sequences_plus + sequences_minus
-#        sequences_array = sequences.convert_to_DNAarray()
-#
-#        motif_graph, best_candidates = find_best_candidates(
-#            sequences_array, 
-#            contig_sequence, 
-#            subpileup, 
-#            min_kl = min_kl_divergence
-#        )
-#        identified_motifs = nxgraph_to_dataframe(motif_graph) \
-#            .filter(col("sequence").is_in(best_candidates))
-#        
-#        if len(identified_motifs) == 0:
-#            log.info("No motifs found")
-#            continue
-#        else:
-#            result.append(identified_motifs.with_columns(
-#                pl.lit(contig).alias("contig"),
-#                pl.lit(modtype).alias("mod_type")
-#            ))
-#    if len(result) == 0:
-#        return None
-#    motifs = pl.concat(result) \
-#        .with_columns([
-#            pl.col("sequence").apply(lambda motif: motif[count_periods_at_start(motif):len(motif)-count_periods_at_end(motif)]).alias("motif"),
-#            pl.col("sequence").apply(lambda motif: padding - count_periods_at_start(motif)).alias("mod_position")
-#        ])
-#    return motifs
-#
-#
-
-def worker_function(args, counter, lock, assembly, min_kl_divergence, padding, minimum_methylation_fraction_confident, log_dir, verbose, seed):
+def worker_function(
+        args, 
+        counter, 
+        lock, 
+        assembly, 
+        min_kl_divergence, 
+        padding, 
+        minimum_methylation_fraction_confident, 
+        read_level_methylation,
+        log_dir, 
+        verbose, 
+        seed
+    ):
     """
     Process a single subpileup for one contig and one modtype
 
@@ -235,7 +193,13 @@ def worker_function(args, counter, lock, assembly, min_kl_divergence, padding, m
     """
     set_seed(seed=seed)
     warnings.filterwarnings("ignore")
-    contig, modtype, subpileup = args
+    contig, modtype, subpileup, low_coverage_positions = args
+
+    if low_coverage_positions is not None:
+        low_coverage_positions = {
+            "fwd": low_coverage_positions.filter(pl.col("strand") == "+")["position"].to_numpy(),
+            "rev": low_coverage_positions.filter(pl.col("strand") == "-")["position"].to_numpy()
+        }
     
     process_id = os.getpid()
     if log_dir is not None:
@@ -243,7 +207,17 @@ def worker_function(args, counter, lock, assembly, min_kl_divergence, padding, m
         configure_logger(log_file, verbose=verbose)
 
     try:
-        result = process_subpileup(contig, modtype, subpileup, assembly, min_kl_divergence, padding, minimum_methylation_fraction_confident)
+        result = process_subpileup(
+            contig, 
+            modtype, 
+            subpileup, 
+            assembly, 
+            min_kl_divergence, 
+            padding, 
+            minimum_methylation_fraction_confident, 
+            read_level_methylation,
+            na_positions = low_coverage_positions
+        )
         with lock:
             counter.value += 1
         return result
@@ -253,10 +227,17 @@ def worker_function(args, counter, lock, assembly, min_kl_divergence, padding, m
         return None
 
 
-
-
-
-def process_subpileup(contig, modtype, subpileup, assembly, min_kl_divergence, padding, minimum_methylation_fraction_confident):
+def process_subpileup(
+        contig, 
+        modtype, 
+        contig_pileup, 
+        assembly, 
+        min_kl_divergence, 
+        padding, 
+        minimum_methylation_fraction_confident,
+        read_level_methylation,
+        na_positions: dict = None
+    ):
     """
     Process a single subpileup for one contig and one modtype
 
@@ -269,24 +250,22 @@ def process_subpileup(contig, modtype, subpileup, assembly, min_kl_divergence, p
     - padding (int): The padding to use for the motif.
     """
     log.info(f"Processing {contig} {modtype}")
+    assert contig_pileup is not None, "Subpileup is None"
+    assert len(contig_pileup) > 0, "Subpileup is empty"
+    assert assembly is not None, "Assembly is None"
+    assert min_kl_divergence >= 0, "min_kl_divergence must be greater than 0"
+    assert contig_pileup.get_column("mod_type").unique().to_list() == [modtype], "subpileup modtype does not match modtype"
 
     contig_sequence = assembly.assembly[contig]
-    subpileup_high_confident = subpileup.filter(pl.col("fraction_mod") >= minimum_methylation_fraction_confident)
-    index_plus = subpileup_high_confident.filter(pl.col("strand") == "+").get_column("position").to_list()
-    index_minus = subpileup_high_confident.filter(pl.col("strand") == "-").get_column("position").to_list()
-    if len(index_minus) <= 1 or len(index_plus) <= 1:
-        log.info("Too few methylated positions")
-        return None
-
-    sequences_plus = contig_sequence.sample_at_indices(index_plus, padding)
-    sequences_minus = contig_sequence.sample_at_indices(index_minus, padding).reverse_compliment()
-    sequences = sequences_plus + sequences_minus
-    sequences_array = sequences.convert_to_DNAarray()
 
     motif_graph, best_candidates = find_best_candidates(
-        sequences_array, 
+        contig_pileup, 
         contig_sequence, 
-        subpileup, 
+        modtype,
+        minimum_methylation_fraction_confident,
+        padding,
+        na_positions = na_positions,
+        read_level_methylation = read_level_methylation,
         min_kl = min_kl_divergence,
         max_dead_ends = 25,
         max_rounds_since_new_best = 15
@@ -310,21 +289,23 @@ def process_subpileup(contig, modtype, subpileup, assembly, min_kl_divergence, p
 
 def process_sample_parallel(
         assembly, pileup, 
+        low_coverage_positions = None,
+        read_level_methylation = False,
         threads = 2,
         search_frame_size = 40,
         threshold_methylation_confident = 0.8,
-        threshold_methylation_general = 0.5,
-        threshold_valid_coverage = 1,
-        minimum_kl_divergence = 0.2,
+        threshold_methylation_general = 0.7,
+        threshold_valid_coverage = 5,
+        minimum_kl_divergence = 0.05,
         verbose = False,
         log_dir = None,
         seed = None
     ):
     """
-    Process a single sample
+    Process a sample
     
     Parameters:
-    - assembly (Assembly): The assembly to be processed.
+    - assembly (Assembly): The assembly of all contigs.
     - pileup (Pileup): The pileup to be processed.
     - max_candidate_size (int): The maximum size of the candidate motifs.
     - min_read_methylation_fraction (float): The minimum fraction of reads that must be methylated for a position to be considered methylated.
@@ -349,11 +330,13 @@ def process_sample_parallel(
     # Filter pileup
     pileup = pileup \
             .filter(pl.col("Nvalid_cov") > threshold_valid_coverage) \
-            .filter(pl.col("fraction_mod") >= threshold_methylation_general) \
             .sort("contig") 
     
     # Create a list of tasks (TODO: not have a list of all data)
-    tasks = [(contig, modtype, subpileup) for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])]
+    if low_coverage_positions is not None:
+        tasks = [(contig, modtype, subpileup, low_coverage_positions.filter((pl.col("contig")==contig) & (pl.col("mod_type") == modtype))) for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])]
+    else:
+        tasks = [(contig, modtype, subpileup, None) for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])]
 
     # Create a progress manager
     manager = multiprocessing.Manager()
@@ -371,7 +354,7 @@ def process_sample_parallel(
     results = pool.starmap(worker_function, [(
         task, 
         counter, lock, 
-        assembly, minimum_kl_divergence, padding, threshold_methylation_confident, 
+        assembly, minimum_kl_divergence, padding, threshold_methylation_confident, read_level_methylation,
         log_dir, verbose, seed
         ) for task in tasks])
     results = [result for result in results if result is not None]
@@ -405,23 +388,55 @@ def process_sample_parallel(
 #########################################################################
 # Motif candidate state space 
 
-def find_best_candidates(methylation_sequences, sequence, pileup, min_kl = 0.2, max_dead_ends = 25, max_rounds_since_new_best = 15):
+def find_best_candidates(        
+        contig_pileup: pl.DataFrame, 
+        contig_sequence: DNAsequence, 
+        mod_type: str,
+        minimum_methylation_fraction_confident: float,
+        padding: int,
+        na_positions = None,
+        read_level_methylation: bool = False,
+        min_kl: float = 0.2, 
+        max_dead_ends: int = 25, 
+        max_rounds_since_new_best: int = 15,
+        score_threshold: float = 0.2,
+        remaining_sequences_threshold: float = 0.01
+    ) -> tuple[MotifTree, list[Motif]]:
     """
     Find the best motif candidates in a sequence.
 
     Parameters:
-    - methylation_sequences (DNAarray): The methylation sequences extracted from the contig at methylated sites.
-    - sequence (DNAsequence): The contig to be processed.
-    - pileup (Pileup): The pileup to be processed.
-    - min_kl (float): The minimum KL-divergence for a position in the candidate to be expanded
-    - max_dead_ends (int): The maximum number of low scoring candidates before the search is terminated.
+    - contig_pileup (Pileup): The pileup to be processed.
+    - contig_sequence (DNAsequence): The sequence to be processed.
+    - mod_type (str): The modtype to be processed.
+    - minimum_methylation_fraction_confident (float): The minimum fraction of reads that must be methylated for a position to be considered confidently methylated and used in search.
+    - padding (int): The padding to use for the motif.
+    - min_kl (float): The minimum KL-divergence for a motif to be considered valid.
+    - max_dead_ends (int): The maximum number of low scoring candidates before stopping the search.
+    - max_rounds_since_new_best (int): The maximum number of rounds since a new best candidate was found before stopping the search.
+    - score_threshold (float): The minimum score for a candidate to be considered valid.
+    - remaining_sequences_threshold (float): The minimum fraction of sequences remaining before stopping the search.
     """
-    padding = methylation_sequences.shape[1] // 2
-    total_sequences = methylation_sequences.shape[0]
-    mod_type = pileup.get_column("mod_type").unique().to_list()[0]
+    subpileup_confident = contig_pileup.filter(pl.col("fraction_mod") >= minimum_methylation_fraction_confident)
+
+    # Extract the sequences for confidently methylated positions
+    index_plus = subpileup_confident.filter(pl.col("strand") == "+").get_column("position").to_list()
+    index_minus = subpileup_confident.filter(pl.col("strand") == "-").get_column("position").to_list()
     
-    root_motif = Motif("." * padding + MOD_TYPE_TO_CANONICAL[mod_type] + "." * padding, padding) # Represent all possible motifs
-    methylation_sequences_subset = methylation_sequences.copy()
+    methylation_sequences_string = []
+    if len(index_plus) >= 1:
+        methylation_sequences_string += contig_sequence.sample_at_indices(index_plus, padding).sequences
+    if len(index_minus) >= 1:
+        methylation_sequences_string += contig_sequence.sample_at_indices(index_minus, padding).reverse_compliment().sequences
+    if len(methylation_sequences_string) == 0:
+        log.info("No methylation sequences found")
+        return None
+    methylation_sequences = EqualLengthDNASet(methylation_sequences_string).convert_to_DNAarray()
+
+    total_sequences = methylation_sequences.shape[0]
+    
+    root_motif = Motif("." * padding + MOD_TYPE_TO_CANONICAL[mod_type] + "." * padding, padding)
+    methylation_sequences_clone = methylation_sequences.copy()
     best_candidates = []
     continue_search = True
     dead_ends = 0
@@ -432,47 +447,37 @@ def find_best_candidates(methylation_sequences, sequence, pileup, min_kl = 0.2, 
             log.debug("Stopping search, too many low scoring candidates")
             break
         # Find the initial guess within the tree
-        motif_graph, naive_guess = a_star_search(
+        searcher = MotifSearcher(
             root_motif, 
-            sequence, 
-            pileup, 
-            methylation_sequences_subset, 
+            contig_sequence, 
+            contig_pileup, 
+            methylation_sequences_clone, 
+            padding,
+            read_level_methylation = read_level_methylation,
+            na_positions = na_positions,
             motif_graph = motif_graph,
             min_kl = min_kl,
             max_rounds_since_new_best = max_rounds_since_new_best
         )
+        motif_graph, naive_guess = searcher.run()
 
         # If there is no naive guess, stop the search
         if naive_guess == root_motif:
             log.debug("No naive guess found, stopping search")
             break
-        guess = naive_guess
-        # next_guess = naive_guess
-        # while guess != next_guess:
-        #     # Find the best guess within the subtree of the naive guess
-        #     guess = next_guess
-        #     motif_graph, next_guess = a_star_search(
-        #         guess, 
-        #         sequence, 
-        #         pileup, 
-        #         methylation_sequences_subset, 
-        #         motif_graph = motif_graph,
-        #         min_kl = min_kl,
-        #         max_rounds_since_new_best = 5
-        #     )
 
         # Remove new candidate from methylation sequences
-        seq_before = methylation_sequences_subset.shape[0]
-        methylation_sequences_subset = methylation_sequences_subset.filter_sequence_matches(naive_guess.one_hot(), keep_matches = False)
-        if methylation_sequences_subset is None:
+        seq_before = methylation_sequences.shape[0]
+        methylation_sequences_clone = methylation_sequences_clone.filter_sequence_matches(naive_guess.one_hot(), keep_matches = False)
+        if methylation_sequences_clone is None:
             log.debug("No more sequences left")
             break
 
         # Check if we should continue the search
-        seq_remaining = methylation_sequences_subset.shape[0]
+        seq_remaining = methylation_sequences_clone.shape[0]
         seq_remaining_percent = seq_remaining/total_sequences
 
-        if motif_graph.nodes[naive_guess]["score"] < 0.1:
+        if motif_graph.nodes[naive_guess]["score"] < score_threshold:
             dead_ends += 1
             log.debug(f"Candidate has low score, {naive_guess}. {dead_ends} of {max_dead_ends} before temination")
             continue
@@ -481,96 +486,81 @@ def find_best_candidates(methylation_sequences, sequence, pileup, min_kl = 0.2, 
 
         best_candidates.append(naive_guess)
         
-        if (seq_remaining/total_sequences) < 0.01:
+        if (seq_remaining/total_sequences) < remaining_sequences_threshold:
             log.debug("Stopping search, too few sequences remaining")
             break
         log.debug("Continuing search")
     return motif_graph, best_candidates
 
 
- 
-def motif_child_nodes_kl_dist_max(motif, meth_pssm, contig_pssm, freq_threshold=0.25, min_kl=0.1):
-        kl_divergence = entropy(meth_pssm, contig_pssm)
-        split_motif = motif.split()
 
-        evaluated = np.array([i for i, base in enumerate(split_motif) if base != "."])
-        kl_divergence[evaluated] = 0
-        if np.max(kl_divergence) < min_kl:
-            return
-        
-        pos = np.where(kl_divergence == np.max(kl_divergence))[0][0]
-
-        # Methylation frequency most be above contig frequency
-        index_meth_frequncies_highest = meth_pssm[:, pos] > contig_pssm[:, pos]
-
-        # Methylation frequency most be above a threshold
-        index_meth_frequncies_above_threshold = meth_pssm[:, pos] > freq_threshold
-
-        # Combine the two filters
-        index_position_filt = np.logical_and(index_meth_frequncies_highest, index_meth_frequncies_above_threshold)
-        bases_index = np.argwhere(index_position_filt).reshape(-1)
-        bases_filt = [BASES[int(i)] for i in bases_index]
-        
-        # All combination of the bases
-        combinations = []
-        for i in range(1, min(len(bases_filt)+1, 4)):
-            combinations += list(itertools.combinations(bases_filt, i))
-        
-        for base in combinations:
-            if len(base) > 1:
-                base = "[" + "".join(list(base)) + "]"
-            else:
-                base = "".join(list(base))
-            new_motif = split_motif[:pos] + [base] + split_motif[pos+1:]
-            yield Motif("".join(new_motif), motif.mod_position)
-
- 
-def motif_child_nodes_kl_dist_prune(motif, meth_pssm, contig_pssm, min_kl=0.1, freq_threshold=0.35):
-        kl_divergence = entropy(meth_pssm, contig_pssm)
-        split_motif = motif.split()
-        
-        for pos in np.where(kl_divergence > min_kl)[0]:
-            if split_motif[pos] != ".":
-                continue
-
-            # Methylation frequency most be above contig frequency
-            index_meth_frequncies_highest = meth_pssm[:, pos] > contig_pssm[:, pos]
-
-            # Methylation frequency most be above a threshold
-            index_meth_frequncies_above_threshold = meth_pssm[:, pos] > freq_threshold
-
-            # Combine the two filters
-            index_position_filt = np.logical_and(index_meth_frequncies_highest, index_meth_frequncies_above_threshold)
-            bases_index = np.argwhere(index_position_filt).reshape(-1)
-            bases_filt = [BASES[int(i)] for i in bases_index]
-            
-            # All combination of the bases
-            combinations = []
-            for i in range(1, min(len(bases_filt)+1, 4)):
-                combinations += list(itertools.combinations(bases_filt, i))
-            
-            for base in combinations:
-                if len(base) > 1:
-                    base = "[" + "".join(list(base)) + "]"
-                else:
-                    base = "".join(list(base))
-                new_motif = split_motif[:pos] + [base] + split_motif[pos+1:]
-                yield Motif("".join(new_motif), motif.mod_position)
-
-def a_star_search(root_motif, contig, pileup, methylation_sequences, 
-                  motif_graph = None, min_kl = 0.1, max_rounds_since_new_best = 10, max_motif_length = 18):
+class MotifSearcher:
     """
-    A* search for methylation motifs
-
-    Parameters:
-    - root_motif (list): The root motif to start the search from.
-    - contig (str): The contig to be processed.
-    - pileup (Pileup): The pileup to be processed.
-    - methylation_sequences (DNAarray): The methylation sequences to be processed.
+    Class to perform motif search for identifying enriched motifs in methylated sequences.
     """
-    
-    # Function for calculating the priority of a motif
-    def priority_function(next_model, root_model):
+
+    def __init__(
+        self,
+        root_motif: Motif,
+        contig_sequence: DNAsequence,
+        contig_pileup: pl.DataFrame,
+        methylation_sequences: DNAarray,
+        padding: int,
+        read_level_methylation: bool = False,
+        na_positions = None,
+        motif_graph: Optional[MotifTree] = None,
+        min_kl: float = 0.1,
+        freq_threshold: float = 0.25,
+        max_rounds_since_new_best: int = 10,
+        max_motif_length: int = 18
+    ):
+        """
+        Initialize the MotifSearcher class.
+
+        Parameters:
+            root_motif (Motif): The initial motif to start the search from.
+            contig_sequence: The contig sequence object with necessary methods.
+            contig_pileup: The pileup data associated with the contig.
+            methylation_sequences: The methylation sequences to be analyzed.
+            padding (int): The padding size for sequence sampling.
+            read_level_methylation (bool): Flag to use read-level methylation.
+            na_positions (Optional[List[int]]): Positions with 'N/A' or missing data.
+            motif_graph (Optional[MotifTree]): An optional pre-initialized motif graph.
+            min_kl (float): Minimum Kullback-Leibler divergence threshold.
+            freq_threshold (float): Frequency threshold for methylation.
+            max_rounds_since_new_best (int): Max iterations without improvement.
+            max_motif_length (int): Maximum allowed motif length.
+        """
+        # Input validation
+        if contig_pileup.is_empty():
+            raise ValueError("contig_pileup cannot be empty.")
+        if padding < 0:
+            raise ValueError("padding must be non-negative.")
+
+        self.root_motif = root_motif
+        self.contig_sequence = contig_sequence
+        self.contig_pileup = contig_pileup
+        self.methylation_sequences = methylation_sequences
+        self.padding = padding
+        self.read_level_methylation = read_level_methylation
+        self.na_positions = na_positions
+        self.motif_graph = motif_graph or MotifTree()
+        self.min_kl = min_kl
+        self.freq_threshold = freq_threshold
+        self.max_rounds_since_new_best = max_rounds_since_new_best
+        self.max_motif_length = max_motif_length
+
+    def _priority_function(self, next_model, root_model) -> float:
+        """
+        Calculate the priority for a motif based on the change in model parameters.
+
+        Parameters:
+            next_model: The model of the next motif.
+            root_model: The model of the root motif.
+
+        Returns:
+            float: The calculated priority.
+        """
         try:
             d_alpha = 1 - (next_model._alpha / root_model._alpha)
         except ZeroDivisionError:
@@ -582,92 +572,238 @@ def a_star_search(root_motif, contig, pileup, methylation_sequences,
         priority = d_alpha * d_beta
         return priority
 
+    def _scoring_function(self, next_model, current_model) -> float:
+        """
+        Calculate the score for a motif based on its model.
 
-    # Function for scoring a motif
-    def scoring_function(next_model, current_model):
-        mean_diff =  next_model.mean() - current_model.mean()
-        return (next_model.mean() * -np.log10(next_model.standard_deviation())) * mean_diff
+        Parameters:
+            next_model: The model of the next motif.
+            current_model: The model of the current motif.
 
-    # Search setup
-    padding = methylation_sequences.shape[1] // 2
-    total_sequences = methylation_sequences.shape[0]
-    best_guess = root_motif
-    root_model = motif_model_contig(pileup, contig.sequence, root_motif)
-    best_score = scoring_function(root_model, root_model)
-    rounds_since_new_best = 0
-    visisted_nodes = []
+        Returns:
+            float: The calculated score.
+        """
+        mean_diff = next_model.mean() - current_model.mean()
+        try:
+            score = (next_model.mean() * -np.log10(next_model.standard_deviation())) * mean_diff
+        except (ValueError, ZeroDivisionError):
+            score = 0
+        return score
 
-    # Sample sequence in contig to get background for KL-divergence
-    contig_sequences = contig.sample_n_subsequences(padding*2 + 1, 10000)
-    contig_pssm = contig_sequences.pssm()
+    def _motif_child_nodes_kl_dist_max(
+        self,
+        motif: Motif,
+        meth_pssm: np.ndarray,
+        contig_pssm: np.ndarray
+    ) -> Generator[Motif, None, None]:
+        """
+        Generate child motifs based on maximum KL divergence.
 
-    # Initialize the search tree
-    if motif_graph is None:
-        motif_graph = MotifTree()
-    motif_graph.add_node(root_motif, model=root_model, motif=root_motif, visited=False, score=scoring_function(root_model, root_model))
+        Parameters:
+            motif (Motif): The current motif.
+            meth_pssm (np.ndarray): Position-specific scoring matrix for methylation.
+            contig_pssm (np.ndarray): Position-specific scoring matrix for the contig.
 
-    # Initialize priority que
-    priority_que = []
-    hq.heappush(priority_que, (0, root_motif))
+        Yields:
+            Motif: The next motif in the search.
+        """
+        kl_divergence = entropy(meth_pssm, contig_pssm)
+        split_motif = motif.split()
 
-    # Search loop
-    while len(priority_que) > 0:
-        # Get the current best candidate
-        current = hq.heappop(priority_que)[1]
-        if current in visisted_nodes:
-            continue
-        if len(current.strip()) > max_motif_length:
-            log.debug(f"{current}, Skipping scoring and expansion due to length (>{max_motif_length})")
-            continue
+        # Positions to evaluate (positions with '.')
+        evaluated_positions = np.array([i for i, base in enumerate(split_motif) if base == "."])
+        if evaluated_positions.size == 0:
+            return
+
+        kl_divergence_masked = kl_divergence.copy()
+        kl_divergence_masked[~np.isin(np.arange(len(split_motif)), evaluated_positions)] = 0
+
+        max_kl = np.max(kl_divergence_masked)
+        if max_kl < self.min_kl:
+            return
+
+        pos = int(np.argmax(kl_divergence_masked))
+
+        # Methylation frequency must be above contig frequency
+        index_meth_freq_higher = meth_pssm[:, pos] > contig_pssm[:, pos]
+
+        # Methylation frequency must be above a threshold
+        index_meth_freq_above_thresh = meth_pssm[:, pos] > self.freq_threshold
+
+        # Combine the two filters
+        index_position_filter = np.logical_and(index_meth_freq_higher, index_meth_freq_above_thresh)
+        bases_indices = np.argwhere(index_position_filter).reshape(-1)
+        bases_filtered = [BASES[int(i)] for i in bases_indices]
+
+        if not bases_filtered:
+            return
+
+        # All combinations of the bases
+        max_combination_length = min(len(bases_filtered), 4)
+        for i in range(1, max_combination_length + 1):
+            for base_tuple in itertools.combinations(bases_filtered, i):
+                if len(base_tuple) > 1:
+                    base_str = "[" + "".join(base_tuple) + "]"
+                else:
+                    base_str = base_tuple[0]
+                new_motif_sequence = split_motif.copy()
+                new_motif_sequence[pos] = base_str
+                new_motif_str = "".join(new_motif_sequence)
+                yield Motif(new_motif_str, motif.mod_position)
+
+    def run(self) -> tuple[MotifTree, list[Motif]]:
+        """
+        Execute the motif search algorithm.
+
+        Returns:
+            Tuple[MotifTree, Motif]: The graph of motifs explored and the best motif found.
+        """
+        # Initialize variables
+        best_guess = self.root_motif
+        if self.read_level_methylation:
+            root_model = motif_model_read(
+                self.contig_pileup, self.contig_sequence.sequence, self.root_motif
+            )
+        else:
+            root_model = motif_model_contig(
+                self.contig_pileup,
+                self.contig_sequence.sequence,
+                self.root_motif,
+                na_positions=self.na_positions
+            )
+        best_score = self._scoring_function(root_model, root_model)
+        rounds_since_new_best = 0
+        visited_nodes: set[Motif] = set()
+
+        # Sample sequences in contig to get background for KL-divergence
+        contig_sequences_sample = self.contig_sequence.sample_n_subsequences(
+            self.padding * 2 + 1, 10000
+        )
+        contig_pssm = contig_sequences_sample.pssm()
+
+        # Initialize the search tree
+        self.motif_graph.add_node(
+            self.root_motif,
+            model=root_model,
+            motif=self.root_motif,
+            visited=False,
+            score=best_score
+        )
+
+        # Initialize priority queue
+        priority_queue: list[tuple[float, Motif]] = []
+        hq.heappush(priority_queue, (0, self.root_motif))
+
+        # Search loop
+        while priority_queue:
+            # Get the current best candidate
+            _, current_motif = hq.heappop(priority_queue)
+            if current_motif in visited_nodes:
+                continue
+            if len(current_motif.strip()) > self.max_motif_length:
+                log.debug(
+                    f"{current_motif.string}, Skipping due to length > {self.max_motif_length}"
+                )
+                continue
+
+            current_model = self.motif_graph.nodes[current_motif]["model"]
+            visited_nodes.add(current_motif)
+            log.debug(
+                f"{current_motif.string} | Model: {current_model} | "
+                f"Score: {self.motif_graph.nodes[current_motif]['score']:.2f} | "
+                f"Queue size: {len(priority_queue)}"
+            )
+            self.motif_graph.nodes[current_motif]["visited"] = True
+            rounds_since_new_best += 1
+
+            active_methylation_sequences = self.methylation_sequences.copy().filter_sequence_matches(
+                current_motif.one_hot(), keep_matches=True
+            )
+            if active_methylation_sequences is None:
+                log.debug("No more sequences left after filtering")
+                continue
+
+            # Generate and evaluate neighbor motifs
+            neighbors = list(self._motif_child_nodes_kl_dist_max(
+                current_motif,
+                active_methylation_sequences.pssm(),
+                contig_pssm
+            ))
+
+            # Add neighbors to graph
+            for next_motif in neighbors:
+                if next_motif in self.motif_graph.nodes:
+                    # Add only edge if motif already visited
+                    next_model = self.motif_graph.nodes[next_motif]["model"]
+                    score = self.motif_graph.nodes[next_motif]["score"]
+                    self.motif_graph.add_edge(current_motif, next_motif)
+                else:
+                    if self.read_level_methylation:
+                        next_model = motif_model_read(
+                            self.contig_pileup,
+                            self.contig_sequence.sequence,
+                            next_motif
+                        )
+                    else:
+                        next_model = motif_model_contig(
+                            self.contig_pileup,
+                            self.contig_sequence.sequence,
+                            next_motif,
+                            na_positions=self.na_positions
+                        )
+
+                    # Add neighbor to graph
+                    self.motif_graph.add_node(
+                        next_motif,
+                        model=next_model,
+                        motif=next_motif,
+                        visited=False
+                    )
+                    self.motif_graph.add_edge(current_motif, next_motif)
+
+                    score = self._scoring_function(next_model, current_model)
+                    self.motif_graph.nodes[next_motif]["score"] = score
+
+                # Add neighbor to priority queue if not visited
+                if next_motif not in visited_nodes:
+                    priority = self._priority_function(next_model, current_model)
+                    hq.heappush(priority_queue, (priority, next_motif))
+
+                if score > best_score:
+                    best_score = score
+                    best_guess = next_motif
+                    rounds_since_new_best = 0
+
+            # Stopping criteria
+            if rounds_since_new_best >= self.max_rounds_since_new_best:
+                break
+
+        return self.motif_graph, best_guess
 
 
-        current_model = motif_graph.nodes[current]["model"]
-        visisted_nodes.append(current)
-        log.debug(f"{''.join(current)} | {current_model} | {motif_graph.nodes[current]['score']:.2f} | {len(priority_que)}")
-        motif_graph.nodes[current]["visited"] = True
-        rounds_since_new_best += 1
-        active_methylation_sequences = methylation_sequences.copy().filter_sequence_matches(current.one_hot(), keep_matches = True)
-        if active_methylation_sequences is None:
-            log.debug("No more sequences left")
-            continue
-        # Prune the neibhors of the current candidate
-        neighbors = list(motif_child_nodes_kl_dist_max(
-            current, 
-            active_methylation_sequences.pssm(), 
-            contig_pssm
-        ))
 
-        # Add neighbors to graph
-        for next in neighbors:
-            if next in motif_graph.nodes:
-                # Add only edge if motif -> next
-                next_model = motif_graph.nodes[next]["model"]
-                score = motif_graph.nodes[next]["score"]
-                motif_graph.add_edge(current, next)
-            else:
-                next_model = motif_model_contig(pileup, contig.sequence, next)
 
-                # Add neighbor to graph
-                motif_graph.add_node(next, model=next_model, motif=next, visited=False)
-                motif_graph.add_edge(current, next)
 
-                score = scoring_function(next_model, current_model)
-                motif_graph.nodes[next]["score"] = score
 
-            # Add neighbor to priority que if has not been visited in this search
-            if next not in visisted_nodes:
-                priority =  priority_function(next_model, current_model)
-                hq.heappush(priority_que, (priority, next))
-            
-            if score > best_score:
-                best_score = score
-                best_guess = next
-                rounds_since_new_best = 0
 
-        # Stopping criteria
-        if rounds_since_new_best >= max_rounds_since_new_best:
-            break
-    return motif_graph, best_guess
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def count_periods_at_start(s):
@@ -695,9 +831,3 @@ def nxgraph_to_dataframe(graph):
     }).sort("score", descending=True)
 
 
-
-if __name__ == "__main__":
-    from nanomotif.dataload import load_assembly, load_pileup
-    assembly = load_assembly("data/ecoli/assembly.polished.fasta")
-    ecoli = load_pileup("data/ecoli/modkit.pileup.bed")
-    result = process_sample(assembly, ecoli.pileup, min_read_methylation_fraction = 0.80)
