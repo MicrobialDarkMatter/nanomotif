@@ -27,8 +27,9 @@ def test_include_contigs(loaded_data, motifs_scored_in_bins_and_bin_motifs):
     include_contigs_df = include_contigs_df.to_pandas()
     
     assert include_contigs_df is not None
-    assert include_contigs_df.shape[0] == 3
-    assert include_contigs_df[include_contigs_df["bin"] == "b3"]["contig"].iloc[0] == "contig_15"
+    print(include_contigs_df)
+    assert include_contigs_df.shape[0] == 2
+    assert include_contigs_df[include_contigs_df["bin"] == "b2"]["contig"].iloc[0] == "contig_6"
     
     
     

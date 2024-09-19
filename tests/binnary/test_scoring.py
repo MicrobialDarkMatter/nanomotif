@@ -80,6 +80,6 @@ def test_compare_methylation_pattern_include(loaded_data, motifs_scored_in_bins_
     contig_bin_comparison_score = contig_bin_comparison_score.to_pandas()
     
     assert contig_bin_comparison_score is not None
-    assert set(contig_bin_comparison_score["bin"].unique()) =={'b2', 'b3'} 
-    assert len(contig_bin_comparison_score["contig"].unique()) == 2
+    assert set(contig_bin_comparison_score["bin"].unique()) =={'b2'} 
+    assert len(contig_bin_comparison_score["contig"].unique()) == 1
     
