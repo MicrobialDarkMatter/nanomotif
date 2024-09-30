@@ -3,7 +3,7 @@ from nanomotif._version import __version__
 import os
 
 
-def  create_parser():
+def create_parser():
     formatter = lambda prog: argparse.HelpFormatter(prog,max_help_position=28)
     parser = argparse.ArgumentParser(description="Motif identification and utilisation commands", formatter_class=formatter)
     parser.add_argument("--version", action="version", version="%(prog)s {}".format(__version__))

@@ -1,0 +1,5 @@
+hit_id	replicon	hit_pos	hit_sequence_length	gene_name	i_eval	hit_score	hit_profile_cov	hit_seq_cov	hit_begin_match	hit_end_match	RM_system
+contig_3_1707	contig_3	1707	472	RM_Type_II__Type_II_MTases	1.1999999999999999e-118	393.9	0.855	0.79	85	457	False
+contig_3_324	contig_3	324	278	RM_Type_II__Type_II_MTases	1.4e-87	291.4	0.727	0.957	2	267	False
+contig_3_3688	contig_3	3688	529	RM__Type_I_MTases	4.600000000000001e-252	835.1	0.965	0.97	1	513	True
+contig_3_446	contig_3	446	294	RM_Type_II__Type_II_MTases	5e-93	309.5	0.719	0.908	10	276	False
