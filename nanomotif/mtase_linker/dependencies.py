@@ -20,22 +20,7 @@ def snakemake_create_environments(args):
         sys.exit(-1)
 
     dependency_dir = os.path.join(args.dependency_dir, "ML_dependencies")
-    # workflow = None
-    # workflow = {"DEPENDENCYDIR": dependency_dir}
-    
-    # status = snakemake.snakemake(snakefile,
-    #                             config = workflow,
-    #                             targets = ["all"],
-    #                             conda_prefix = os.path.join(args.dependency_dir, "ML_dependencies", "ML_envs"),
-    #                             use_conda = True,
-    #                             conda_create_envs_only = True,
-    #                             cores = 1, workdir = cwd)
 
-    #  # Check if the workflow executed successfully
-    # if status:
-    #     print("Conda environments were successfully created.")
-    # else:
-    #     print("Creation of conda environments failed.")
 
     command = [
         "snakemake",
@@ -73,21 +58,7 @@ def get_models(args):
         sys.exit(-1)
 
     dependency_dir = os.path.join(args.dependency_dir, "ML_dependencies")
-    # workflow = None
-    # workflow = {"DEPENDENCYDIR": dependency_dir}
-    
-    # status = snakemake.snakemake(snakefile,
-    #                             config = workflow,
-    #                             targets = ["make_REbase_db"],
-    #                             conda_prefix = os.path.join(args.dependency_dir, "ML_dependencies", "ML_envs"),
-    #                             use_conda = True,
-    #                             cores = 1, workdir = cwd)
 
-    #  # Check if the workflow executed successfully
-    # if status:
-    #     print("pfam models and REbase database were successfully retreived.")
-    # else:
-    #     print("pfam models and REbase database could not be retreived.")
 
     command = [
         "snakemake",
@@ -125,21 +96,7 @@ def defensefinder_update(args):
         sys.exit(-1)
 
     dependency_dir = os.path.join(args.dependency_dir, "ML_dependencies")
-    # workflow = None
-    # workflow = {"DEPENDENCYDIR": dependency_dir}
 
-
-    # status = snakemake.snakemake(snakefile, config=workflow,
-    #                             targets = ["defense_finder_update"], 
-    #                             use_conda = True,
-    #                             conda_prefix = os.path.join(args.dependency_dir, "ML_dependencies", 'ML_envs'),
-    #                             cores = 1, workdir = cwd)
-
-    #  # Check if the workflow executed successfully
-    # if status:
-    #     print("Defensefinder models updated succesfully")
-    # else:
-    #     print("Update of Defensefinder models failed.")
 
     command = [
         "snakemake",
@@ -184,8 +141,6 @@ def check_installation_MTase_linker(args):
 
     try:
         result = subprocess.run(command, cwd=cwd, check=True)
-        #if os.path.exists(os.path.join(dependency_dir, "check_installation")):
-       #     shutil.rmtree(os.path.join(dependency_dir, "check_installation"))
         if result.returncode == 0:
             print("Installation of MTase-linker was successful.")
     except subprocess.CalledProcessError as e:
