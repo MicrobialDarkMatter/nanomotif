@@ -1,5 +1,0 @@
-bin	gene_id	contig	mod_type_pred	sub_type	RM_system	motif_type_pred	REbase_ID	motif_pred	linked	detected_motif
-e_coli_K12	contig_3_1707	contig_3	m	Type_II	False	palindrome	M.SflLIN6DcmP	CCWGG	True	CCWGG
-e_coli_K12	contig_3_324	contig_3	ac	Type_II	False	palindrome	M.UbaC1152DamP	GATC	True	GATC
-e_coli_K12	contig_3_3688	contig_3	ac	Type_I	True	bipartite	M.SenHNK130ORF17125P	AACNNNNNNGTGC	True	AACNNNNNNGTGC
-e_coli_K12	contig_3_446	contig_3	ac	Type_II	False	palindrome	M.Eco4792LORF2734P	ATGCAT	False	

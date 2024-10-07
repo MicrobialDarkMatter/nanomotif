@@ -1,9 +1,0 @@
-sys_id	type	subtype	sys_beg	sys_end	protein_in_syst	genes_count	name_of_profiles_in_sys
-contig_3_RM_Type_IV_7	RM	RM_Type_IV	contig_3_2509	contig_3_2509	contig_3_2509	1	RM_Type_IV__Type_IV_REases
-contig_3_RM_Type_I_6	RM	RM_Type_I	contig_3_3687	contig_3_3689	contig_3_3687,contig_3_3688,contig_3_3689	3	RM__Type_I_REases,RM__Type_I_MTases,RM__Type_I_S
-contig_3_MazEF_3	MazEF	MazEF	contig_3_905	contig_3_906	contig_3_905,contig_3_906	2	MazEF__MazE,MazEF__MazF
-contig_3_RnlAB_5	RnlAB	RnlAB	contig_3_1048	contig_3_1049	contig_3_1048,contig_3_1049	2	RnlAB__RnlB,RnlAB__RnlA
-contig_3_MazEF_4	MazEF	MazEF	contig_3_3812	contig_3_3813	contig_3_3812,contig_3_3813	2	MazEF__MazF,MazEF__MazE
-contig_3_Lit_1	Lit	Lit	contig_3_2528	contig_3_2528	contig_3_2528	1	Lit__Lit
-contig_3_Hachiman_2	Hachiman	Hachiman	contig_3_1050	contig_3_1051	contig_3_1050,contig_3_1051	2	Hachiman__HamA_2,Hachiman__HamB
-contig_3_CAS_Class1-Subtype-I-E_8	CasFinder	CAS_Class1-Subtype-I-E	contig_3_927	contig_3_934	contig_3_927,contig_3_928,contig_3_929,contig_3_930,contig_3_931,contig_3_932,contig_3_933,contig_3_934	8	cas3_I_5,cas8e_I-E_1,cse2gr11_I-E_1,cas7_I-E_2,cas5_I-E_3,cas6e_I_II_III_IV_V_VI_1,cas1_I-E_1,cas2_I-E_2
