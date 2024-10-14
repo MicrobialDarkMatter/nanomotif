@@ -129,9 +129,9 @@ def check_installation_MTase_linker(args):
         "MTase-linker", 
         "run", 
         "--threads", "1", 
-        "--assembly", os.path.join(thisdir, "..", "datasets", "mtase_linker_check_installation", "assembly.polished.fa"), 
-        "--contig_bin", os.path.join(thisdir, "..", "datasets", "mtase_linker_check_installation", "contig_bin.tsv"), 
-        "--bin_motifs", os.path.join(thisdir, "..", "datasets", "mtase_linker_check_installation", "bin-motifs.tsv"), 
+        "--assembly", os.path.join(thisdir, "..", "datasets", "e_coli_assembly.polished.fasta"), 
+        "--contig_bin", os.path.join(thisdir, "..", "datasets", "e_coli_contig-bin.tsv"), 
+        "--bin_motifs", os.path.join(thisdir, "..", "datasets", "e_coli_bin-motifs.tsv"), 
         "--out", os.path.join(dependency_dir, "check_installation"),
         "-d", dependency_dir, 
         "--forceall", "True"
