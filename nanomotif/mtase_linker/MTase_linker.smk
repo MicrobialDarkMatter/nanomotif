@@ -82,9 +82,9 @@ rule extract_MTase_protein_seqs:
         prodigal_AAs = os.path.join(OUTPUTDIR, "prodigal", f"{BASENAME}_processed.faa")
     output:
         DF_MTase_table = os.path.join(OUTPUTDIR, "defensefinder", f"{BASENAME}_processed_defense_finder_mtase.tsv"),
-        DF_MTase_AA = os.path.join(OUTPUTDIR, "defensefinder", f"{BASENAME}_processed_defense_finder_mtase.faa")
+        DF_MTase_AA = os.path.join(OUTPUTDIR, "defensefinder", f"{BASENAME}_processed_defense_finder_mtase.faa"),
     conda:
-        "envs/python_env-3.12.0.yaml"
+        "envs/python_env-3.12.0.yaml",
     script:
         "src/extract_MTase_genes.py"
 
