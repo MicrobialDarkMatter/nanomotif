@@ -191,20 +191,23 @@ def worker_function(
     - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
     - padding (int): The padding to use for the motif.
     """
+    process_id = os.getpid()
+    if log_dir is not None:
+        log_file = f"{log_dir}/find-motifs.{process_id}.log"
+        configure_logger(log_file, verbose=verbose)
+    log.info(f"Worker {process_id} started")
+
     set_seed(seed=seed)
     warnings.filterwarnings("ignore")
     contig, modtype, subpileup, low_coverage_positions = args
 
     if low_coverage_positions is not None:
+        low_coverage_positions = low_coverage_positions.explode("position", "strand")
         low_coverage_positions = {
             "fwd": low_coverage_positions.filter(pl.col("strand") == "+")["position"].to_numpy(),
             "rev": low_coverage_positions.filter(pl.col("strand") == "-")["position"].to_numpy()
         }
     
-    process_id = os.getpid()
-    if log_dir is not None:
-        log_file = f"{log_dir}/find-motifs.{process_id}.log"
-        configure_logger(log_file, verbose=verbose)
 
     try:
         result = process_subpileup(
@@ -309,7 +312,6 @@ def process_sample_parallel(
     - pileup (Pileup): The pileup to be processed.
     - max_candidate_size (int): The maximum size of the candidate motifs.
     - min_read_methylation_fraction (float): The minimum fraction of reads that must be methylated for a position to be considered methylated.
-    - threshold_valid_coverage (int): The minimum number of reads that must cover a position for it to be considered valid.
     - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
     - min_cdf_score (float): Minimum score of 1 - cdf(cdf_position) for a motif to be considered valid.
     - cdf_position (float): The position to evaluate the cdf at.
@@ -321,22 +323,24 @@ def process_sample_parallel(
     assert search_frame_size > 0, "search_frame_size must be greater than 0"
     assert threshold_methylation_confident >= 0 and threshold_methylation_confident <= 1, "threshold_methylation_confident must be between 0 and 1"
     assert threshold_methylation_general >= 0 and threshold_methylation_general <= 1, "threshold_methylation_general must be between 0 and 1"
-    assert threshold_valid_coverage >= 0, "min_valid_coverage must be greater than 0"
     assert minimum_kl_divergence >= 0, "mininum_kl_divergence must be greater than 0"
 
     # Infer padding size from candidate_size
     padding = search_frame_size // 2
-
-    # Filter pileup
-    pileup = pileup \
-            .filter(pl.col("Nvalid_cov") > threshold_valid_coverage) \
-            .sort("contig") 
     
     # Create a list of tasks (TODO: not have a list of all data)
+
+    log.debug("Creating task list for workers")
     if low_coverage_positions is not None:
-        tasks = [(contig, modtype, subpileup, low_coverage_positions.filter((pl.col("contig")==contig) & (pl.col("mod_type") == modtype))) for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])]
+        tasks = (
+            (contig, modtype, subpileup, low_coverage_positions.filter((pl.col("contig") == contig) & (pl.col("mod_type") == modtype)))
+            for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])
+        )
     else:
-        tasks = [(contig, modtype, subpileup, None) for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])]
+        tasks = (
+            (contig, modtype, subpileup, None)
+            for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])
+        )
     # Create a progress manager
     manager = multiprocessing.Manager()
     counter = manager.Value('i', 0)
@@ -346,16 +350,23 @@ def process_sample_parallel(
     pool = get_context("spawn").Pool(processes=threads)
 
     # Create a process for the progress bar
-    progress_bar_process = multiprocessing.Process(target=update_progress_bar, args=(counter, len(tasks), True))
+    total_tasks = sum(1 for _ in tasks)
+    tasks = (  # Re-create generator as it’s exhausted after counting
+        (contig, modtype, subpileup, low_coverage_positions.filter((pl.col("contig") == contig) & (pl.col("mod_type") == modtype)))
+        if low_coverage_positions is not None else
+        (contig, modtype, subpileup, None)
+        for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])
+    )
+    progress_bar_process = multiprocessing.Process(target=update_progress_bar, args=(counter, total_tasks, True))
     progress_bar_process.start()
 
     # Put them workers to work
-    results = pool.starmap(worker_function, [(
-        task, 
-        counter, lock, 
-        assembly, minimum_kl_divergence, padding, threshold_methylation_confident, read_level_methylation,
-        log_dir, verbose, seed
-        ) for task in tasks])
+    log.debug("Starting workers")
+    results = pool.starmap(worker_function, (
+        (task, counter, lock, assembly, minimum_kl_divergence, padding, threshold_methylation_confident, read_level_methylation,
+         log_dir, verbose, seed)
+        for task in tasks
+    ))
     results = [result for result in results if result is not None]
 
     # Close the pool
@@ -422,6 +433,12 @@ def find_best_candidates(
     index_plus = subpileup_confident.filter(pl.col("strand") == "+").get_column("position").to_list()
     index_minus = subpileup_confident.filter(pl.col("strand") == "-").get_column("position").to_list()
     
+    # Sample sequences in contig to get background for KL-divergence
+    contig_sequences_sample = contig_sequence.sample_n_subsequences(
+        padding * 2 + 1, 10000
+    )
+    contig_pssm = contig_sequences_sample.pssm()
+
     methylation_sequences_string = []
     if len(index_plus) >= 1:
         methylation_sequences_string += contig_sequence.sample_at_indices(index_plus, padding).sequences
@@ -449,6 +466,7 @@ def find_best_candidates(
         searcher = MotifSearcher(
             root_motif, 
             contig_sequence, 
+            contig_pssm,
             contig_pileup, 
             methylation_sequences_clone, 
             padding,
@@ -502,6 +520,7 @@ class MotifSearcher:
         self,
         root_motif: Motif,
         contig_sequence: DNAsequence,
+        contig_pssm: DNAarray,
         contig_pileup: pl.DataFrame,
         methylation_sequences: DNAarray,
         padding: int,
@@ -519,6 +538,7 @@ class MotifSearcher:
         Parameters:
             root_motif (Motif): The initial motif to start the search from.
             contig_sequence: The contig sequence object with necessary methods.
+            contig_pssm: The position-specific scoring matrix for the contig background.
             contig_pileup: The pileup data associated with the contig.
             methylation_sequences: The methylation sequences to be analyzed.
             padding (int): The padding size for sequence sampling.
@@ -538,6 +558,7 @@ class MotifSearcher:
 
         self.root_motif = root_motif
         self.contig_sequence = contig_sequence
+        self.contig_pssm = contig_pssm
         self.contig_pileup = contig_pileup
         self.methylation_sequences = methylation_sequences
         self.padding = padding
@@ -650,7 +671,7 @@ class MotifSearcher:
                 new_motif_str = "".join(new_motif_sequence)
                 yield Motif(new_motif_str, motif.mod_position)
 
-    def run(self) -> tuple[MotifTree, list[Motif]]:
+    def run(self) -> tuple[MotifTree, Motif]:
         """
         Execute the motif search algorithm.
 
@@ -673,12 +694,6 @@ class MotifSearcher:
         best_score = self._scoring_function(root_model, root_model)
         rounds_since_new_best = 0
         visited_nodes: set[Motif] = set()
-
-        # Sample sequences in contig to get background for KL-divergence
-        contig_sequences_sample = self.contig_sequence.sample_n_subsequences(
-            self.padding * 2 + 1, 10000
-        )
-        contig_pssm = contig_sequences_sample.pssm()
 
         # Initialize the search tree
         self.motif_graph.add_node(
@@ -726,7 +741,7 @@ class MotifSearcher:
             neighbors = list(self._motif_child_nodes_kl_dist_max(
                 current_motif,
                 active_methylation_sequences.pssm(),
-                contig_pssm
+                self.contig_pssm
             ))
 
             # Add neighbors to graph

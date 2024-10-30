@@ -94,6 +94,7 @@ def worker_function(args, counter, lock, sequence, motifs, log_dir, verbose, see
     contig, modtype, subpileup, na_positions = args
 
     if na_positions is not None:
+        na_positions = na_positions.explode("position", "strand")
         na_positions = {
             "fwd": na_positions.filter(pl.col("strand") == "+")["position"].to_numpy(),
             "rev": na_positions.filter(pl.col("strand") == "-")["position"].to_numpy()
