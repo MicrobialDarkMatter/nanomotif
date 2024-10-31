@@ -130,7 +130,7 @@ If decontamination should not be performed, the `include_contigs` can be run wit
 #### save_scores
 Save scores will create a csv file for each contig, which contains all the information for scoring the contig. Columns are:
 - bin: The bin the contig is compared to
-- motif_mod: The motif being compared `motif_string + "_" + mod_type + "-" + mod_position`
+- motif_mod: The motif being compared `motif_string + "_" + mod_type + "_" + mod_position`
 - n_mod: The number of modified motifs in bin
 - n_nomod: The number of unmodified motifs in bin
 - n_motifs_bin: The total number of motifs in bin
