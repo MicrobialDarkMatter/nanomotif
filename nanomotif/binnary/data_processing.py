@@ -17,9 +17,6 @@ def load_data(args):
     logger.info("Loading data.")
     # Load the data from the provided files
     # Load the data from the provided files using Polars
-    
-    motifs_scored = pl.read_csv(args.motifs_scored, separator="\t")
-    
     bin_motifs = pl.read_csv(args.bin_motifs, separator="\t")
     
     # Polars automatically infers headers; if args.contig_bins file doesn't have headers, you need to specify it
@@ -30,7 +27,7 @@ def load_data(args):
         })
 
     logger.info("Data loaded.")
-    return motifs_scored, bin_motifs, contig_bins
+    return bin_motifs, contig_bins
 
 def read_fasta(file_path):
     # Check if the file exists

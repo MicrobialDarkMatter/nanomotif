@@ -457,20 +457,11 @@ def binnary(args, pl):
 
     
     # Settting up the logger
-    # set_logger_config(args)
-    # logger = log.getLogger(__name__)
     log.info("Starting Binnary analysis...")
-    
-    # Set number of threads for polars
-    os.environ['POLARS_MAX_THREADS'] = str(args.threads)
-    
-    POLAR_THREADS = pl.threadpool_size()
-    log.info(f"Polars is using {POLAR_THREADS} threads.")
     
     # Step 1: Load and preprocess data
     # These functions would be defined in your data_processing module
     (
-        motifs_scored,
         bin_motifs,
         contig_bins,
     ) = data_processing.load_data(args)
