@@ -1,3 +1,0 @@
-[submodule "methylation_utils"]
-	path = methylation_utils
-	url = git@github.com:SebastianDall/methylation_utils.git
