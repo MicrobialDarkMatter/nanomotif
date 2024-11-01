@@ -7,7 +7,7 @@ import sys
 import platform
 
 METHYLATION_UTILS_URL = {
-    "Linux": "https://github.com/SebastianDall/methylation_utils/releases/download/v0.1.0/methylation_utils",
+    "Linux": "https://github.com/SebastianDall/methylation_utils/releases/download/v0.2.0/methylation_utils",
 }
 
 
