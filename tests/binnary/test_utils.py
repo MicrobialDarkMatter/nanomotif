@@ -1,8 +1,9 @@
 import polars as pl
 import pandas as pd
 from nanomotif.binnary import utils as ut
-
-
+from .conftest import MockArgs
+import os
+from pathlib import Path
 
 def test_split_bin_contig():
     # Input DataFrame
@@ -25,3 +26,23 @@ def test_split_bin_contig():
     
     # Verify the output
     pd.testing.assert_frame_equal(output, expected_output, check_like=True)
+
+def test_methylation_utils():
+    args = MockArgs()
+
+    ut.run_methylation_utils(
+        pileup = "nanomotif/datasets/geobacillus-plasmids.pileup.bed",
+        assembly = "nanomotif/datasets/geobacillus-plasmids.assembly.fasta",
+        motifs = ["GATC_m_3", "GATC_a_1"],
+        threads = 1,
+        min_valid_read_coverage = args.min_valid_read_coverage,
+        output = args.out
+    )
+
+    file = Path(os.path.join(args.out, "motifs-scored-read-methylation.tsv"))
+    assert file.exists(), "motifs_scored-read-methylation.tsv does not exist"
+
+    res = pl.read_csv(file, separator = "\t")
+    assert res.shape == (4, 6), "Shape does not match"
+
+    
