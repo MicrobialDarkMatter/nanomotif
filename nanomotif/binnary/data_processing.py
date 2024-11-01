@@ -153,7 +153,7 @@ def prepare_bin_consensus(bin_motifs, args):
     return bin_motif_binary_enriched
 
 
-def prepare_motifs_scored_in_bins(motifs_scored, motifs_of_interest, contig_bins):
+def add_bin_to_motifs_scored(motifs_scored, contig_bins):
     """
     Prepares the motifs_scored_in_bins DataFrame by merging with bin motifs, contig bins, and assembly stats,
     and calculates additional metrics like number of motifs and mean methylation per contig.
@@ -162,102 +162,77 @@ def prepare_motifs_scored_in_bins(motifs_scored, motifs_of_interest, contig_bins
     # Filter and enhance motifs_scored based on motifs_in_bins
     motifs_scored_in_bins = motifs_scored \
         .with_columns(
-            (pl.col("motif") + "_" + pl.col("mod_type") + "-" + pl.col("mod_position").cast(pl.Utf8)).alias("motif_mod"),
-            (pl.col("n_mod") + pl.col("n_nomod")).alias("n_motifs")
-        ) \
-        .filter(pl.col("motif_mod").is_in(motifs_of_interest)) \
-        .with_columns((pl.col("n_mod") / pl.col("n_motifs")).alias("mean"))
+            (pl.col("motif") + "_" + pl.col("mod_type") + "_" + pl.col("mod_position").cast(pl.Utf8)).alias("motif_mod")
+        )
     
     # Merge with contig_bins
     motifs_scored_in_bins = motifs_scored_in_bins.join(contig_bins, on="contig", how="left") \
         .with_columns(pl.col("bin").fill_null("unbinned")) \
         .with_columns((pl.col("bin") + "_" + pl.col("contig")).alias("bin_contig"))
     
-    
-    # Remove complement columns:
-    # Identify columns that contain the word "complement"
-    complement_columns = [col for col in motifs_scored_in_bins.columns if 'complement' in col]
-
-    # Drop these columns from the DataFrame
-    motifs_scored_in_bins = motifs_scored_in_bins.drop(complement_columns)
-
-    
     return motifs_scored_in_bins
 
 
-def remove_ambiguous_motifs_from_bin_consensus(motifs_scored_in_bins, args):
+def remove_ambiguous_motifs_from_bin_consensus(contig_methylation, min_motifs_in_contig, ambiguous_motif_percentage_cutoff):
     # Remove motifs in bins where the majority of the mean methylation of motifs is in the range of 0.05-0.4
-    contig_motif_mean_density = motifs_scored_in_bins \
+    ambiguous_contig_methylation = contig_methylation \
         .filter(pl.col("bin") != "unbinned") \
-        .filter(pl.col("n_motifs") >= args.n_motif_contig_cutoff) \
+        .filter(pl.col("N_motif_obs") >= min_motifs_in_contig) \
         .with_columns(
-            ((pl.col("mean") > 0.05) & (pl.col("mean") < 0.4)).alias("is_ambiguous")
+            ((pl.col("median") > 0.05) & (pl.col("median") < 0.4)).alias("is_ambiguous")
         )
 
     # Count the number of ambiguous motifs per bin
     # Group by 'bin' and 'motif_mod' and calculate the sum of 'is_ambiguous' and the total count in each group
-    bin_consensus_ambiguous_motifs = contig_motif_mean_density.group_by(["bin", "motif_mod"]) \
+    ambiguous_bin_motifs = ambiguous_contig_methylation.group_by(["bin", "motif_mod"]) \
         .agg(
             pl.col("is_ambiguous").sum().alias("total_ambiguous"),
             pl.col("is_ambiguous").count().alias("n_contigs_with_motif")
         ) \
         .with_columns((pl.col("total_ambiguous") / pl.col("n_contigs_with_motif")).alias("percentage_ambiguous")) \
-        .filter(pl.col("percentage_ambiguous") <= args.ambiguous_motif_percentage_cutoff) \
+        .filter(pl.col("percentage_ambiguous") <= ambiguous_motif_percentage_cutoff) \
         .select(["bin", "motif_mod"])
     
     
-    return bin_consensus_ambiguous_motifs
+    return ambiguous_bin_motifs
 
 
-# TODO: rename - calculate_bin_consensus_from_contigs
-def construct_bin_consensus_from_motifs_scored_in_bins(motifs_scored_in_bins, args):
-    """
-    Constructs the bin_motifs_from_motifs_scored_in_bins DataFrame by filtering motifs that are not in bin_motif_binary,
-    """
-    
+def filter_motifs_for_scoring(contig_methylation, args):
     # Remove motifs in bins where the majority of the mean methylation of motifs is in the range of 0.05-0.4
-    bin_consensus_without_ambiguous_motifs = remove_ambiguous_motifs_from_bin_consensus(motifs_scored_in_bins, args)
+    confident_bin_methylations = remove_ambiguous_motifs_from_bin_consensus(contig_methylation, args.n_motif_contig_cutoff, args.ambiguous_motif_percentage_cutoff)
     
     
-    # Find n_motifs in bin TODO: rename bin_motifs_from_motifs_scored_in_bins to bin_consensus_from_motifs_scored_in_bins
-    bin_consensus_from_motifs_scored_in_bins = motifs_scored_in_bins \
+    bin_methylation = contig_methylation \
         .filter(pl.col("bin") != "unbinned") \
         .group_by(["bin", "motif_mod"]) \
         .agg(
-            pl.col("n_mod").sum().alias("n_mod"),
-            pl.col("n_nomod").sum().alias("n_nomod")
+            pl.col("N_motif_obs").sum().alias("N_motif_obs_bin"),
+            pl.col("median").mean().alias("mean_bin")
         ) \
-        .with_columns((pl.col("n_mod") + pl.col("n_nomod")).alias("n_motifs_bin")) \
-        .filter(pl.col("n_motifs_bin") > args.n_motif_bin_cutoff) \
-        .with_columns((pl.col("n_mod") / pl.col("n_motifs_bin")).alias("mean_methylation"))
+        .filter(pl.col("N_motif_obs_bin") > args.n_motif_bin_cutoff)
     
-    bin_consensus_from_motifs_scored_in_bins_filtered = bin_consensus_from_motifs_scored_in_bins \
-        .join(bin_consensus_without_ambiguous_motifs, on=["bin", "motif_mod"], how="inner")
+    bin_methylation = bin_methylation \
+        .join(confident_bin_methylations, on=["bin", "motif_mod"], how="inner")
     
     # Calculate standard deviation of methylation per bin and motif_mod
-    bin_motifs_mean_and_sd = motifs_scored_in_bins \
+    bin_motifs_mean_and_sd = contig_methylation \
         .filter(
             (pl.col("bin") != "unbinned") &  
-            (pl.col("mean") > 0.1) &                                 # TODO: Remove this line if the negative cases should be used to determine methylation pattern.
-            (pl.col("n_motifs") > args.n_motif_contig_cutoff)
+            (pl.col("median") > 0.1) &
+            (pl.col("N_motif_obs") > args.n_motif_contig_cutoff)
         ) \
         .group_by(["bin", "motif_mod"]) \
         .agg(
-            pl.col("mean").mean().alias("mean_methylation_bin"),
-            pl.col("mean").std().fill_null(0.15/4).alias("std_methylation_bin"),
+            pl.col("median").mean().alias("mean_bin_filtered"),
+            pl.col("median").std().fill_null(0.15/4).alias("std_bin_filtered"),
             pl.col("contig").count().alias("n_contigs")
         ) 
     
     # Merge with bin_motifs_from_motifs_scored_in_bins
-    bin_consensus_from_motifs_scored_in_bins_filtered = bin_consensus_from_motifs_scored_in_bins_filtered.join(bin_motifs_mean_and_sd, on=["bin", "motif_mod"], how="left") \
-        .with_columns((pl.col("mean_methylation") >= args.mean_methylation_cutoff).cast(int).alias("methylation_binary")) # Create a binary index for bin and motif_mod
+    bin_methylation = bin_methylation.join(bin_motifs_mean_and_sd, on=["bin", "motif_mod"], how="left") \
+        .with_columns((pl.col("mean_bin") >= args.mean_methylation_cutoff).cast(int).alias("methylation_binary")) # Create a binary index for bin and motif_mod
     
-    # bin_motifs_from_motifs_scored_in_bins = bin_motifs_from_motifs_scored_in_bins.merge(bin_motifs_mean_and_sd, on=["bin", "motif_mod"], how="left")
-    
-    # TODO: Does this make sense? All motifs with mean_methylation above 0.25 is called as methylated.
-
-    
-    return bin_consensus_from_motifs_scored_in_bins_filtered
+    return bin_methylation
     
 
 # def calculate_binary_motif_comparison_matrix(motifs_scored_in_bins, args):

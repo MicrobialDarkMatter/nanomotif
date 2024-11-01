@@ -436,7 +436,7 @@ def check_install(args, pl):
 # Binnary - contamination and inclusion
 from nanomotif.binnary import data_processing, detect_contamination, include_contigs
 from nanomotif.binnary.logging import set_logger_config
-
+from nanomotif.binnary.utils import run_methylation_utils
 
 
 def binnary(args, pl):
@@ -472,25 +472,38 @@ def binnary(args, pl):
     bin_motif_binary = data_processing.prepare_bin_consensus(bin_motifs, args)
     
     motifs_in_bin_consensus = bin_motif_binary.select("motif_mod").unique()["motif_mod"]
+
+    # Create motifs-scored-read-methylation
+    run_methylation_utils(
+        pileup = args.pileup,
+        assembly = args.assembly,
+        motifs = motifs_in_bin_consensus,
+        threads = args.threads,
+        min_valid_read_coverage = args.min_valid_read_coverage,
+        output = args.out
+    )
+
+    motifs_scored = pl.read_csv(
+        os.path.join(args.out, "motifs-scored-read-methylation.tsv"), separator="\t", has_header = True
+    )
     
-    motifs_scored_in_bins = data_processing.prepare_motifs_scored_in_bins(
+    motifs_scored = data_processing.add_bin_to_motifs_scored(
         motifs_scored,
-        motifs_in_bin_consensus,
         contig_bins
     )
     
     
     # Create the bin_consensus dataframe for scoring
     log.info("Creating bin_consensus dataframe for scoring...")
-    bin_motifs_from_motifs_scored_in_bins = data_processing.construct_bin_consensus_from_motifs_scored_in_bins(
-        motifs_scored_in_bins,
+    motifs_scored_filtered = data_processing.filter_motifs_for_scoring(
+        motifs_scored,
         args
     )
 
     # Setting up the contamination analysis
     if (args.command == "detect_contamination" and not args.contamination_file) or (args.command == "include_contigs" and args.run_detect_contamination):
         contamination = detect_contamination.detect_contamination(
-            motifs_scored_in_bins, bin_motifs_from_motifs_scored_in_bins, args
+            motifs_scored, motifs_scored_filtered, args
         )
         data_processing.generate_output(contamination.to_pandas(), args.out, "bin_contamination.tsv")
     elif args.contamination_file:

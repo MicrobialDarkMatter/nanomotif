@@ -1,11 +1,15 @@
 import pytest
-from nanomotif.binnary import data_processing
+import polars as pl
+from nanomotif.binnary import data_processing, utils
 
 class MockArgs:
     def __init__(self):
-        self.motifs_scored = "datasets/binnary_testdata/motifs-scored.tsv"
+        self.pileup = "datasets/binnary_testdata/pileup.bed"
+        self.assembly_file = "data/binnary_testdata/assembly_file.fasta"
         self.bin_motifs = "datasets/binnary_testdata/bin-motifs.tsv"
+        self.motifs_scored = "datasets/binnary_testdata/motifs-scored.tsv"
         self.contig_bins = "datasets/binnary_testdata/contig_bin.tsv"
+        self.min_valid_read_coverage = 3
         self.mean_methylation_cutoff = 0.25
         self.n_motif_bin_cutoff = 500
         self.n_motif_contig_cutoff = 10
@@ -29,7 +33,9 @@ def loaded_data():
     data = data_processing.load_data(mock_args)
 
     # Unpack the data tuple to individual variables if needed
-    motifs_scored, bin_motifs, contig_bins = data
+    bin_motifs, contig_bins = data
+
+    motifs_scored = pl.read_csv(mock_args.motifs_scored, separator = "\t")
 
     # Return the data as a dictionary or as individual variables, depending on your preference
     return {
@@ -53,8 +59,8 @@ def motifs_scored_in_bins_and_bin_motifs(loaded_data):
     motifs_in_bins = bin_motif_binary.select("motif_mod").unique()["motif_mod"]
     
     # Step 2: create motifs_scored_in_bins
-    motifs_scored_in_bins = data_processing.prepare_motifs_scored_in_bins(
-        motifs_scored, motifs_in_bins, contig_bins 
+    motifs_scored_in_bins = data_processing.add_bin_to_motifs_scored(
+        motifs_scored, contig_bins 
     )
     
     return {

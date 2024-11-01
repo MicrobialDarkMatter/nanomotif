@@ -38,18 +38,18 @@ def test_prepare_bin_consensus(loaded_data):
     assert bin_motif_binary is not None
     assert bin_motif_binary.columns == ["bin", "motif_mod", "mean_methylation", "methylation_binary"]
     
-    assert bin_motif_binary.filter((pl.col("bin") == "b3") & (pl.col("motif_mod") == "m6_a-1")).select("methylation_binary").item() == 1
+    assert bin_motif_binary.filter((pl.col("bin") == "b3") & (pl.col("motif_mod") == "m6_a_1")).select("methylation_binary").item() == 1
     
     # Assert that there are 4 motifs in bin 1
     assert bin_motif_binary.filter(pl.col("bin") == "b3").height == 4
-    assert set(bin_motif_binary.filter(pl.col("bin") == "b3").to_pandas()["motif_mod"].to_list()) == {"m1_a-1", "m2_a-1", "m3_a-1", "m6_a-1"}
+    assert set(bin_motif_binary.filter(pl.col("bin") == "b3").to_pandas()["motif_mod"].to_list()) == {"m1_a_1", "m2_a_1", "m3_a_1", "m6_a_1"}
     
     # Assert m7_a is filtered because of too few observations
-    assert bin_motif_binary.filter(pl.col("motif_mod") == "m7_a-1").is_empty()
+    assert bin_motif_binary.filter(pl.col("motif_mod") == "m7_a_1").is_empty()
     
 
 
-def test_motifs_scored_in_bins(loaded_data):
+def test_add_bin_to_motifs_scored(loaded_data):
     # Access the loaded data directly if returned as a dictionary
     motifs_scored = loaded_data["motifs_scored"]
     bin_motifs = loaded_data["bin_motifs"]
@@ -60,9 +60,8 @@ def test_motifs_scored_in_bins(loaded_data):
     bin_motif_binary = data_processing.prepare_bin_consensus(bin_motifs, args)
 
     # Step 2: create motifs_scored_in_bins
-    motifs_scored_in_bins = data_processing.prepare_motifs_scored_in_bins(
+    motifs_scored_in_bins = data_processing.add_bin_to_motifs_scored(
         motifs_scored,
-        bin_motif_binary.select("motif_mod").unique()["motif_mod"],
         contig_bins
     )
     print(motifs_scored_in_bins)
@@ -72,7 +71,7 @@ def test_motifs_scored_in_bins(loaded_data):
     )
     
     # Assert that the number of columns is 12
-    assert len(motifs_scored_in_bins.columns) == 12  # number of columns
+    assert len(motifs_scored_in_bins.columns) == 9 # number of columns
     # Assert contig 1 belongs to bin 1
     assert motifs_scored_in_bins.filter(pl.col("contig") == "contig_1").select("bin").unique()["bin"].item() == "b1"
     
@@ -92,7 +91,8 @@ def test_remove_ambiguous_motifs(loaded_data, motifs_scored_in_bins_and_bin_moti
     
     bins_w_no_ambiguous_motifs = data_processing.remove_ambiguous_motifs_from_bin_consensus(
         motifs_scored_in_bins,
-        args
+        args.n_motif_contig_cutoff,
+        args.ambiguous_motif_percentage_cutoff 
     )
     print(bins_w_no_ambiguous_motifs)
     
@@ -104,7 +104,7 @@ def test_remove_ambiguous_motifs(loaded_data, motifs_scored_in_bins_and_bin_moti
     
 
 
-def test_bin_motifs_from_motifs_scored_in_bins(loaded_data, motifs_scored_in_bins_and_bin_motifs):
+def test_filter_motifs_for_scoring(loaded_data, motifs_scored_in_bins_and_bin_motifs):
     """
     GIVEN loaded_data and motifs_scored_in_bins_and_bin_motifs
     WHEN construct_bin_motifs_from_motifs_scored_in_bins is called
@@ -114,41 +114,12 @@ def test_bin_motifs_from_motifs_scored_in_bins(loaded_data, motifs_scored_in_bin
     
     args = MockArgs()
     print(motifs_scored_in_bins)
-    bin_motifs_from_motifs_scored_in_bins = data_processing.construct_bin_consensus_from_motifs_scored_in_bins(
+    motifs_scored_filtered = data_processing.filter_motifs_for_scoring(
         motifs_scored_in_bins,
         args
     )
     
-    assert bin_motifs_from_motifs_scored_in_bins is not None
-    assert bin_motifs_from_motifs_scored_in_bins.columns == ['bin', 'motif_mod', 'n_mod', 'n_nomod', 'n_motifs_bin', 'mean_methylation', 'mean_methylation_bin', 'std_methylation_bin', 'n_contigs', 'methylation_binary']
+    assert motifs_scored_filtered is not None
+    assert motifs_scored_filtered.columns == ['bin', 'motif_mod', 'N_motif_obs_bin', 'mean_bin', 'mean_bin_filtered', 'std_bin_filtered', 'n_contigs', 'methylation_binary']
     
-    
-# def test_calculate_binary_motif_comparison_matrix(loaded_data, motifs_scored_in_bins_and_bin_motifs):
-#     """
-#     GIVEN loaded_data and motifs_scored_in_bins_and_bin_motifs
-#     WHEN calculate_binary_motif_comparison_matrix is called
-#     THEN assert that the output contains only the expected columns
-#     """
-#     motifs_scored_in_bins = motifs_scored_in_bins_and_bin_motifs["motifs_scored_in_bins"]
-    
-#     args = MockArgs()
-    
-#     motifs_scored_in_bins_filtered = motifs_scored_in_bins \
-#         .filter(~pl.col("bin_contig").str.contains("unbinned"))
-    
-#     motif_binary_compare = data_processing.calculate_binary_motif_comparison_matrix(
-#         motifs_scored_in_bins_filtered,
-#         args
-#     )
-    
-#     assert motif_binary_compare is not None
-#     # Assert that no bin_contig contains "unbinned"
-#     assert motif_binary_compare.filter(pl.col("bin_compare").str.contains("unbinned")).is_empty()
-    
-#     # b3 = motif_binary_compare[(motif_binary_compare["bin"] == "b3") & (motif_binary_compare["bin_compare"].str.contains("b3"))]
-#     b3 = motif_binary_compare.filter((pl.col("bin") == "b3") & (pl.col("bin_compare").str.contains("b3")))
-    
-#     assert set(b3.to_pandas()["motif_mod"].unique()) == set(["m1_a", "m2_a", "m3_a", "m6_a"])
-#     assert b3.filter(pl.col("motif_mod") == "m6_a").select("methylation_binary").get_column("methylation_binary")[0] == 1
-#     assert b3.filter(pl.col("motif_mod") == "m2_a").select("methylation_binary").get_column("methylation_binary")[0] == 0
     
