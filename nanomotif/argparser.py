@@ -77,13 +77,23 @@ def create_parser():
     
     
     parser_binnary_shared_mandatory.add_argument(
-        "--motifs_scored", type=str, help="Path to motifs-scored.tsv from nanomotif", required=True
+        "--pileup", type=str, help="Path to pileup.bed", required=True
+    )
+    parser_binnary_shared_mandatory.add_argument(
+        "--assembly_file", type=str, help="Path to assembly file [fasta format required]", required=True
     )
     parser_binnary_shared_mandatory.add_argument("--bin_motifs", type=str, help="Path to bin-motifs.tsv file", required=True)
     parser_binnary_shared_mandatory.add_argument(
         "--contig_bins", type=str, help="Path to bins.tsv file for contig bins", required=True
     )
     parser_binnary_shared.add_argument("-t", "--threads", type=int, default=1, help="Number of threads to use for multiprocessing")
+
+    parser_binnary_shared.add_argument(
+        "--min_valid_read_coverage",
+        type=int,
+        default=3,
+        help="Minimum read coverage for calculating methylation [used with methylation_util executable]",
+    )
     parser_binnary_shared.add_argument(
         "--mean_methylation_cutoff",
         type=float,
@@ -113,11 +123,6 @@ def create_parser():
         "--write_bins",
         action='store_true',
         help="If specified, new bins will be written to a bins folder. Requires --assembly_file to be specified.",
-    )
-    parser_binnary_shared.add_argument(
-        "--assembly_file",
-        type=str,
-        help="Path to assembly.fasta file"
     )
     parser_binnary_shared.add_argument(
         "--save_scores",
