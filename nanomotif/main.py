@@ -402,14 +402,6 @@ def binnary(args):
     Orchestrates the workflow of the tool based on the provided arguments.
     """
     
-    # Conditional check for --write_bins and --assembly_file
-    if args.write_bins and not args.assembly_file:
-        print("Error: --assembly_file must be specified when --write_bins is used.")
-        sys.exit(1)
-    elif not args.write_bins and args.assembly_file:
-        print("Error: --assembly_file can only be used when --write_bins is specified.")
-        sys.exit(1)
-    
     print("Starting Binnary ", args.command, " analysis...")
 
     
