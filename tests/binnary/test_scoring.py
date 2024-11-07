@@ -17,7 +17,7 @@ def test_compare_methylation_pattern_contamination(loaded_data, motifs_scored_in
     motifs_scored_in_bins = motifs_scored_in_bins \
         .filter(~pl.col("bin_contig").str.contains("unbinned"))
     
-    bin_consensus = dp.construct_bin_consensus_from_motifs_scored_in_bins(
+    bin_consensus = dp.filter_motifs_for_scoring(
         motifs_scored_in_bins,
         args
     )
@@ -62,7 +62,7 @@ def test_compare_methylation_pattern_include(loaded_data, motifs_scored_in_bins_
     motifs_scored_in_bins = motifs_scored_in_bins \
         .filter(~pl.col("bin_contig").str.contains("unbinned"))
     
-    bin_consensus = dp.construct_bin_consensus_from_motifs_scored_in_bins(
+    bin_consensus = dp.filter_motifs_for_scoring(
         motifs_scored_in_bins,
         args
     )

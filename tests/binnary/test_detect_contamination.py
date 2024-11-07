@@ -16,7 +16,7 @@ def test_detect_contamination(loaded_data, motifs_scored_in_bins_and_bin_motifs)
     motifs_scored_in_bins = motifs_scored_in_bins_and_bin_motifs["motifs_scored_in_bins"]
     
     
-    bin_motifs_from_motifs_scored_in_bins = dp.construct_bin_consensus_from_motifs_scored_in_bins(
+    bin_motifs_from_motifs_scored_in_bins = dp.filter_motifs_for_scoring(
         motifs_scored_in_bins,
         args
     )
@@ -45,7 +45,7 @@ def test_load_contamination_file(loaded_data, motifs_scored_in_bins_and_bin_moti
     motifs_scored_in_bins = motifs_scored_in_bins_and_bin_motifs["motifs_scored_in_bins"]
     
     
-    bin_motifs_from_motifs_scored_in_bins = dp.construct_bin_consensus_from_motifs_scored_in_bins(
+    bin_motifs_from_motifs_scored_in_bins = dp.filter_motifs_for_scoring(
         motifs_scored_in_bins,
         args
     )
