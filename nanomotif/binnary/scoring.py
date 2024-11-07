@@ -18,8 +18,8 @@ def define_mean_methylation_thresholds(motif_binary_compare):
     motif_binary_compare = motif_binary_compare.with_columns([
         pl.when(pl.col("methylation_binary") == 1)
         .then(
-            pl.when(pl.col("mean_methylation") - 4 * pl.col("std_methylation_bin") > 0.25)
-            .then(pl.col("mean_methylation") - 4 * pl.col("std_methylation_bin"))
+            pl.when(pl.col("mean_bin_median") - 4 * pl.col("std_bin_median_filtered") > 0.25)
+            .then(pl.col("mean_bin_median") - 4 * pl.col("std_bin_median_filtered"))
             .otherwise(0.25)
         )
         .otherwise(pl.lit(None))
@@ -29,10 +29,10 @@ def define_mean_methylation_thresholds(motif_binary_compare):
     # Calculate the binary methylation value for each motif in each bin where the bin consensus is 1
     motif_binary_compare = motif_binary_compare.with_columns([
         pl.when((pl.col("methylation_binary") == 1) & 
-                ((pl.col("mean") >= pl.col("methylation_mean_threshold")) | 
-                (pl.col("mean") > 0.4)))
+                ((pl.col("median") >= pl.col("methylation_mean_threshold")) | 
+                (pl.col("median") > 0.4)))
         .then(1)
-        .when((pl.col("methylation_binary") == 1) & pl.col("mean").is_not_null())
+        .when((pl.col("methylation_binary") == 1) & pl.col("median").is_not_null())
         .then(0)
         .otherwise(pl.lit(None))
         .alias("methylation_binary_compare")
@@ -46,7 +46,7 @@ def define_mean_methylation_thresholds(motif_binary_compare):
         .alias("methylation_mean_threshold"),
 
         pl.when(pl.col("methylation_binary") == 0)
-        .then((pl.col("mean") >= 0.25).cast(pl.Int32))
+        .then((pl.col("median") >= 0.25).cast(pl.Int32))
         .otherwise(pl.col("methylation_binary_compare"))
         .alias("methylation_binary_compare")
     ])
@@ -182,14 +182,14 @@ def compare_methylation_pattern_multiprocessed(motifs_scored_in_bins, bin_consen
     logger.info("Starting comparison of methylation patterns")
     
     motifs_scored_in_contigs = motifs_scored_in_bins \
-        .filter(pl.col("n_motifs") >= args.n_motif_contig_cutoff)
+        .filter(pl.col("N_motif_obs") >= args.n_motif_contig_cutoff)
     
     unique_tasks = motifs_scored_in_contigs.select(["bin", "bin_contig"]).unique()
     
     tasks = [(row['bin'], row['bin_contig']) for row in unique_tasks.iter_rows(named = True)]
     
     motifs_scored_in_contigs = motifs_scored_in_contigs \
-        .select(["bin", "bin_contig", "motif_mod", "mean"]) \
+        .select(["bin", "bin_contig", "motif_mod", "median"]) \
         .rename({"bin_contig": "bin_compare"})
     
     # Create a progress manager
