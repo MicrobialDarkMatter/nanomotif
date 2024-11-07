@@ -3,46 +3,6 @@ from setuptools.command.install import install
 import os
 import shutil
 import urllib.request
-import sys
-import platform
-
-METHYLATION_UTILS_URL = {
-    "Linux": "https://github.com/SebastianDall/methylation_utils/releases/download/v0.2.2/methylation_utils",
-}
-
-
-def download_methylation_utils(url, dest_path):
-    try:
-        print(f"Attempting to download binary from {url}...")
-        urllib.request.urlretrieve(url, dest_path)
-        print("Download completed successfully.")
-        # Make the file executable for Unix-like systems
-        if platform.system() != "Windows":
-            os.chmod(dest_path, 0o755)
-    except urllib.error.URLError as e:
-        print(f"Failed to download binary from {url}. URL Error: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"An error occurred while downloading binary: {e}")
-        sys.exit(1)
-
-
-class InstallCommand(install):
-    def run(self):
-        # Determine the binary URL based on the platform
-        system = platform.system()
-        binary_url = METHYLATION_UTILS_URL.get(system)
-        if not binary_url:
-            sys.exit(f"Unsupported platform: {system}")
-        
-        # Download the binary to the correct location
-        destination_path = os.path.join("nanomotif/bin", "methylation_utils")
-        download_methylation_utils(binary_url, destination_path)
-
-        # Continue with the rest of the installation
-        super().run()
-
-    
 
 exec(open('nanomotif/_version.py').read())
 setup(
@@ -76,11 +36,9 @@ setup(
         "pyarrow>=15.0.2",
         "Bio==1.6.1",
         "snakemake==7.32.4",
+        "pymethylation_utils",
         "progressbar2>=3.53.1"
     ],
-    cmdclass = {
-        "install": InstallCommand
-    },
     entry_points={
             'console_scripts': [
                   'nanomotif = nanomotif.main:main'
