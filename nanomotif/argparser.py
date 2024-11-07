@@ -80,7 +80,7 @@ def create_parser():
         "--pileup", type=str, help="Path to pileup.bed", required=True
     )
     parser_binnary_shared_mandatory.add_argument(
-        "--assembly_file", type=str, help="Path to assembly file [fasta format required]", required=True
+        "--assembly", type=str, help="Path to assembly file [fasta format required]", required=True
     )
     parser_binnary_shared_mandatory.add_argument("--bin_motifs", type=str, help="Path to bin-motifs.tsv file", required=True)
     parser_binnary_shared_mandatory.add_argument(
