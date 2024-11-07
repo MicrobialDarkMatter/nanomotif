@@ -207,7 +207,7 @@ def filter_motifs_for_scoring(contig_methylation, args):
         .group_by(["bin", "motif_mod"]) \
         .agg(
             pl.col("N_motif_obs").sum().alias("N_motif_obs_bin"),
-            pl.col("median").mean().alias("mean_bin")
+            pl.col("median").mean().alias("mean_bin_median")
         ) \
         .filter(pl.col("N_motif_obs_bin") > args.n_motif_bin_cutoff)
     
@@ -223,75 +223,17 @@ def filter_motifs_for_scoring(contig_methylation, args):
         ) \
         .group_by(["bin", "motif_mod"]) \
         .agg(
-            pl.col("median").mean().alias("mean_bin_filtered"),
-            pl.col("median").std().fill_null(0.15/4).alias("std_bin_filtered"),
+            pl.col("median").mean().alias("mean_bin_median_filtered"),
+            pl.col("median").std().fill_null(0.15/4).alias("std_bin_median_filtered"),
             pl.col("contig").count().alias("n_contigs")
         ) 
     
     # Merge with bin_motifs_from_motifs_scored_in_bins
     bin_methylation = bin_methylation.join(bin_motifs_mean_and_sd, on=["bin", "motif_mod"], how="left") \
-        .with_columns((pl.col("mean_bin") >= args.mean_methylation_cutoff).cast(int).alias("methylation_binary")) # Create a binary index for bin and motif_mod
+        .with_columns((pl.col("mean_bin_median") >= args.mean_methylation_cutoff).cast(int).alias("methylation_binary")) # Create a binary index for bin and motif_mod
     
     return bin_methylation
     
-
-# def calculate_binary_motif_comparison_matrix(motifs_scored_in_bins, args):
-#     # Step 1 create bin_motif_from_motifs_scored_in_bins - basis for bin-contig comparison
-#     bin_motifs_from_motifs_scored_in_bins = construct_bin_consensus_from_motifs_scored_in_bins(
-#         motifs_scored_in_bins,
-#         args
-#     )
-    
-#     ## Filter motifs that are not observed more than n_motif_cutoff times
-#     motifs_scored_in_contigs = motifs_scored_in_bins \
-#         .filter(pl.col("n_motifs") > args.n_motif_contig_cutoff) \
-#         .select(["bin_contig", "motif_mod", "mean"]) \
-#         .rename({"bin_contig" : "bin_compare"})
-    
-#     # Merge bin_motifs_from_motifs_scored_in_bins and motifs_scored_in_contigs    
-#     motif_binary_compare = bin_motifs_from_motifs_scored_in_bins.join(motifs_scored_in_contigs, on="motif_mod", how="left") 
-        
-#     # Calculate the mean methylation value for each motif in each bin
-#     motif_binary_compare = motif_binary_compare.with_columns([
-#         pl.when(pl.col("methylation_binary") == 1)
-#         .then(
-#             pl.when(pl.col("mean_methylation") - 4 * pl.col("std_methylation_bin") > 0.1)
-#             .then(pl.col("mean_methylation") - 4 * pl.col("std_methylation_bin"))
-#             .otherwise(0.1)
-#         )
-#         .otherwise(pl.lit(None))
-#         .alias("methylation_mean_threshold")
-#     ])
-
-#     # Calculate the binary methylation value for each motif in each bin where the bin consensus is 1
-#     motif_binary_compare = motif_binary_compare.with_columns([
-#         pl.when((pl.col("methylation_binary") == 1) & 
-#                 ((pl.col("mean") >= pl.col("methylation_mean_threshold")) | 
-#                 (pl.col("mean") > 0.4)))
-#         .then(1)
-#         .when(pl.col("methylation_binary") == 1)
-#         .then(0)
-#         .otherwise(pl.lit(None))
-#         .alias("methylation_binary_compare")
-#     ])
-
-#     # Calculate score for bin consensus is 0
-#     motif_binary_compare = motif_binary_compare.with_columns([
-#         pl.when(pl.col("methylation_binary") == 0)
-#         .then(0.25)
-#         .otherwise(pl.col("methylation_mean_threshold"))
-#         .alias("methylation_mean_threshold"),
-
-#         pl.when(pl.col("methylation_binary") == 0)
-#         .then((pl.col("mean") >= 0.25).cast(pl.Int32))
-#         .otherwise(pl.col("methylation_binary_compare"))
-#         .alias("methylation_binary_compare")
-#     ])
-    
-#     return motif_binary_compare
-
-
-
 def load_contamination_file(contamination_file):
     """
     Load the contamination file from the provided path.
