@@ -422,12 +422,12 @@ def binnary(args):
     
     motifs_in_bin_consensus = bin_motif_binary.select("motif_mod").unique()["motif_mod"]
 
-    if not args.force:
-        log.info("Check if motifs-scored-read-methylation.tsv exists")
-
     contig_methylation_file = "motifs-scored-read-methylation.tsv"
+    if not args.force:
+        log.info(f"Check if {contig_methylation_file} exists")
+
     if os.path.isfile(os.path.join(args.out,contig_methylation_file)) and not args.force:
-        log.info("Motifs-scored-read-methylation.tsv exists. Using existing file!")
+        log.info("Motifs-scored-read-methylation.tsv exists. Using existing file! Use --force to override this.")
     elif not os.path.isfile(os.path.join(args.out, contig_methylation_file)) or args.force:
         log.info(f"Running methylation_utils to create {contig_methylation_file}")
         # Create motifs-scored-read-methylation
@@ -440,11 +440,40 @@ def binnary(args):
             output = args.out
         )
 
-    # Load motifs-scored-read-methylation.tsv
-    contig_methylation = pl.read_csv(
-        os.path.join(args.out, contig_methylation_file), separator="\t", has_header = True
-    )
+
+    # Setting up the contamination analysis
+    if (args.command == "detect_contamination" and not args.contamination_file) or (args.command == "include_contigs" and args.run_detect_contamination):
+        # Load motifs-scored-read-methylation.tsv
+        contig_methylation = pl.read_csv(
+            os.path.join(args.out, contig_methylation_file), separator="\t", has_header = True
+        )
     
+        contig_methylation = data_processing.add_bin(
+            contig_methylation,
+            contig_bins
+        )
+
+        # Create the bin_consensus dataframe for scoring
+        log.info("Creating bin_consensus dataframe for scoring...")
+        bin_methylation = data_processing.filter_motifs_for_scoring(
+            contig_methylation,
+            args
+        )
+
+        contamination = detect_contamination.detect_contamination(
+            contig_methylation, bin_methylation, args
+        )
+        data_processing.generate_output(contamination.to_pandas(), args.out, "bin_contamination.tsv")
+
+    if args.command == "detect_contamination":
+        # Create a decontaminated contig_bin file
+        new_contig_bins = data_processing.create_contig_bin_file(
+            contig_bins=contig_bins.to_pandas(), 
+            contamination=contamination.to_pandas(),
+            include=None
+        )
+        data_processing.generate_output(new_contig_bins, args.out, "decontaminated_contig_bin.tsv")
+
     if args.command == "include_contigs":
         # User provided contamination file
         if args.contamination_file:
@@ -465,44 +494,25 @@ def binnary(args):
         # move contigs in bin_contamination to unbinned
         contamination_contigs = contamination.get_column("contig")
 
-        contig_bins = contig_bins.filter(~pl.col("contigs").is_in(contamination_contigs))
-
-    contig_methylation = data_processing.add_bin(
-        contig_methylation,
-        contig_bins
-    )
-
-    
-    
-    # Create the bin_consensus dataframe for scoring
-    log.info("Creating bin_consensus dataframe for scoring...")
-    bin_methylation = data_processing.filter_motifs_for_scoring(
-        contig_methylation,
-        args
-    )
-
-    # Setting up the contamination analysis
-    if (args.command == "detect_contamination" and not args.contamination_file) or (args.command == "include_contigs" and args.run_detect_contamination):
-        contamination = detect_contamination.detect_contamination(
-            contig_methylation, bin_methylation, args
+        log.info("Removing contaminants from bins")
+        contig_bins = contig_bins.filter(~pl.col("contig").is_in(contamination_contigs))
+        
+        # Load motifs-scored-read-methylation.tsv
+        contig_methylation = pl.read_csv(
+            os.path.join(args.out, contig_methylation_file), separator="\t", has_header = True
         )
-        data_processing.generate_output(contamination.to_pandas(), args.out, "bin_contamination.tsv")
-    elif args.contamination_file:
-        log.info("Loading contamination file...")
-        contamination = data_processing.load_contamination_file(args.contamination_file)
-        
-    if args.command == "detect_contamination":
-        # Create a decontaminated contig_bin file
-        new_contig_bins = data_processing.create_contig_bin_file(
-            contig_bins=contig_bins.to_pandas(), 
-            contamination=contamination.to_pandas(),
-            include=None
+    
+        contig_methylation = data_processing.add_bin(
+            contig_methylation,
+            contig_bins
         )
-        data_processing.generate_output(new_contig_bins, args.out, "decontaminated_contig_bin.tsv")
 
-    if args.command == "include_contigs":
-        
-        
+        # Create the bin_consensus dataframe for scoring
+        log.info("Creating bin_consensus dataframe for scoring...")
+        bin_methylation = data_processing.filter_motifs_for_scoring(
+            contig_methylation,
+            args
+        )
         # Run the include_contigs analysis    
         include_contigs_df = include_contigs.include_contigs(
             contig_methylation, bin_methylation, contamination, args
