@@ -532,7 +532,7 @@ def binnary(args, pl):
                 {
                     "bin": [],
                     "bin_contig_compare": [],
-                    "binary_methylation_missmatch_score": [],
+                    "binary_methylation_mismatch_score": [],
                     "non_na_comparisons": [],
                     "contig": []
                 }

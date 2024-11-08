@@ -82,7 +82,7 @@ def compare_methylation_pattern(motif_binary_compare):
     contig_bin_comparison_score = motif_binary_compare \
         .group_by(["bin", "bin_compare", "contig_bin"]) \
         .agg([
-            pl.sum("motif_comparison_score").alias("binary_methylation_missmatch_score"),
+            pl.sum("motif_comparison_score").alias("binary_methylation_mismatch_score"),
             pl.count("motif_comparison_score").alias("non_na_comparisons")
         ])
         
@@ -158,12 +158,12 @@ def process_bin_contig(
     if mode == "include":
         contig_bin_comparison_score = contig_bin_comparison_score \
             .filter(
-                pl.col("binary_methylation_missmatch_score") == 0
+                pl.col("binary_methylation_mismatch_score") == 0
             )
     if mode == "contamination":
         contig_bin_comparison_score = contig_bin_comparison_score \
             .filter(
-                pl.col("binary_methylation_missmatch_score") > 0
+                pl.col("binary_methylation_mismatch_score") > 0
             )
             
     with lock:

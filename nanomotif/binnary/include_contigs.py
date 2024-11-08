@@ -61,7 +61,7 @@ def include_contigs(motifs_scored_in_bins, bin_consensus, contamination, args):
         .filter(
             pl.col("non_na_comparisons") >= args.min_motif_comparisons,
             (~pl.col("bin_compare").is_in(contigs_w_no_methylation)),  # Remove contigs with no methylation
-            (pl.col("binary_methylation_missmatch_score") == 0)        # Retain contigs with no methylation missmatch 
+            (pl.col("binary_methylation_mismatch_score") == 0)        # Retain contigs with no methylation mismatch 
             
         ) \
         .sort("bin","bin_compare")
