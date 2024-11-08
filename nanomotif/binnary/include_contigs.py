@@ -8,12 +8,12 @@ import logging
 
 
 
-def include_contigs(motifs_scored_in_bins, bin_consensus, contamination, args):
+def include_contigs(contig_methylation, bin_methylation, contamination, args):
     """
-    Takes the motifs_scored_in_bins and motifs_of_interest DataFrames and finds unbinned contigs with an exact methylation pattern as the bin.
+    Takes the contig_methylation and motifs_of_interest DataFrames and finds unbinned contigs with an exact methylation pattern as the bin.
     
     params:
-        motifs_scored_in_bins: pd.DataFrame - DataFrame containing the motifs scored in each bin
+        contig_methylation: pd.DataFrame - DataFrame containing the motifs scored in each bin
         motifs_of_interest: list - List of motifs to be considered from bin_motif_binary
         args: argparse.Namespace - Namespace containing the arguments passed to the script
     
@@ -23,7 +23,7 @@ def include_contigs(motifs_scored_in_bins, bin_consensus, contamination, args):
     
     
     # Remove bins with no methylation in consensus
-    bins_w_no_methylation = bin_consensus \
+    bins_w_no_methylation = bin_methylation \
         .group_by("bin") \
         .agg(
             pl.sum("methylation_binary").alias("binary_sum")    
@@ -33,11 +33,11 @@ def include_contigs(motifs_scored_in_bins, bin_consensus, contamination, args):
         .unique()["bin"]
     
 
-    bin_consensus = bin_consensus \
+    bin_methylation = bin_methylation \
         .filter(~pl.col("bin").is_in(bins_w_no_methylation))
     
     # Retain only unbinned contigs or contigs in the contamination file
-    contigs_for_comparison = motifs_scored_in_bins \
+    contigs_for_comparison = contig_methylation \
         .filter(
             (pl.col("bin_contig").str.contains("unbinned")) |
             (pl.col("bin_contig").is_in(contamination["bin_contig_compare"]))
@@ -45,8 +45,8 @@ def include_contigs(motifs_scored_in_bins, bin_consensus, contamination, args):
     
 
     contig_bin_comparison_score, contigs_w_no_methylation = sc.compare_methylation_pattern_multiprocessed(
-        motifs_scored_in_bins=contigs_for_comparison,
-        bin_consensus=bin_consensus,
+        contig_methylation=contigs_for_comparison,
+        bin_methylation=bin_methylation,
         mode="include",
         args=args,
         num_processes=args.threads

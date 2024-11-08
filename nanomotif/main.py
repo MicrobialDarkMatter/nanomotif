@@ -425,11 +425,11 @@ def binnary(args):
     if not args.force:
         log.info("Check if motifs-scored-read-methylation.tsv exists")
 
-    motifs_scored_file = "motifs-scored-read-methylation.tsv"
-    if os.path.isfile(os.path.join(args.out,motifs_scored_file)) and not args.force:
+    contig_methylation_file = "motifs-scored-read-methylation.tsv"
+    if os.path.isfile(os.path.join(args.out,contig_methylation_file)) and not args.force:
         log.info("Motifs-scored-read-methylation.tsv exists. Using existing file!")
-    elif not os.path.isfile(os.path.join(args.out, motifs_scored_file)) or args.force:
-        log.info(f"Running methylation_utils to create {motifs_scored_file}")
+    elif not os.path.isfile(os.path.join(args.out, contig_methylation_file)) or args.force:
+        log.info(f"Running methylation_utils to create {contig_methylation_file}")
         # Create motifs-scored-read-methylation
         run_methylation_utils(
             pileup = args.pileup,
@@ -441,12 +441,12 @@ def binnary(args):
         )
 
     # Load motifs-scored-read-methylation.tsv
-    motifs_scored = pl.read_csv(
-        os.path.join(args.out, motifs_scored_file), separator="\t", has_header = True
+    contig_methylation = pl.read_csv(
+        os.path.join(args.out, contig_methylation_file), separator="\t", has_header = True
     )
     
-    motifs_scored = data_processing.add_bin_to_motifs_scored(
-        motifs_scored,
+    contig_methylation = data_processing.add_bin(
+        contig_methylation,
         contig_bins
     )
     
@@ -454,14 +454,14 @@ def binnary(args):
     # Create the bin_consensus dataframe for scoring
     log.info("Creating bin_consensus dataframe for scoring...")
     bin_methylation = data_processing.filter_motifs_for_scoring(
-        motifs_scored,
+        contig_methylation,
         args
     )
 
     # Setting up the contamination analysis
     if (args.command == "detect_contamination" and not args.contamination_file) or (args.command == "include_contigs" and args.run_detect_contamination):
         contamination = detect_contamination.detect_contamination(
-            motifs_scored, bin_methylation, args
+            contig_methylation, bin_methylation, args
         )
         data_processing.generate_output(contamination.to_pandas(), args.out, "bin_contamination.tsv")
     elif args.contamination_file:
@@ -498,7 +498,7 @@ def binnary(args):
         
         # Run the include_contigs analysis    
         include_contigs_df = include_contigs.include_contigs(
-            motifs_scored, bin_methylation, contamination, args
+            contig_methylation, bin_methylation, contamination, args
         )
         
         # Save the include_contigs_df results
