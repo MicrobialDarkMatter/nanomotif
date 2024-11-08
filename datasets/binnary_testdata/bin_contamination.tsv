@@ -1,4 +1,4 @@
-bin	bin_contig_compare	binary_methylation_missmatch_score	non_na_comparisons	contig
+bin	bin_contig_compare	binary_methylation_mismatch_score	non_na_comparisons	contig
 b3	b3_contig_12	2	4	contig_12
 b3	b3_contig_13	2	4	contig_13
 b3	b3_contig_6	3	4	contig_6

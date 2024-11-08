@@ -27,7 +27,7 @@ def detect_contamination(motifs_scored_in_bins, bin_consensus, args):
     contamination_contigs = contig_bin_comparison_score \
         .filter(
             (pl.col("bin") == pl.col("contig_bin")) &
-            (pl.col("binary_methylation_missmatch_score") > 0)
+            (pl.col("binary_methylation_mismatch_score") > 0)
         )
     
     contamination_contigs = contamination_contigs \
