@@ -95,6 +95,11 @@ def create_parser():
         help="Minimum read coverage for calculating methylation [used with methylation_util executable]",
     )
     parser_binnary_shared.add_argument(
+        "--force",
+        action='store_true',
+        help="Force override of motifs-scored-read-methylation.tsv. If not set existing file will be used.",
+    )
+    parser_binnary_shared.add_argument(
         "--mean_methylation_cutoff",
         type=float,
         default=0.25,

@@ -465,18 +465,27 @@ def binnary(args, pl):
     
     motifs_in_bin_consensus = bin_motif_binary.select("motif_mod").unique()["motif_mod"]
 
-    # Create motifs-scored-read-methylation
-    run_methylation_utils(
-        pileup = args.pileup,
-        assembly = args.assembly,
-        motifs = motifs_in_bin_consensus,
-        threads = args.threads,
-        min_valid_read_coverage = args.min_valid_read_coverage,
-        output = args.out
-    )
+    if not args.force:
+        log.info("Check if motifs-scored-read-methylation.tsv exists")
 
+    motifs_scored_file = "motifs-scored-read-methylation.tsv"
+    if os.path.isfile(os.path.join(args.out,motifs_scored_file)) and not args.force:
+        log.info("Motifs-scored-read-methylation.tsv exists. Using existing file!")
+    elif not os.path.isfile(os.path.join(args.out, motifs_scored_file)) or args.force:
+        log.info(f"Running methylation_utils to create {motifs_scored_file}")
+        # Create motifs-scored-read-methylation
+        run_methylation_utils(
+            pileup = args.pileup,
+            assembly = args.assembly,
+            motifs = motifs_in_bin_consensus,
+            threads = args.threads,
+            min_valid_read_coverage = args.min_valid_read_coverage,
+            output = args.out
+        )
+
+    # Load motifs-scored-read-methylation.tsv
     motifs_scored = pl.read_csv(
-        os.path.join(args.out, "motifs-scored-read-methylation.tsv"), separator="\t", has_header = True
+        os.path.join(args.out, motifs_scored_file), separator="\t", has_header = True
     )
     
     motifs_scored = data_processing.add_bin_to_motifs_scored(
