@@ -196,8 +196,8 @@ def compare_methylation_pattern_multiprocessed(contig_methylation, bin_methylati
     # Put them workers to work
     results = pool.starmap(process_bin_contig, [(
         task, 
-        bin_methylation, 
         contig_methylation_filtered, 
+        bin_methylation, 
         mode, 
         args,
         counter,
