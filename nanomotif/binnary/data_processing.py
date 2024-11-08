@@ -153,24 +153,19 @@ def prepare_bin_consensus(bin_motifs, args):
     return bin_motif_binary_enriched
 
 
-def add_bin_to_motifs_scored(motifs_scored, contig_bins):
-    """
-    Prepares the motifs_scored_in_bins DataFrame by merging with bin motifs, contig bins, and assembly stats,
-    and calculates additional metrics like number of motifs and mean methylation per contig.
-    """
-    
-    # Filter and enhance motifs_scored based on motifs_in_bins
-    motifs_scored_in_bins = motifs_scored \
+def add_bin(contig_methylation, contig_bins):
+    # Filter and enhance contig_methylation 
+    contig_methylation_w_bin = contig_methylation \
         .with_columns(
             (pl.col("motif") + "_" + pl.col("mod_type") + "_" + pl.col("mod_position").cast(pl.Utf8)).alias("motif_mod")
         )
     
     # Merge with contig_bins
-    motifs_scored_in_bins = motifs_scored_in_bins.join(contig_bins, on="contig", how="left") \
+    contig_methylation_w_bin = contig_methylation_w_bin.join(contig_bins, on="contig", how="left") \
         .with_columns(pl.col("bin").fill_null("unbinned")) \
         .with_columns((pl.col("bin") + "_" + pl.col("contig")).alias("bin_contig"))
     
-    return motifs_scored_in_bins
+    return contig_methylation_w_bin
 
 
 def remove_ambiguous_motifs_from_bin_consensus(contig_methylation, min_motifs_in_contig, ambiguous_motif_percentage_cutoff):

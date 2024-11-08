@@ -91,8 +91,8 @@ def compare_methylation_pattern(motif_binary_compare):
 
 def process_bin_contig(
     task, 
-    bin_motifs_from_motifs_scored_in_bins, 
-    motifs_scored_in_contigs, 
+    contig_methyltaion, 
+    bin_methylation, 
     mode, 
     args,
     counter,
@@ -101,38 +101,22 @@ def process_bin_contig(
     """
     This function processes a single contig and compares the methylation pattern between the contig and the bin.
     Depending on the mode, the function will either look for contamination or include contigs.
-    
-    Parameters:
-    - bin_contig: str
-        The contig to process
-    - bin_motifs_from_motifs_scored_in_bins: polars.DataFrame
-        The motifs scored in the bin
-    - motifs_scored_in_contigs: polars.DataFrame
-        The motifs scored in the contigs
-    - mode: str
-        The mode to run the comparison in. Either "contamination" or "include"
-    - args: argparse.Namespace
-        The arguments passed to the script
-    
-    Returns:
-    - contig_bin_comparison_score: polars.DataFrame
-        The comparison score for the contig
     """
     
     bin, bin_contig = task
     
     if mode == "contamination":
-        motif_binary_compare = bin_motifs_from_motifs_scored_in_bins \
+        motif_binary_compare = bin_methylation \
             .filter(pl.col("bin") == bin) \
             .join(
-                ut.add_compare_df(motifs_scored_in_contigs, bin_contig),
+                ut.add_compare_df(contig_methyltaion, bin_contig),
                 on="motif_mod"
             )
     if mode == "include":
-        motif_binary_compare = bin_motifs_from_motifs_scored_in_bins \
+        motif_binary_compare = bin_methylation \
             .filter(pl.col("bin") != bin) \
             .join(
-                ut.add_compare_df(motifs_scored_in_contigs, bin_contig),
+                ut.add_compare_df(contig_methyltaion, bin_contig),
                 on="motif_mod",
                 how="left"
             )\
@@ -177,18 +161,18 @@ def create_dir_if_not_exists(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
-def compare_methylation_pattern_multiprocessed(motifs_scored_in_bins, bin_consensus, mode, args, num_processes=1):
+def compare_methylation_pattern_multiprocessed(contig_methylation, bin_methylation, mode, args, num_processes=1):
     logger = logging.getLogger(__name__)
     logger.info("Starting comparison of methylation patterns")
     
-    motifs_scored_in_contigs = motifs_scored_in_bins \
+    contig_methylation_filtered = contig_methylation \
         .filter(pl.col("N_motif_obs") >= args.n_motif_contig_cutoff)
     
-    unique_tasks = motifs_scored_in_contigs.select(["bin", "bin_contig"]).unique()
+    unique_tasks = contig_methylation_filtered.select(["bin", "bin_contig"]).unique()
     
     tasks = [(row['bin'], row['bin_contig']) for row in unique_tasks.iter_rows(named = True)]
     
-    motifs_scored_in_contigs = motifs_scored_in_contigs \
+    contig_methylation_filtered = contig_methylation_filtered \
         .select(["bin", "bin_contig", "motif_mod", "median"]) \
         .rename({"bin_contig": "bin_compare"})
     
@@ -212,8 +196,8 @@ def compare_methylation_pattern_multiprocessed(motifs_scored_in_bins, bin_consen
     # Put them workers to work
     results = pool.starmap(process_bin_contig, [(
         task, 
-        bin_consensus, 
-        motifs_scored_in_contigs, 
+        bin_methylation, 
+        contig_methylation_filtered, 
         mode, 
         args,
         counter,

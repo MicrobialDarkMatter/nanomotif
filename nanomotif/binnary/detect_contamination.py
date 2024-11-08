@@ -5,16 +5,16 @@ from nanomotif.binnary import scoring as sc
 from nanomotif.binnary.utils import split_bin_contig
 import logging
 
-def detect_contamination(motifs_scored_in_bins, bin_consensus, args):
+def detect_contamination(contig_methylation, bin_methylation, args):
     logger = logging.getLogger(__name__)
     logger.info("Starting contamination detection analysis...")
-    motifs_scored_in_bins_wo_unbinned = motifs_scored_in_bins \
+    contig_methylation_wo_unbinned = contig_methylation \
         .filter(~pl.col("bin_contig").str.contains("unbinned"))
     
     
     contig_bin_comparison_score, contigs_w_no_methylation = sc.compare_methylation_pattern_multiprocessed(
-        motifs_scored_in_bins=motifs_scored_in_bins_wo_unbinned,
-        bin_consensus=bin_consensus,
+        contig_methylation=contig_methylation_wo_unbinned,
+        bin_methylation=bin_methylation,
         mode="contamination",
         args=args,
         num_processes=args.threads
