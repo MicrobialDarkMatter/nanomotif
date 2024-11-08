@@ -496,7 +496,7 @@ def binnary(args, pl):
     
     # Create the bin_consensus dataframe for scoring
     log.info("Creating bin_consensus dataframe for scoring...")
-    motifs_scored_filtered = data_processing.filter_motifs_for_scoring(
+    bin_methylation = data_processing.filter_motifs_for_scoring(
         motifs_scored,
         args
     )
@@ -504,7 +504,7 @@ def binnary(args, pl):
     # Setting up the contamination analysis
     if (args.command == "detect_contamination" and not args.contamination_file) or (args.command == "include_contigs" and args.run_detect_contamination):
         contamination = detect_contamination.detect_contamination(
-            motifs_scored, motifs_scored_filtered, args
+            motifs_scored, bin_methylation, args
         )
         data_processing.generate_output(contamination.to_pandas(), args.out, "bin_contamination.tsv")
     elif args.contamination_file:
@@ -521,12 +521,11 @@ def binnary(args, pl):
         data_processing.generate_output(new_contig_bins, args.out, "decontaminated_contig_bin.tsv")
 
     if args.command == "include_contigs":
-        # # User provided contamination file
-        # if args.contamination_file:
-        #     log.info("Loading contamination file...")
-        #     contamination = data_processing.load_contamination_file(args.contamination_file)
-        
-        ## If run_detect_contamination is false and contamination file is not provided, then set contamination to None
+        # User provided contamination file
+        if args.contamination_file:
+            log.info("Loading contamination file...")
+            contamination = data_processing.load_contamination_file(args.contamination_file)
+                # If run_detect_contamination is false and contamination file is not provided, then set contamination to None
         if not args.run_detect_contamination and not args.contamination_file:
             contamination = pl.DataFrame(
                 {
@@ -542,15 +541,13 @@ def binnary(args, pl):
         
         # Run the include_contigs analysis    
         include_contigs_df = include_contigs.include_contigs(
-            motifs_scored_in_bins, bin_motifs_from_motifs_scored_in_bins, contamination, args
+            motifs_scored, bin_methylation, contamination, args
         )
         
         # Save the include_contigs_df results
         data_processing.generate_output(include_contigs_df.to_pandas(), args.out, "include_contigs.tsv")
         
         # Create a new contig_bin file
-        
-        
         new_contig_bins = data_processing.create_contig_bin_file(
             contig_bins=contig_bins.to_pandas(), 
             contamination= contamination.to_pandas(),

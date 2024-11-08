@@ -114,12 +114,12 @@ def test_filter_motifs_for_scoring(loaded_data, motifs_scored_in_bins_and_bin_mo
     
     args = MockArgs()
     print(motifs_scored_in_bins)
-    motifs_scored_filtered = data_processing.filter_motifs_for_scoring(
+    bin_methylation = data_processing.filter_motifs_for_scoring(
         motifs_scored_in_bins,
         args
     )
     
-    assert motifs_scored_filtered is not None
-    assert motifs_scored_filtered.columns == ['bin', 'motif_mod', 'N_motif_obs_bin', 'mean_bin', 'mean_bin_filtered', 'std_bin_filtered', 'n_contigs', 'methylation_binary']
+    assert bin_methylation is not None
+    assert bin_methylation.columns == ['bin', 'motif_mod', 'N_motif_obs_bin', 'mean_bin_median', 'mean_bin_median_filtered', 'std_bin_median_filtered', 'n_contigs', 'methylation_binary']
     
     
