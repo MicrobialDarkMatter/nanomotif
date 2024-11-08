@@ -393,7 +393,6 @@ def check_install(args):
 # Binnary - contamination and inclusion
 from nanomotif.binnary import data_processing, detect_contamination, include_contigs
 from nanomotif.binnary.logging import set_logger_config
-# from nanomotif.binnary.utils import run_methylation_utils
 from methylation_utils_wrapper.utils import run_methylation_utils
 
 
