@@ -59,7 +59,7 @@ def motifs_scored_in_bins_and_bin_motifs(loaded_data):
     motifs_in_bins = bin_motif_binary.select("motif_mod").unique()["motif_mod"]
     
     # Step 2: create motifs_scored_in_bins
-    motifs_scored_in_bins = data_processing.add_bin_to_motifs_scored(
+    motifs_scored_in_bins = data_processing.add_bin(
         motifs_scored, contig_bins 
     )
     

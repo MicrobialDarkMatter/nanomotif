@@ -33,8 +33,8 @@ def test_compare_methylation_pattern_contamination(loaded_data, motifs_scored_in
     # ]
     
     contig_bin_comparison_score, contigs_w_no_methylation = sc.compare_methylation_pattern_multiprocessed(
-        motifs_scored_in_bins=motifs_scored_in_bins,
-        bin_consensus=bin_consensus,
+        contig_methylation=motifs_scored_in_bins,
+        bin_methylation=bin_consensus,
         mode="contamination",
         # choices=choices,
         args=args
@@ -67,8 +67,8 @@ def test_compare_methylation_pattern_include(loaded_data, motifs_scored_in_bins_
     )
     
     contig_bin_comparison_score, contigs_w_no_methylation = sc.compare_methylation_pattern_multiprocessed(
-        motifs_scored_in_bins=motifs_scored_in_bins,
-        bin_consensus=bin_consensus,
+        contig_methylation=motifs_scored_in_bins,
+        bin_methylation=bin_consensus,
         mode="include",
         args=args
     )

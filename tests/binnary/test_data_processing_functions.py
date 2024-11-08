@@ -49,7 +49,7 @@ def test_prepare_bin_consensus(loaded_data):
     
 
 
-def test_add_bin_to_motifs_scored(loaded_data):
+def test_add(loaded_data):
     # Access the loaded data directly if returned as a dictionary
     motifs_scored = loaded_data["motifs_scored"]
     bin_motifs = loaded_data["bin_motifs"]
@@ -60,7 +60,7 @@ def test_add_bin_to_motifs_scored(loaded_data):
     bin_motif_binary = data_processing.prepare_bin_consensus(bin_motifs, args)
 
     # Step 2: create motifs_scored_in_bins
-    motifs_scored_in_bins = data_processing.add_bin_to_motifs_scored(
+    motifs_scored_in_bins = data_processing.add_bin(
         motifs_scored,
         contig_bins
     )
