@@ -238,9 +238,7 @@ def compare_methylation_pattern_multiprocessed(motifs_scored_in_bins, bin_consen
             contigs_w_no_methylation.append(no_methylation)
     
     if comparison_score.shape[0] == 0:
-        logger.warning("No contigs were found with the specified criteria.")
-        # exit
-        sys.exit(1)
+        logger.warning(f"{args.command}: No contigs were found with the specified criteria.")
     
     return comparison_score, contigs_w_no_methylation
 
