@@ -488,10 +488,33 @@ def binnary(args, pl):
         os.path.join(args.out, contig_methylation_file), separator="\t", has_header = True
     )
     
+    if args.command == "include_contigs":
+        # User provided contamination file
+        if args.contamination_file:
+            log.info("Loading contamination file...")
+            contamination = data_processing.load_contamination_file(args.contamination_file)
+        # If run_detect_contamination is false and contamination file is not provided, then set contamination to None
+        if not args.run_detect_contamination and not args.contamination_file:
+            contamination = pl.DataFrame(
+                {
+                    "bin": [],
+                    "bin_contig_compare": [],
+                    "binary_methylation_mismatch_score": [],
+                    "non_na_comparisons": [],
+                    "contig": []
+                }
+            )
+        
+        # move contigs in bin_contamination to unbinned
+        contamination_contigs = contamination.get_column("contig")
+
+        contig_bins = contig_bins.filter(~pl.col("contigs").is_in(contamination_contigs))
+
     contig_methylation = data_processing.add_bin(
         contig_methylation,
         contig_bins
     )
+
     
     
     # Create the bin_consensus dataframe for scoring
@@ -521,22 +544,6 @@ def binnary(args, pl):
         data_processing.generate_output(new_contig_bins, args.out, "decontaminated_contig_bin.tsv")
 
     if args.command == "include_contigs":
-        # User provided contamination file
-        if args.contamination_file:
-            log.info("Loading contamination file...")
-            contamination = data_processing.load_contamination_file(args.contamination_file)
-                # If run_detect_contamination is false and contamination file is not provided, then set contamination to None
-        if not args.run_detect_contamination and not args.contamination_file:
-            contamination = pl.DataFrame(
-                {
-                    "bin": [],
-                    "bin_contig_compare": [],
-                    "binary_methylation_mismatch_score": [],
-                    "non_na_comparisons": [],
-                    "contig": []
-                }
-            )
-        
         
         
         # Run the include_contigs analysis    
