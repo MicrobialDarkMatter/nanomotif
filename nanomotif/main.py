@@ -427,7 +427,7 @@ def binnary(args):
         log.info(f"Check if {contig_methylation_file} exists")
 
     if os.path.isfile(os.path.join(args.out,contig_methylation_file)) and not args.force:
-        log.info("Motifs-scored-read-methylation.tsv exists. Using existing file! Use --force to override this.")
+        log.info("motifs-scored-read-methylation.tsv exists. Using existing file! Use --force to override this.")
     elif not os.path.isfile(os.path.join(args.out, contig_methylation_file)) or args.force:
         log.info(f"Running methylation_utils to create {contig_methylation_file}")
         # Create motifs-scored-read-methylation
@@ -437,7 +437,7 @@ def binnary(args):
             motifs = motifs_in_bin_consensus,
             threads = args.threads,
             min_valid_read_coverage = args.min_valid_read_coverage,
-            output = args.out
+            output = os.path.join(args.out,contig_methylation_file)
         )
 
 
