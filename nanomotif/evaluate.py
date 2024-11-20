@@ -168,17 +168,7 @@ def motif_model_read(pileup: pl.DataFrame, contig: str, motif: Motif) -> BetaBer
 ##########################################
 
 def worker_function(
-        args, 
-        counter, 
-        lock, 
-        assembly, 
-        min_kl_divergence, 
-        padding, 
-        minimum_methylation_fraction_confident, 
-        read_level_methylation,
-        log_dir, 
-        verbose, 
-        seed
+        args
     ):
     """
     Process a single subpileup for one contig and one modtype
@@ -191,15 +181,16 @@ def worker_function(
     - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
     - padding (int): The padding to use for the motif.
     """
+    (contig, modtype, subpileup, low_coverage_positions, counter, lock, assembly, 
+     min_kl_divergence, padding, minimum_methylation_fraction_confident, 
+     read_level_methylation, log_dir, verbose, seed) = args
+    set_seed(seed=seed)
+    warnings.filterwarnings("ignore")
     process_id = os.getpid()
     if log_dir is not None:
         log_file = f"{log_dir}/find-motifs.{process_id}.log"
         configure_logger(log_file, verbose=verbose)
     log.info(f"Worker {process_id} started")
-
-    set_seed(seed=seed)
-    warnings.filterwarnings("ignore")
-    contig, modtype, subpileup, low_coverage_positions = args
 
     if low_coverage_positions is not None:
         low_coverage_positions = low_coverage_positions.explode("position", "strand")
@@ -223,8 +214,10 @@ def worker_function(
         )
         with lock:
             counter.value += 1
+            log.debug(f"Task for ({contig}, {modtype}) complete; progress: {counter.value}")
         return result
-    except:
+    except Exception as e:
+        log.error(f"Error processing {contig}, {modtype}: {e}")
         with lock:
             counter.value += 1
         return None
@@ -288,7 +281,11 @@ def process_subpileup(
             pl.col("model").map_elements(lambda x: x._beta).alias("beta")
         ]).drop("model")
         return identified_motifs
-    
+
+def set_polars_env():
+    os.environ["POLARS_MAX_THREADS"] = "1"
+
+
 
 def process_sample_parallel(
         assembly, pileup, 
@@ -328,61 +325,66 @@ def process_sample_parallel(
     # Infer padding size from candidate_size
     padding = search_frame_size // 2
     
-    # Create a list of tasks (TODO: not have a list of all data)
+    log.debug("Partitining pileups to dict")
+    pileup_dict = pileup.partition_by(["contig", "mod_type"], as_dict=True)
+    low_coverage_positions_dict = low_coverage_positions.partition_by(["contig", "mod_type"], as_dict=True) if low_coverage_positions is not None else None
 
-    log.debug("Creating task list for workers")
-    if low_coverage_positions is not None:
-        tasks = (
-            (contig, modtype, subpileup, low_coverage_positions.filter((pl.col("contig") == contig) & (pl.col("mod_type") == modtype)))
-            for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])
-        )
-    else:
-        tasks = (
-            (contig, modtype, subpileup, None)
-            for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])
-        )
+    def task_generator(pileup_dict, low_coverage_positions_dict):
+        for (contig, modtype) in pileup_dict:
+            subpileup = pileup_dict[(contig, modtype)]
+            
+            if low_coverage_positions is not None:
+                if (contig, modtype) in low_coverage_positions_dict.keys():
+                    low_coverage_positions_filtered = low_coverage_positions_dict[(contig, modtype)]
+                else:
+                    low_coverage_positions_filtered = None
+            else:
+                low_coverage_positions_filtered = None
+
+            yield (contig, modtype, subpileup, low_coverage_positions_filtered, counter, lock, assembly, 
+                       minimum_kl_divergence, search_frame_size // 2, threshold_methylation_confident, 
+                       read_level_methylation, log_dir, verbose, seed)
+                
     # Create a progress manager
     manager = multiprocessing.Manager()
     counter = manager.Value('i', 0)
     lock = manager.Lock()
 
     # Create a pool of workers
-    pool = get_context("spawn").Pool(processes=threads)
+    pool = get_context("spawn").Pool(processes=threads, initializer=set_polars_env)
 
     # Create a process for the progress bar
-    total_tasks = sum(1 for _ in tasks)
-    tasks = (  # Re-create generator as it’s exhausted after counting
-        (contig, modtype, subpileup, low_coverage_positions.filter((pl.col("contig") == contig) & (pl.col("mod_type") == modtype)))
-        if low_coverage_positions is not None else
-        (contig, modtype, subpileup, None)
-        for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])
-    )
+    log.debug("Counting number of tasks")
+    total_tasks = len(pileup.select("contig", "mod_type").unique())
+
+    log.debug("Starting progress bar")
     progress_bar_process = multiprocessing.Process(target=update_progress_bar, args=(counter, total_tasks, True))
     progress_bar_process.start()
 
     # Put them workers to work
     log.debug("Starting workers")
-    results = pool.starmap(worker_function, (
-        (task, counter, lock, assembly, minimum_kl_divergence, padding, threshold_methylation_confident, read_level_methylation,
-         log_dir, verbose, seed)
-        for task in tasks
-    ))
+    chunksize = min(100, total_tasks // threads)
+    results = pool.imap(worker_function, task_generator(pileup_dict, low_coverage_positions_dict), chunksize=chunksize)
     results = [result for result in results if result is not None]
+    log.debug("Joining results")
 
-    # Close the pool
+    log.debug("Closing pool")
     pool.close()
     pool.join()
 
-    # Close the progress bar
+    log.debug("Joining progress bar")
     progress_bar_process.join()
 
+    log.debug("Creating final dataframe")
     if len(results) == 0:
+        log.debug("No motifs found")
         return None
     motifs = pl.concat(results, rechunk=True, parallel=False)
 
     model_col = []
     for a, b in zip(motifs.get_column("alpha").to_list(), motifs.get_column("beta").to_list()):
         model_col.append(BetaBernoulliModel(a, b))
+
 
     motifs = motifs.with_columns([
             pl.Series(model_col).alias("model"),

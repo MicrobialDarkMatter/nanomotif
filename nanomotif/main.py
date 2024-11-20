@@ -6,9 +6,7 @@ import sys
 import shutil
 from pathlib import Path
 import json
-os.environ["POLARS_MAX_THREADS"] = "1"
-import polars as pl
-from polars import col
+
 import numpy as np
 import random
 import warnings
@@ -16,6 +14,10 @@ from nanomotif._version import __version__
 
 
 def shared_setup(args, working_dir):
+    # Set up logging
+    LOG_DIR = working_dir + "/logs"
+    Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
+    configure_logger(LOG_DIR + f"/{args.command}.main.log", args.verbose)
     warnings.filterwarnings("ignore")
     # Check if output directory exists
     if not os.path.exists(args.out):
@@ -23,10 +25,6 @@ def shared_setup(args, working_dir):
     else:
         log.warning(f"Output directory {args.out} already exists")
 
-    # Set up logging
-    LOG_DIR = working_dir + "/logs"
-    Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
-    configure_logger(LOG_DIR + f"/{args.command}.main.log", args.verbose)
 
     # Log arguments
     log.info(f"nanomotif version: {__version__}")
@@ -44,7 +42,7 @@ def shared_setup(args, working_dir):
 
 
 
-def find_motifs(args, pileup = None, assembly = None, min_mods_pr_contig = 50, min_mod_frequency = 10000) -> pl.DataFrame:
+def find_motifs(args, pl,  pileup = None, assembly = None, min_mods_pr_contig = 50, min_mod_frequency = 10000):
     """
     Nanomotif motif finder module
 
@@ -56,6 +54,7 @@ def find_motifs(args, pileup = None, assembly = None, min_mods_pr_contig = 50, m
     Returns:
         pandas.DataFrame: Motif data
     """
+    import polars as pl
     log.info("Starting nanomotif motif finder")
     if pileup is None:
         log.info("Loading pileup")
@@ -158,7 +157,7 @@ def find_motifs(args, pileup = None, assembly = None, min_mods_pr_contig = 50, m
     motifs_file_name = "precleanup-motifs/motifs"
 
     log.info(" - Writing motifs")
-    motifs = motifs.filter(col("score") > args.min_motif_score)
+    motifs = motifs.filter(pl.col("score") > args.min_motif_score)
     if len(motifs) == 0:
         log.info("No motifs found")
         return
@@ -213,7 +212,7 @@ def find_motifs(args, pileup = None, assembly = None, min_mods_pr_contig = 50, m
     log.info("Done finding motifs")
     return format_motif_df(motifs)
 
-def score_motifs(args, pileup = None, assembly = None, motifs = None, min_mods_pr_contig = 50, min_mod_frequency = 10000) -> pl.DataFrame:
+def score_motifs(args, pl, pileup = None, assembly = None, motifs = None, min_mods_pr_contig = 50, min_mod_frequency = 10000):
     log.info("Starting nanomotif motif scorer")
     if pileup is None:
         log.info("Loading pileup")
@@ -283,7 +282,7 @@ def score_motifs(args, pileup = None, assembly = None, motifs = None, min_mods_p
     scored_all.write_csv(args.out + "/motifs-scored.tsv", separator="\t")
     return scored_all
 
-def bin_consensus(args, pileup = None, assembly = None, motifs = None, motifs_scored = None):
+def bin_consensus(args, pl, pileup = None, assembly = None, motifs = None, motifs_scored = None):
     bins = pl.read_csv(args.bins, separator="\t", has_header=False, infer_schema_length=10000) \
         .rename({"column_1":"contig", "column_2":"bin"})
     if motifs is None:
@@ -332,7 +331,7 @@ def bin_consensus(args, pileup = None, assembly = None, motifs = None, motifs_sc
     output = output.unique(["motif", "bin", "mod_type", "mod_position", "n_mod_bin", "n_nomod_bin"])
     output.write_csv(args.out + "/bin-motifs.tsv", separator="\t")
 
-def motif_discovery(args):
+def motif_discovery(args, pl):
     # Check if all required files exist
     if not os.path.exists(args.pileup):
         log.error(f"File {args.pileup} does not exist")
@@ -356,22 +355,22 @@ def motif_discovery(args):
 
     # Find motifs
     log.info("Finding motifs")
-    motifs = find_motifs(args, pileup=pileup, assembly=assembly)
+    motifs = find_motifs(args, pl, pileup=pileup, assembly=assembly)
     if motifs is None:
         log.info("Stopping workflow")
         return
 
     # Score all motifs
     log.info("Scoring motifs")
-    scored_all = score_motifs(args, pileup=pileup, assembly=assembly, motifs=motifs)
+    scored_all = score_motifs(args, pl, pileup=pileup, assembly=assembly, motifs=motifs)
 
     # Bin consensus
     log.info("Finding bin consensus motifs")
-    bin_consensus(args, pileup=pileup, assembly=assembly, motifs=motifs, motifs_scored=scored_all)
+    bin_consensus(args, pl, pileup=pileup, assembly=assembly, motifs=motifs, motifs_scored=scored_all)
 
     log.info("Done")
 
-def check_install(args):
+def check_install(args, pl):
     
     # Check if output directory exists
     log.info("Loading required files")
@@ -384,16 +383,16 @@ def check_install(args):
 
     # Find motifs
     log.info("Finding motifs")
-    motifs = find_motifs(args, pileup=pileup, assembly=assembly)
+    motifs = find_motifs(args, pl, pileup=pileup, assembly=assembly)
 
     # Score all motifs
     log.info("Scoring motifs")
-    scored_all = score_motifs(args, pileup=pileup, assembly=assembly, motifs=motifs)
+    scored_all = score_motifs(args, pl, pileup=pileup, assembly=assembly, motifs=motifs)
 
     # Bin consensus
     log.info("Finding bin consensus motifs")
     args.bins = nm.datasets.geobacillus_plasmids_bin_path()
-    bin_consensus(args, pileup=pileup, assembly=assembly, motifs=motifs, motifs_scored=scored_all)
+    bin_consensus(args, pl, pileup=pileup, assembly=assembly, motifs=motifs, motifs_scored=scored_all)
     
     log.info("Done")
     shutil.rmtree(args.out)
@@ -406,7 +405,7 @@ from nanomotif.binnary.logging import set_logger_config
 
 
 
-def binnary(args):
+def binnary(args, pl):
     """
     binnary entry point for the DNA Methylation Pattern Analysis tool.
     Orchestrates the workflow of the tool based on the provided arguments.
@@ -553,27 +552,29 @@ def main():
     # Parse arguments
     parser = nm.argparser.create_parser()
     args = parser.parse_args()
-    
+
+    os.environ["POLARS_MAX_THREADS"] =str(args.threads)
+    import polars as pl
     if args.command in ["detect_contamination", "include_contigs", "MTase-linker"]:
         args.verbose = False
         args.seed = 1
     
     if args.command == "find_motifs":
         shared_setup(args, args.out)
-        find_motifs(args)
+        find_motifs(args, pl)
     elif args.command == "score_motifs":
         shared_setup(args, args.out)
-        score_motifs(args)
+        score_motifs(args, pl)
     elif args.command == "bin_consensus":
         shared_setup(args, args.out)
-        bin_consensus(args)
+        bin_consensus(args, pl)
     elif args.command == "motif_discovery":
         shared_setup(args, args.out)
-        motif_discovery(args)
+        motif_discovery(args, pl)
 
     elif args.command in ["detect_contamination", "include_contigs"]:
         shared_setup(args, args.out)
-        binnary(args)
+        binnary(args, pl)
 
     elif args.command == "MTase-linker":
         mtase_linker(args)
@@ -581,7 +582,7 @@ def main():
     elif args.command == "check_installation":
         args.out = "nanomotif_install_check"
         shared_setup(args, args.out)
-        check_install(args)
+        check_install(args, pl)
 
     else:
         parser.print_help()
