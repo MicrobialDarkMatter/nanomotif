@@ -202,7 +202,9 @@ def filter_motifs_for_scoring(contig_methylation, args):
         .group_by(["bin", "motif_mod"]) \
         .agg(
             pl.col("N_motif_obs").sum().alias("N_motif_obs_bin"),
-            pl.col("median").mean().alias("mean_bin_median")
+            (
+                (pl.col("median") * pl.col("N_motif_obs")).sum() / pl.col("N_motif_obs").sum()
+            ).alias("mean_bin_median")
         ) \
         .filter(pl.col("N_motif_obs_bin") > args.n_motif_bin_cutoff)
     
@@ -213,16 +215,29 @@ def filter_motifs_for_scoring(contig_methylation, args):
     bin_motifs_mean_and_sd = contig_methylation \
         .filter(
             (pl.col("bin") != "unbinned") &  
-            (pl.col("median") > 0.1) &
+            # (pl.col("median") > 0.1) &
             (pl.col("N_motif_obs") > args.n_motif_contig_cutoff)
         ) \
         .group_by(["bin", "motif_mod"]) \
         .agg(
-            pl.col("median").mean().alias("mean_bin_median_filtered"),
-            pl.col("median").std().fill_null(0.15/4).alias("std_bin_median_filtered"),
+            pl.col("N_motif_obs").sum().alias("sum_w"),
+            (pl.col("N_motif_obs") * pl.col("median")).sum().alias("sum_wx"),
+            (pl.col("N_motif_obs") * pl.col("median") ** 2).sum().alias("sum_wx2"),
             pl.col("contig").count().alias("n_contigs")
-        ) 
+        )\
+        .with_columns(
+            (pl.col("sum_wx") / pl.col("sum_w")).alias("mean_bin_median_filtered")
+        )\
+        .with_columns(
+            ((pl.col("sum_wx2") / pl.col("sum_w")) - (pl.col("mean_bin_median_filtered") ** 2)).alias("weighted_variance")
+        )\
+        .with_columns(
+            pl.col("weighted_variance").sqrt().alias("std_bin_median_filtered")
+        )
     
+            # pl.col("median").mean().alias("mean_bin_median_filtered"),
+            # pl.col("median").std().fill_null(0.15/4).alias("std_bin_median_filtered"),
+            # pl.col("contig").count().alias("n_contigs")
     # Merge with bin_motifs_from_motifs_scored_in_bins
     bin_methylation = bin_methylation.join(bin_motifs_mean_and_sd, on=["bin", "motif_mod"], how="left") \
         .with_columns((pl.col("mean_bin_median") >= args.mean_methylation_cutoff).cast(int).alias("methylation_binary")) # Create a binary index for bin and motif_mod
