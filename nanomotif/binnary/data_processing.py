@@ -163,42 +163,16 @@ def add_bin(contig_methylation, contig_bins):
     # Merge with contig_bins
     contig_methylation_w_bin = contig_methylation_w_bin.join(contig_bins, on="contig", how="left") \
         .with_columns(pl.col("bin").fill_null("unbinned")) \
-        .with_columns((pl.col("bin") + "_" + pl.col("contig")).alias("bin_contig"))
+        .drop(["mod_position", "mod_type", "motif"])
     
     return contig_methylation_w_bin
 
 
-def remove_ambiguous_motifs_from_bin_consensus(contig_methylation, min_motifs_in_contig, ambiguous_motif_percentage_cutoff):
-    # Remove motifs in bins where the majority of the mean methylation of motifs is in the range of 0.05-0.4
-    ambiguous_contig_methylation = contig_methylation \
-        .filter(pl.col("bin") != "unbinned") \
-        .filter(pl.col("N_motif_obs") >= min_motifs_in_contig) \
-        .with_columns(
-            ((pl.col("median") > 0.05) & (pl.col("median") < 0.4)).alias("is_ambiguous")
-        )
-
-    # Count the number of ambiguous motifs per bin
-    # Group by 'bin' and 'motif_mod' and calculate the sum of 'is_ambiguous' and the total count in each group
-    ambiguous_bin_motifs = ambiguous_contig_methylation.group_by(["bin", "motif_mod"]) \
-        .agg(
-            pl.col("is_ambiguous").sum().alias("total_ambiguous"),
-            pl.col("is_ambiguous").count().alias("n_contigs_with_motif")
-        ) \
-        .with_columns((pl.col("total_ambiguous") / pl.col("n_contigs_with_motif")).alias("percentage_ambiguous")) \
-        .filter(pl.col("percentage_ambiguous") <= ambiguous_motif_percentage_cutoff) \
-        .select(["bin", "motif_mod"])
-    
-    
-    return ambiguous_bin_motifs
-
-
-def filter_motifs_for_scoring(contig_methylation, args):
-    # Remove motifs in bins where the majority of the mean methylation of motifs is in the range of 0.05-0.4
-    confident_bin_methylations = remove_ambiguous_motifs_from_bin_consensus(contig_methylation, args.n_motif_contig_cutoff, args.ambiguous_motif_percentage_cutoff)
-    
+def impute_contig_methylation_within_bin(contig_methylation, args):
+    contig_methylation = contig_methylation\
+        .filter((pl.col("bin") != "unbinned") & (pl.col("N_motif_obs") >= args.n_motif_contig_cutoff))
     
     bin_methylation = contig_methylation \
-        .filter(pl.col("bin") != "unbinned") \
         .group_by(["bin", "motif_mod"]) \
         .agg(
             pl.col("N_motif_obs").sum().alias("N_motif_obs_bin"),
@@ -207,42 +181,19 @@ def filter_motifs_for_scoring(contig_methylation, args):
             ).alias("mean_bin_median")
         ) \
         .filter(pl.col("N_motif_obs_bin") > args.n_motif_bin_cutoff)
-    
-    bin_methylation = bin_methylation \
-        .join(confident_bin_methylations, on=["bin", "motif_mod"], how="inner")
-    
-    # Calculate standard deviation of methylation per bin and motif_mod
-    bin_motifs_mean_and_sd = contig_methylation \
-        .filter(
-            (pl.col("bin") != "unbinned") &  
-            # (pl.col("median") > 0.1) &
-            (pl.col("N_motif_obs") > args.n_motif_contig_cutoff)
-        ) \
-        .group_by(["bin", "motif_mod"]) \
-        .agg(
-            pl.col("N_motif_obs").sum().alias("sum_w"),
-            (pl.col("N_motif_obs") * pl.col("median")).sum().alias("sum_wx"),
-            (pl.col("N_motif_obs") * pl.col("median") ** 2).sum().alias("sum_wx2"),
-            pl.col("contig").count().alias("n_contigs")
-        )\
+
+    contig_bin_cross = contig_methylation\
+        .unique(subset=["contig", "bin"], maintain_order = True)\
+        .select(["contig", "bin"])
+
+    contig_methylation_imputed = contig_bin_cross\
+        .join(bin_methylation, on = ["bin"], how = "left")\
+        .join(contig_methylation, on = ["bin", "contig", "motif_mod"], how = "left")\
+        .sort(["bin", "contig", "motif_mod"])\
         .with_columns(
-            (pl.col("sum_wx") / pl.col("sum_w")).alias("mean_bin_median_filtered")
-        )\
-        .with_columns(
-            ((pl.col("sum_wx2") / pl.col("sum_w")) - (pl.col("mean_bin_median_filtered") ** 2)).alias("weighted_variance")
-        )\
-        .with_columns(
-            pl.col("weighted_variance").sqrt().alias("std_bin_median_filtered")
+            pl.when(pl.col("median").is_null()).then(pl.col("mean_bin_median")).otherwise(pl.col("median")).alias("median")
         )
-    
-            # pl.col("median").mean().alias("mean_bin_median_filtered"),
-            # pl.col("median").std().fill_null(0.15/4).alias("std_bin_median_filtered"),
-            # pl.col("contig").count().alias("n_contigs")
-    # Merge with bin_motifs_from_motifs_scored_in_bins
-    bin_methylation = bin_methylation.join(bin_motifs_mean_and_sd, on=["bin", "motif_mod"], how="left") \
-        .with_columns((pl.col("mean_bin_median") >= args.mean_methylation_cutoff).cast(int).alias("methylation_binary")) # Create a binary index for bin and motif_mod
-    
-    return bin_methylation
+    return contig_methylation_imputed
     
 def load_contamination_file(contamination_file):
     """
