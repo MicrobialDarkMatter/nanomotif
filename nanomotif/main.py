@@ -431,7 +431,7 @@ def binnary(args):
     elif not os.path.isfile(os.path.join(args.out, contig_methylation_file)) or args.force:
         log.info(f"Running methylation_utils to create {contig_methylation_file}")
         # Create motifs-scored-read-methylation
-        run_methylation_utils(
+        return_code = run_methylation_utils(
             pileup = args.pileup,
             assembly = args.assembly,
             motifs = motifs_in_bin_consensus,
@@ -439,6 +439,9 @@ def binnary(args):
             min_valid_read_coverage = args.min_valid_read_coverage,
             output = os.path.join(args.out,contig_methylation_file)
         )
+
+        if return_code != 0:
+            log.error("Error running methylation_utils")
 
 
     # Setting up the contamination analysis
@@ -582,6 +585,7 @@ def main():
         motif_discovery(args)
 
     elif args.command in ["detect_contamination", "include_contigs"]:
+        args.verbose = False
         shared_setup(args, args.out)
         binnary(args)
 
