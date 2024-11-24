@@ -1,27 +1,42 @@
+from sklearn.manifold import TSNE
 import polars as pl
-import pandas as pd
 from nanomotif.binnary import data_processing as dp
-from nanomotif.binnary import scoring as sc
-from nanomotif.binnary.utils import split_bin_contig
 import logging
 
-def detect_contamination(contig_methylation, bin_methylation, args):
+def detect_contamination(contig_methylation, contig_lengths, args):
     logger = logging.getLogger(__name__)
     logger.info("Starting contamination detection analysis...")
-    contig_methylation_wo_unbinned = contig_methylation \
-        .filter(~pl.col("bin_contig").str.contains("unbinned"))
-    
-    
-    contig_bin_comparison_score, contigs_w_no_methylation = sc.compare_methylation_pattern_multiprocessed(
-        contig_methylation=contig_methylation_wo_unbinned,
-        bin_methylation=bin_methylation,
-        mode="contamination",
-        args=args,
-        num_processes=args.threads
-    )
-    
+
+    contig_names, matrix = dp.create_matrix(contig_methylation)
+
+    logger.info("Starting tSNE")
+    tsne = TSNE(n_components = 3, perplexity = 30, random_state=42, n_jobs=args.threads)
+    tsne_embedding = tsne.fit_transform(matrix)
+
+    contig_weight = contig_lengths\
+        .filter(pl.col("contig").is_in(contig_names))\
+        .with_columns(
+            pl.col("length").log(base=10).alias("weight")
+        )\
+        .get_column("weight")
+
+    from sklearn.cluster import DBSCAN
+    logger.info("Performing DBSCAN")
+    dbscan = DBSCAN(eps=0.5, min_samples=5, n_jobs=args.threads)
+    dbscan.fit(tsne_embedding, sample_weight = contig_weight)
+    labels = dbscan.labels_
+
+    results = pl.DataFrame({
+                               "contig": contig_names,
+                               "cluster": labels
+                           })
+
+    results = contig_methylation\
+        .select(["bin", "contig"])\
+        .unique()\
+        .join(results, on = "contig", how = "left")
+
     logger.info("Finding contamination in bins")
-    contig_bin_comparison_score = split_bin_contig(contig_bin_comparison_score)
     
     # Filter contig_bin == bin and contig_bin_comparison_score > 0
     contamination_contigs = contig_bin_comparison_score \
