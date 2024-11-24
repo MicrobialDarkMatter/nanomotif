@@ -32,6 +32,7 @@ setup(
         "pandas>=2.0.2",
         "polars>=0.19,<=0.20.23",
         "scipy>=1.10.1",
+        "scikit-learn>=1.5.2",
         "networkx>=3.1",
         "pyarrow>=15.0.2",
         "Bio>=1.6.2",
