@@ -76,35 +76,10 @@ def test_add(loaded_data):
     assert motifs_scored_in_bins.filter(pl.col("contig") == "contig_1").select("bin").unique()["bin"].item() == "b1"
     
 
+   
 
 
-def test_remove_ambiguous_motifs(loaded_data, motifs_scored_in_bins_and_bin_motifs):
-    """
-    GIVEN loaded_data and motifs_scored_in_bins_and_bin_motifs
-    WHEN construct_bin_motifs_from_motifs_scored_in_bins is called
-    THEN assert that the output contains only the expected columns
-    """
-    motifs_scored_in_bins = motifs_scored_in_bins_and_bin_motifs["motifs_scored_in_bins"]
-    
-    args = MockArgs()
-    
-    
-    bins_w_no_ambiguous_motifs = data_processing.remove_ambiguous_motifs_from_bin_consensus(
-        motifs_scored_in_bins,
-        args.n_motif_contig_cutoff,
-        args.ambiguous_motif_percentage_cutoff 
-    )
-    print(bins_w_no_ambiguous_motifs)
-    
-    print(bins_w_no_ambiguous_motifs.filter(pl.col("bin") == "b1").to_pandas())
-    assert bins_w_no_ambiguous_motifs is not None
-    assert bins_w_no_ambiguous_motifs.columns == ['bin', 'motif_mod']
-    assert bins_w_no_ambiguous_motifs.filter((pl.col("bin") == "b1") & (pl.col("motif_mod") == "m1_a")).is_empty()
-    
-    
-
-
-def test_filter_motifs_for_scoring(loaded_data, motifs_scored_in_bins_and_bin_motifs):
+def test_impute_contig_methylation_within_bin(loaded_data, motifs_scored_in_bins_and_bin_motifs):
     """
     GIVEN loaded_data and motifs_scored_in_bins_and_bin_motifs
     WHEN construct_bin_motifs_from_motifs_scored_in_bins is called
@@ -114,12 +89,13 @@ def test_filter_motifs_for_scoring(loaded_data, motifs_scored_in_bins_and_bin_mo
     
     args = MockArgs()
     print(motifs_scored_in_bins)
-    bin_methylation = data_processing.filter_motifs_for_scoring(
+    imputed_binned_contig_methylation = data_processing.impute_contig_methylation_within_bin(
         motifs_scored_in_bins,
         args
     )
-    
-    assert bin_methylation is not None
-    assert bin_methylation.columns == ['bin', 'motif_mod', 'N_motif_obs_bin', 'mean_bin_median', 'mean_bin_median_filtered', 'std_bin_median_filtered', 'n_contigs', 'methylation_binary']
+    print(imputed_binned_contig_methylation)
+    assert imputed_binned_contig_methylation is not None
+    assert set(imputed_binned_contig_methylation.columns) == set(['contig', 'bin', 'motif_mod', 'N_motif_obs_bin', 'mean_bin_median', 'median' ])
+    assert imputed_binned_contig_methylation.get_column("median").has_nulls()
     
     
