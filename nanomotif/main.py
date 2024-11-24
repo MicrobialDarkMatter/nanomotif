@@ -460,10 +460,10 @@ def binnary(args, pl):
 
     
 
-    # Step 2: create motifs_scored_in_bins and bin_motif_binary
-    bin_motif_binary = data_processing.prepare_bin_consensus(bin_motifs, args)
+    # Step 2: create motifs_scored_in_bins and bin_consensus_motifs_filtered
+    bin_consensus_motifs_filtered = data_processing.prepare_bin_consensus(bin_motifs, args)
     
-    motifs_in_bin_consensus = bin_motif_binary.select("motif_mod").unique()["motif_mod"]
+    motifs_in_bin_consensus = bin_consensus_motifs_filtered.select("motif_mod").unique()["motif_mod"]
 
     contig_methylation_file = "motifs-scored-read-methylation.tsv"
     if not args.force:
@@ -487,6 +487,10 @@ def binnary(args, pl):
             log.error("Error running methylation_utils")
 
 
+    log.info("Loading assembly file...")
+    assembly = data_processing.read_fasta(args.assembly_file)
+    contig_lengths = data_processing.find_contig_lengths(assembly)
+
     # Setting up the contamination analysis
     if (args.command == "detect_contamination" and not args.contamination_file) or (args.command == "include_contigs" and args.run_detect_contamination):
         # Load motifs-scored-read-methylation.tsv
@@ -501,13 +505,13 @@ def binnary(args, pl):
 
         # Create the bin_consensus dataframe for scoring
         log.info("Creating bin_consensus dataframe for scoring...")
-        bin_methylation = data_processing.filter_motifs_for_scoring(
+        binned_contig_methylation_imputed = data_processing.impute_contig_methylation_within_bin(
             contig_methylation,
             args
         )
 
         contamination = detect_contamination.detect_contamination(
-            contig_methylation, bin_methylation, args
+            binned_contig_methylation_imputed, contig_lengths, args
         )
         data_processing.generate_output(contamination.to_pandas(), args.out, "bin_contamination.tsv")
 
@@ -577,8 +581,6 @@ def binnary(args, pl):
         
     if args.write_bins:
         log.info("Write bins flag is set. Writing bins to file...")
-        log.info("Loading assembly file...")
-        assembly = data_processing.read_fasta(args.assembly_file)
         
         bin_dir = os.path.join(args.out, args.command + "_bins")
         

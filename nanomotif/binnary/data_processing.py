@@ -48,6 +48,22 @@ def read_fasta(file_path):
         with open(file_path, "r") as handle:
             return {record.id: str(record.seq) for record in SeqIO.parse(handle, "fasta")}
 
+def find_contig_lengths(assembly):
+    # Parse the assembly file using Biopython
+    contigs = []
+    lengths = []
+    
+    for id, seq in assembly.items():
+        contigs.append(id)       # Contig name (FASTA header)
+        lengths.append(len(seq)) # Contig length
+    
+    # Create a Polars DataFrame
+    df = pl.DataFrame({
+        "contig": contigs,
+        "length": lengths
+    })
+    
+    return df
 
 def write_bins_from_contigs(new_contig_bins, assembly_dict, output_dir):
     """
@@ -192,8 +208,26 @@ def impute_contig_methylation_within_bin(contig_methylation, args):
         .sort(["bin", "contig", "motif_mod"])\
         .with_columns(
             pl.when(pl.col("median").is_null()).then(pl.col("mean_bin_median")).otherwise(pl.col("median")).alias("median")
-        )
+        )\
+        .drop("N_motif_obs")
+        
     return contig_methylation_imputed
+
+def create_matrix(contig_methylation):
+    matrix_df = contig_methylation\
+        .select(["contig", "motif_mod", "median"])\
+        .pivot(
+            values = "median",
+            index = "contig",
+            columns="motif_mod",
+            aggregate_function = None
+        )\
+        .fill_null(0)
+
+    contig_names = matrix_df.get_column("contig")
+    matrix = matrix_df.drop("contig").to_numpy()
+    return contig_names, matrix
+
     
 def load_contamination_file(contamination_file):
     """
