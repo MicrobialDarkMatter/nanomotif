@@ -10,7 +10,7 @@ def split_bin_contig(df):
     def custom_replace(bin_compare, contig_bin):
         if bin_compare is not None and contig_bin is not None:
             pattern = re.escape(contig_bin) + "_"
-            return re.sub(pattern, "", bin_compare)
+            return re.sub(pattern, "", bin_compare, count=1)
         return bin_compare
 
     df = df.with_columns(
@@ -20,11 +20,6 @@ def split_bin_contig(df):
             , return_dtype = pl.String)
         ).alias("contig")
     )
-    
-        # .with_columns([
-        #     pl.col("bin_compare").str.replace(pl.col("bin") + "_", "").alias("contig_bin")
-        # ])
-
     return df
 
 
