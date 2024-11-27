@@ -8,8 +8,8 @@ def detect_contamination(contig_methylation, contig_lengths):
     logger.info("Starting contamination detection analysis...")
 
     # Create the bin_consensus dataframe for scoring
-    log.info("Creating bin_consensus dataframe for scoring...")
-    contig_methylation = data_processing.impute_contig_methylation_within_bin(
+    logger.info("Creating bin_consensus dataframe for scoring...")
+    contig_methylation = dp.impute_contig_methylation_within_bin(
         contig_methylation
     )
     # INFO: It does not makes sense to find contamination in bins with a single contig

@@ -4,10 +4,11 @@ import numpy as np
 from nanomotif.binnary import data_processing as dp 
 from nanomotif.binnary import utils as ut
 import logging
+import hdbscan
 
 
 
-def include_contigs(contig_methylation):
+def include_contigs(contig_methylation, contig_lengths):
     logger = logging.getLogger(__name__)
     logger.info("Starting include_contigs analysis...")
     
@@ -72,12 +73,12 @@ def include_contigs(contig_methylation):
             (pl.col("cluster_length") / pl.col("bin_length")).alias("fraction_length")
         )
 
-    assigned_cluster = cluster_sizes\
+    assigned_cluster = bin_cluster_sizes\
         .group_by(["bin"])\
         .agg(
             pl.col("cluster_length").max().alias("cluster_length")
         )\
-        .join(cluster_sizes, on = ["bin", "cluster_length"], how = "left")\
+        .join(bin_cluster_sizes, on = ["bin", "cluster_length"], how = "left")\
         .rename({
                     "bin": "assigned_bin"
                 })\
