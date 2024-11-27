@@ -2,7 +2,6 @@ import pandas as pd
 import polars as pl
 import numpy as np
 from nanomotif.binnary import data_processing as dp 
-from nanomotif.binnary import scoring as sc
 from nanomotif.binnary import utils as ut
 import logging
 
