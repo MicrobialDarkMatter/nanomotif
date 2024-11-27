@@ -211,12 +211,6 @@ def impute_contig_methylation_within_bin(contig_methylation):
         )\
         .drop("N_motif_obs")
         
-        # .with_columns(
-        #     pl.when(pl.col("N_motif_obs") <= args.n_motif_contig_cutoff)
-        #     .then(None)
-        #     .otherwise(pl.col("median"))
-        #     .alias("median")
-        # )\
     return contig_methylation_imputed
 
 def impute_unbinned_contigs(contig_methylation):
