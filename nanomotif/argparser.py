@@ -99,31 +99,7 @@ def create_parser():
         action='store_true',
         help="Force override of motifs-scored-read-methylation.tsv. If not set existing file will be used.",
     )
-    parser_binnary_shared.add_argument(
-        "--mean_methylation_cutoff",
-        type=float,
-        default=0.25,
-        help="Cutoff value for considering a motif as methylated",
-    )
-    parser_binnary_shared.add_argument(
-        "--n_motif_contig_cutoff",
-        type=int,
-        default=10,
-        help="Number of motifs that needs to be observed in a contig before it is considered valid for scoring",
-    )
-    parser_binnary_shared.add_argument(
-        "--n_motif_bin_cutoff",
-        type=int,
-        default=500,
-        help="Number of motifs that needs to be observed in a bin to be considered valid for scoring",
-    )
     
-    parser_binnary_shared.add_argument(
-        "--ambiguous_motif_percentage_cutoff",
-        type=float,
-        default=0.40,
-        help="Percentage of ambiguous motifs defined as mean methylation between 0.05 and 0.40 in a bin. Motifs with an ambiguous methylation percentage of more than this value are removed from scoring. Default is 0.40",
-    )
     parser_binnary_shared.add_argument(
         "--write_bins",
         action='store_true',
@@ -167,12 +143,6 @@ def create_parser():
         "--run_detect_contamination",
         action='store_true',
         help="Indicate that the detect_contamination workflow should be run first"
-    )
-    parser_inclusion.add_argument(
-        "--min_motif_comparisons",
-        type=int,
-        default=5,
-        help="Minimum number of non-NA motif comparisons required to include a contig in the analysis. Default is 5",
     )
     
     ###########################################################################
