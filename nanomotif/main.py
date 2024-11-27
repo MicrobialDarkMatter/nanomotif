@@ -461,9 +461,11 @@ def binnary(args, pl):
     
 
     # Step 2: create motifs_scored_in_bins and bin_consensus_motifs_filtered
-    bin_consensus_motifs_filtered = data_processing.prepare_bin_consensus(bin_motifs, args)
-    
-    motifs_in_bin_consensus = bin_consensus_motifs_filtered.select("motif_mod").unique()["motif_mod"]
+    motifs_in_bin_consensus = bin_motifs\
+        .with_columns(
+            (pl.col("motif") + "_" + pl.col("mod_type") + "_" + pl.col("mod_position").cast(pl.Utf8)).alias("motif_mod")            
+        )\
+        .get_column("motif_mod").unique()
 
     contig_methylation_file = "motifs-scored-read-methylation.tsv"
     if not args.force:
@@ -549,7 +551,8 @@ def binnary(args, pl):
 
         # Run the include_contigs analysis    
         include_contigs_df = include_contigs.include_contigs(
-            contig_methylation_inc
+            contig_methylation_inc,
+            contig_lengths
         )
         
         # Save the include_contigs_df results
