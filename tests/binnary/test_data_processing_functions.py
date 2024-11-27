@@ -71,7 +71,7 @@ def test_add(loaded_data):
     )
     
     # Assert that the number of columns is 12
-    assert len(motifs_scored_in_bins.columns) == 9 # number of columns
+    assert set(motifs_scored_in_bins.columns) == set(['contig', 'median', 'N_motif_obs', 'motif_mod', 'bin']) # number of columns
     # Assert contig 1 belongs to bin 1
     assert motifs_scored_in_bins.filter(pl.col("contig") == "contig_1").select("bin").unique()["bin"].item() == "b1"
     
@@ -90,12 +90,76 @@ def test_impute_contig_methylation_within_bin(loaded_data, motifs_scored_in_bins
     args = MockArgs()
     print(motifs_scored_in_bins)
     imputed_binned_contig_methylation = data_processing.impute_contig_methylation_within_bin(
-        motifs_scored_in_bins,
-        args
+        motifs_scored_in_bins
     )
     print(imputed_binned_contig_methylation)
     assert imputed_binned_contig_methylation is not None
-    assert set(imputed_binned_contig_methylation.columns) == set(['contig', 'bin', 'motif_mod', 'N_motif_obs_bin', 'mean_bin_median', 'median' ])
-    assert imputed_binned_contig_methylation.get_column("median").has_nulls()
+    assert set(imputed_binned_contig_methylation.columns) == set(['contig', 'bin', 'motif_mod', 'mean_bin_median', 'median' ])
+    assert None not in imputed_binned_contig_methylation.to_pandas()["median"] 
     
+def test_impute_contig_methylation_within_bin2():
+    # Sample input DataFrame
+    contig_methylation = pl.DataFrame({
+        "contig": ["contig_1", "contig_1", "contig_1", "contig_2", "contig_3"],
+        "bin": ["bin1", "bin1", "bin1", "bin1", "bin2"],
+        "motif_mod": ["mod1", "mod2", "mod3", "mod3", "mod2"],
+        "median": [0.5, 0.0, 0.9, 0.5, 0.9],
+        "N_motif_obs": [10, 5, 15, 20, 25]
+    })
+
+    # Expected output DataFrame after imputation
+    expected_output = pl.DataFrame({
+        "contig": ["contig_1", "contig_1", "contig_1", "contig_2", "contig_2", "contig_2", "contig_3"],
+        "bin": ["bin1", "bin1", "bin1", "bin1", "bin1", "bin1", "bin2"],
+        "motif_mod": ["mod1", "mod2","mod3", "mod1","mod2", "mod3","mod2"],
+        "median": [0.5, 0.0, 0.9, 0.5, 0.0, 0.5, 0.9]
+    })
+
+    # Since args is not used in the function (commented out), we can pass None
+    args = None
+
+    # Call the function to test
+    output = data_processing.impute_contig_methylation_within_bin(contig_methylation)
+
+
+    # Select and sort columns for comparison
+    output = output.select(expected_output.columns).sort(["bin", "contig", "motif_mod"]).drop("mean_bin_median")
+    expected_output = expected_output.sort(["bin", "contig", "motif_mod"])
+    print(output)
+    print(expected_output)
+
+    # Assert that the output matches the expected output
+    assert output.equals(expected_output, null_equal=True), "The imputed DataFrame does not match the expected output."
     
+def test_impute_unbinned_contigs():
+    import numpy as np
+    np.random.seed(42)
+    # Mock input data
+    contig_methylation = pl.DataFrame({
+        "bin": ["unbinned", "binned", "unbinned", "binned"],
+        "contig": ["contig_1", "contig_2", "contig_3", "contig_4"],
+        "motif_mod": ["mod1", "mod2", "mod1", "mod3"],
+        "median": [0.0, 0.3, 0.95, 0.5]
+    })
+
+    # Define the expected behavior of the pseudo-random number generator
+    result = data_processing.impute_unbinned_contigs(contig_methylation)
+    print(result)
+
+    # Validate the resulting DataFrame structure
+    assert "median" in result.columns
+    assert len(result.get_column("contig")) == 6
+    assert set(result.get_column("motif_mod").unique()) == set(["mod1", "mod2", "mod3"])
+    assert None not in result.to_pandas()["median"]
+    # Expected values for the "median" column (based on your output)
+    expected_median = [0.0, 0.390143, 0.346399, 0.95, 0.231204, 0.231199]
+
+    # Extract actual "median" values from the DataFrame
+    actual_median = result.get_column("median").to_list()
+
+    # Assert the two lists are equal with some tolerance for floating-point precision
+    assert np.allclose(actual_median, expected_median, atol=1e-6), \
+        f"Median values do not match: {actual_median} != {expected_median}"
+
+    
+
