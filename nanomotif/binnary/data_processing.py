@@ -1,5 +1,7 @@
 import polars as pl
 import pandas as pd
+import numpy as np
+np.random.seed(1)
 
 from Bio import SeqIO
 from Bio.Seq import Seq
@@ -184,19 +186,17 @@ def add_bin(contig_methylation, contig_bins):
     return contig_methylation_w_bin
 
 
-def impute_contig_methylation_within_bin(contig_methylation, args):
+def impute_contig_methylation_within_bin(contig_methylation):
     contig_methylation = contig_methylation\
-        .filter((pl.col("bin") != "unbinned") & (pl.col("N_motif_obs") >= args.n_motif_contig_cutoff))
+        .filter(pl.col("bin") != "unbinned")
     
     bin_methylation = contig_methylation \
         .group_by(["bin", "motif_mod"]) \
         .agg(
-            pl.col("N_motif_obs").sum().alias("N_motif_obs_bin"),
             (
                 (pl.col("median") * pl.col("N_motif_obs")).sum() / pl.col("N_motif_obs").sum()
             ).alias("mean_bin_median")
-        ) \
-        .filter(pl.col("N_motif_obs_bin") > args.n_motif_bin_cutoff)
+        )
 
     contig_bin_cross = contig_methylation\
         .unique(subset=["contig", "bin"], maintain_order = True)\
@@ -211,7 +211,52 @@ def impute_contig_methylation_within_bin(contig_methylation, args):
         )\
         .drop("N_motif_obs")
         
+        # .with_columns(
+        #     pl.when(pl.col("N_motif_obs") <= args.n_motif_contig_cutoff)
+        #     .then(None)
+        #     .otherwise(pl.col("median"))
+        #     .alias("median")
+        # )\
     return contig_methylation_imputed
+
+def impute_unbinned_contigs(contig_methylation):
+    unbinned_contig_methylation = contig_methylation\
+        .filter(pl.col("bin") == "unbinned")
+
+    unbinned_contigs = unbinned_contig_methylation\
+        .select(["contig"])\
+        .unique()
+        
+    cross_motif_mod_contig = contig_methylation\
+        .select(["motif_mod"])\
+        .unique()\
+        .join(unbinned_contigs, how = "cross")\
+        .with_columns(
+            pl.lit("unbinned").alias("bin")
+        )\
+        .sort(["contig", "motif_mod"])
+
+    num_rows = cross_motif_mod_contig.height
+    random_values = np.random.uniform(0.2, 0.4, size = num_rows)
+    
+    cross_motif_mod_contig = cross_motif_mod_contig\
+        .with_columns(
+            pl.Series("pseudo_median", random_values)
+        )
+    
+    imputed_unbinned_contig_methylation = cross_motif_mod_contig\
+        .join(unbinned_contig_methylation, on=["contig", "motif_mod", "bin"], how="left")\
+        .with_columns(
+            pl.when(pl.col("median").is_null())
+                .then(pl.col("pseudo_median"))
+                .otherwise(pl.col("median"))
+                .alias("median")
+        )\
+        .drop("pseudo_median")\
+        .sort(["contig", "motif_mod"])
+
+    return imputed_unbinned_contig_methylation
+    
 
 def create_matrix(contig_methylation):
     matrix_df = contig_methylation\
@@ -236,7 +281,7 @@ def load_contamination_file(contamination_file):
     contamination = pl.read_csv(contamination_file, separator= "\t")
     
     # Check if the file contains the required columns
-    required_columns = ["bin", "bin_contig_compare", "binary_methylation_mismatch_score", "non_na_comparisons", "contig"]
+    required_columns = ["contig"]
     if not all(column in contamination.columns for column in required_columns):
         raise ValueError("The contamination file does not contain the required columns.")
     
