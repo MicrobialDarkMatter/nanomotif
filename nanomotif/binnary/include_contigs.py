@@ -8,75 +8,99 @@ import logging
 
 
 
-def include_contigs(contig_methylation, bin_methylation, contamination, args):
-    """
-    Takes the contig_methylation and motifs_of_interest DataFrames and finds unbinned contigs with an exact methylation pattern as the bin.
-    
-    params:
-        contig_methylation: pd.DataFrame - DataFrame containing the motifs scored in each bin
-        motifs_of_interest: list - List of motifs to be considered from bin_motif_binary
-        args: argparse.Namespace - Namespace containing the arguments passed to the script
-    
-    """
+def include_contigs(contig_methylation):
     logger = logging.getLogger(__name__)
     logger.info("Starting include_contigs analysis...")
     
-    
-    # Remove bins with no methylation in consensus
-    bins_w_no_methylation = bin_methylation \
-        .group_by("bin") \
-        .agg(
-            pl.sum("methylation_binary").alias("binary_sum")    
-        ) \
-        .filter(pl.col("binary_sum") == 0) \
-        .select("bin") \
-        .unique()["bin"]
-    
-
-    bin_methylation = bin_methylation \
-        .filter(~pl.col("bin").is_in(bins_w_no_methylation))
-    
-    # Retain only unbinned contigs or contigs in the contamination file
-    contigs_for_comparison = contig_methylation \
-        .filter(
-            (pl.col("bin_contig").str.contains("unbinned")) |
-            (pl.col("bin_contig").is_in(contamination["bin_contig_compare"]))
-        )
-    
-
-    contig_bin_comparison_score, contigs_w_no_methylation = sc.compare_methylation_pattern_multiprocessed(
-        contig_methylation=contigs_for_comparison,
-        bin_methylation=bin_methylation,
-        mode="include",
-        args=args,
-        num_processes=args.threads
+    binned_contig_methylation = dp.impute_contig_methylation_within_bin(
+        contig_methylation
     )
-    
-    contig_bin_comparison_score = ut.split_bin_contig(contig_bin_comparison_score)
-    
-    logger.info("Assigning contigs to bins...")
-    # Filter contigs where motif comparisons are less than args.min_motif_comparisons
-    # TODO: looking for 0 comparisons is now redundant. Also remove the column.
-    contigs_of_interest = contig_bin_comparison_score \
-        .filter(
-            pl.col("non_na_comparisons") >= args.min_motif_comparisons,
-            (~pl.col("bin_compare").is_in(contigs_w_no_methylation)),  # Remove contigs with no methylation
-            (pl.col("binary_methylation_mismatch_score") == 0)        # Retain contigs with no methylation mismatch 
-            
-        ) \
-        .sort("bin","bin_compare")
-    
-    
-    single_contigs = contigs_of_interest \
-        .group_by("contig") \
-        .agg(
-            pl.count("contig").alias("contig_count")
-        ) \
-        .filter(pl.col("contig_count") == 1)
-    
-    contigs_of_interest = contigs_of_interest \
-        .filter(pl.col("contig").is_in(single_contigs["contig"]))
-      
 
-    logger.info("Finished include_contigs analysis.")
-    return contigs_of_interest
+    bins_w_methylation = binned_contig_methylation\
+        .group_by(["bin", "motif_mod"])\
+        .agg(
+            pl.col("median").mean().alias("median")
+        )\
+        .with_columns(
+            (pl.col("median") > 0.5).cast(pl.Int8).alias("is_methylated")
+        )\
+        .filter(
+            pl.col("is_methylated") == 1
+        )\
+        .get_column("bin").unique()
+
+    binned_contig_methylation = binned_contig_methylation\
+        .filter(pl.col("bin").is_in(bins_w_methylation))
+
+    unbinned_contig_methylation = dp.impute_unbinned_contigs(contig_methylation)
+
+    contig_names, matrix = dp.create_matrix(contig_methylation)
+
+    logger.info("Performing HDBSCAN")
+    clusterer = hdbscan.HDBSCAN(min_samples=10, min_cluster_size=2, metric = "euclidean", allow_single_cluster=False)
+    labels = clusterer.fit_predict(matrix)
+
+    contig_bin = contig_methylation\
+        .select(["bin", "contig"])\
+        .unique() 
+
+    results = pl.DataFrame({
+                   "contig": contig_names,
+                   "cluster": labels
+              })\
+                .join(contig_bin, on="contig")\
+
+    bin_size = contig_bin\
+        .filter(pl.col("bin") != "unbinned")\
+        .join(contig_lengths, on = "contig")\
+        .group_by("bin")\
+        .agg(
+            pl.col("length").sum().alias("bin_length"),
+            pl.col("contig").count().alias("n_contigs_bin")
+        )
+
+    bin_cluster_sizes = results\
+        .filter(pl.col("bin") != "unbinned")\
+        .join(contig_lengths, on="contig")\
+        .group_by(["bin","cluster"])\
+        .agg(
+            pl.col("contig").count().alias("n_contigs"),
+            pl.col("length").sum().alias("cluster_length")
+        )\
+        .join(bin_size, on = "bin")\
+        .with_columns(
+            (pl.col("n_contigs") / pl.col("n_contigs_bin")).alias("fraction_contigs"),
+            (pl.col("cluster_length") / pl.col("bin_length")).alias("fraction_length")
+        )
+
+    assigned_cluster = cluster_sizes\
+        .group_by(["bin"])\
+        .agg(
+            pl.col("cluster_length").max().alias("cluster_length")
+        )\
+        .join(cluster_sizes, on = ["bin", "cluster_length"], how = "left")\
+        .rename({
+                    "bin": "assigned_bin"
+                })\
+        .drop(["cluster_length", "n_contigs"])
+
+    unbinned_contigs_assigned_to_bin_cluster = results\
+        .filter(pl.col("bin") == "unbinned")\
+        .join(assigned_cluster, on = ["cluster"])
+
+    uniquely_assigned_contigs = unbinned_contigs_assigned_to_bin_cluster\
+        .group_by("contig")\
+        .agg(
+            pl.col("bin").count().alias("n_assigned_bins")
+        )\
+        .filter(pl.col("n_assigned_bins") == 1)\
+        .get_column("contig")
+
+    unbinned_contigs_assigned_to_bin_cluster = unbinned_contigs_assigned_to_bin_cluster\
+        .with_columns(
+            pl.when(pl.col("contig").is_in(uniquely_assigned_contigs))
+                .then(True)
+                .otherwise(False)
+                .alias("assignment_is_unique")
+        )
+    return unbinned_contigs_assigned_to_bin_cluster
