@@ -445,31 +445,30 @@ def binnary(args):
 
 
     log.info("Loading assembly file...")
-    assembly = data_processing.read_fasta(args.assembly_file)
-    contig_lengths = data_processing.find_contig_lengths(assembly)
+    assembly = data_processing.read_fasta(args.assembly)
+    contig_lengths = data_processing.find_contig_lengths(assembly) 
+
+    # Load motifs-scored-read-methylation.tsv
+    contig_methylation = pl.read_csv(
+        os.path.join(args.out, contig_methylation_file), separator="\t", has_header = True
+    )
+
+    contig_methylation = contig_methylation\
+        .filter(pl.col("mean_read_cov") >= args.min_valid_read_coverage)\
+        .filter((pl.col("N_motif_obs").cast(pl.Float64) * pl.col("mean_read_cov")) >= 40)
 
     # Setting up the contamination analysis
     if (args.command == "detect_contamination" and not args.contamination_file) or (args.command == "include_contigs" and args.run_detect_contamination):
-        # Load motifs-scored-read-methylation.tsv
-        contig_methylation = pl.read_csv(
-            os.path.join(args.out, contig_methylation_file), separator="\t", has_header = True
-        )
     
-        contig_methylation = data_processing.add_bin(
+        contig_methylation_cont = data_processing.add_bin(
             contig_methylation,
             contig_bins
         )
 
-        # Create the bin_consensus dataframe for scoring
-        log.info("Creating bin_consensus dataframe for scoring...")
-        binned_contig_methylation_imputed = data_processing.impute_contig_methylation_within_bin(
-            contig_methylation,
-            args
+        contamination = detect_contamination.detect_contamination(
+            contig_methylation_cont, contig_lengths
         )
 
-        contamination = detect_contamination.detect_contamination(
-            binned_contig_methylation_imputed, contig_lengths, args
-        )
         data_processing.generate_output(contamination.to_pandas(), args.out, "bin_contamination.tsv")
 
     if args.command == "detect_contamination":
@@ -490,10 +489,6 @@ def binnary(args):
         if not args.run_detect_contamination and not args.contamination_file:
             contamination = pl.DataFrame(
                 {
-                    "bin": [],
-                    "bin_contig_compare": [],
-                    "binary_methylation_mismatch_score": [],
-                    "non_na_comparisons": [],
                     "contig": []
                 }
             )
@@ -504,25 +499,14 @@ def binnary(args):
         log.info("Removing contaminants from bins")
         contig_bins = contig_bins.filter(~pl.col("contig").is_in(contamination_contigs))
         
-        # Load motifs-scored-read-methylation.tsv
-        contig_methylation = pl.read_csv(
-            os.path.join(args.out, contig_methylation_file), separator="\t", has_header = True
-        )
-    
-        contig_methylation = data_processing.add_bin(
+        contig_methylation_inc = data_processing.add_bin(
             contig_methylation,
             contig_bins
         )
 
-        # Create the bin_consensus dataframe for scoring
-        log.info("Creating bin_consensus dataframe for scoring...")
-        bin_methylation = data_processing.filter_motifs_for_scoring(
-            contig_methylation,
-            args
-        )
         # Run the include_contigs analysis    
         include_contigs_df = include_contigs.include_contigs(
-            contig_methylation, bin_methylation, contamination, args
+            contig_methylation_inc
         )
         
         # Save the include_contigs_df results
@@ -532,7 +516,7 @@ def binnary(args):
         new_contig_bins = data_processing.create_contig_bin_file(
             contig_bins=contig_bins.to_pandas(), 
             contamination= contamination.to_pandas(),
-            include=include_contigs_df.to_pandas()
+            include=include_contigs_df.filter(pl.col("assignment_is_unique")).to_pandas()
         )
         data_processing.generate_output(new_contig_bins, args.out, "new_contig_bin.tsv")
         
