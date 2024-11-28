@@ -167,3 +167,7 @@ cython_debug/
 
 # Snakemake files
 .snakemake/
+
+# mtase_linker rules test
+tests/mtase_linker/test_rules.py
+datasets/mtase_linker_testdata

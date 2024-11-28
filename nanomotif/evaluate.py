@@ -696,7 +696,7 @@ class MotifSearcher:
         best_score = self._scoring_function(root_model, root_model)
         rounds_since_new_best = 0
         visited_nodes: set[Motif] = set()
-
+        
         # Initialize the search tree
         self.motif_graph.add_node(
             self.root_motif,
@@ -814,36 +814,21 @@ def count_periods_at_start(string: str) -> int:
     3
     """
     count = 0
-    for char in string:
+    for char in s:
         if char == '.':
             count += 1
         else:
             break
     return count
-
-def count_periods_at_end(string: str) -> int:
-    """
-    Count the number of periods at the end of a string
-
-    Parameters:
-    - string (str): The string to be processed.
-
-    Returns:
-    - int: The number of periods at the end of the string.
-
-    Example:
-    >>> count_periods_at_end("ACGT...")
-    3
-    """
-    string = string[::-1]
+def count_periods_at_end(s):
+    s = s[::-1]
     count = 0
-    for char in string:
+    for char in s:
         if char == '.':
             count += 1
         else:
             break
     return count
-
 def nxgraph_to_dataframe(graph):
     return pl.DataFrame({
         "sequence":[i for i in graph.nodes],

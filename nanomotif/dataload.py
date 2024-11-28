@@ -89,6 +89,7 @@ def load_low_coverage_positions(path_pileup: str, contig_mods_to_load: list[str]
     pileup = pileup.rename({"column_1":"contig", "column_2": "position", "column_4": "mod_type", "column_6": "strand"})
     return pileup
 
+
 def load_assembly(path: str):
     """
     Load assembly from path to fasta file
