@@ -253,7 +253,7 @@ def score_motifs(args, pl, pileup = None, assembly = None, motifs = None, min_mo
         pl.col("motif").map_elements(lambda x: nm.seq.iupac_to_regex(x)).alias("motif")
     ])
 
-    pileup = pileup.pileup.with_columns([
+    pileup = pileup.with_columns([
         (pl.col("contig") + "_" + pl.col("mod_type")).alias("contig_mod")
     ])
     contig_mods_to_keep, contig_mods_to_remove = nm.dataload.extract_contig_mods_with_sufficient_information(pileup, assembly, min_mods_pr_contig, min_mod_frequency)
