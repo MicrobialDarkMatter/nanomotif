@@ -25,10 +25,10 @@ class TestPileupLoad:
 
     def test_fraction_filter(self):
         pileup_path = nm.datasets.geobacillus_plasmids_pileup_path()
-        pileup = nm.dataload.load_pileup(pileup_path, min_fraction=0.5)
+        pileup = nm.dataload.load_pileup(pileup_path, min_fraction=0.5, min_coverage=5)
         assert (pileup.pileup["fraction_mod"] > 0.5).all()
         # Assert that the filtered pileup is a subset of the complete pileup
-        pileup_complete = nm.dataload.load_pileup(pileup_path, min_fraction=0)
+        pileup_complete = nm.dataload.load_pileup(pileup_path, min_fraction=0.5, min_coverage=5)
         assert len(pileup.pileup.join(pileup_complete.pileup, on=pileup.pileup.columns, how="inner")) == len(pileup.pileup)
 
 

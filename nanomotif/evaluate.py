@@ -814,16 +814,16 @@ def count_periods_at_start(string: str) -> int:
     3
     """
     count = 0
-    for char in s:
+    for char in string:
         if char == '.':
             count += 1
         else:
             break
     return count
-def count_periods_at_end(s):
-    s = s[::-1]
+def count_periods_at_end(string):
+    string = string[::-1]
     count = 0
-    for char in s:
+    for char in string:
         if char == '.':
             count += 1
         else:
