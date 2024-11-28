@@ -24,22 +24,24 @@ df_hmmer_MTase = df_hmmer_RM_filtered[(df_hmmer_RM_filtered['gene_name'].str.con
 df_systems_RM = df_systems[df_systems['type'] == "RM"]
 
 # Defining a function to check whether a 'qseqid' is in any 'protein_in_syst' row
-def check_RM_system(hit_id, protein_in_syst_column):
-    for proteins in protein_in_syst_column:
-        protein_list = proteins.split(',')
+def check_RM_system(hit_id, df_systems):
+    for index, row in df_systems.iterrows():
+        protein_list = row['protein_in_syst'].split(',')
         if hit_id in protein_list:
-            return True
-    return False
+            return True, row['sys_id']
+    return False, None
 
 # Checking whether MTase is part of any system
-df_hmmer_MTase.loc[:, 'system'] = df_hmmer_MTase["hit_id"].apply(lambda x: check_RM_system(x, df_systems['protein_in_syst']))
+df_hmmer_MTase[['system', 'sys_id']] = df_hmmer_MTase['hit_id'].apply(lambda x: pd.Series(check_RM_system(x, df_systems)))
 
 # Checking wether MTase is part of an RM-system
-df_hmmer_MTase.loc[:, 'RM_system'] = df_hmmer_MTase["hit_id"].apply(lambda x: check_RM_system(x, df_systems_RM['protein_in_syst']))
+df_hmmer_MTase[['RM_system', 'sys_id']] = df_hmmer_MTase["hit_id"].apply(lambda x: pd.Series(check_RM_system(x, df_systems_RM)))
 
 # Removing MTase hits which are part of another defense system 
-df_hmmer_MTase_filtered = df_hmmer_MTase[~((df_hmmer_MTase['system'] == True) & (df_hmmer_MTase['RM_system'] == False))]
-df_hmmer_MTase_filtered.drop('system', axis = 1, inplace = True) 
+df_hmmer_MTase_filtered = df_hmmer_MTase[~((df_hmmer_MTase['system'] == True) & (df_hmmer_MTase['RM_system'] == False))].copy()
+df_hmmer_MTase_filtered.drop('system', axis = 1, inplace = True)
+
+df_hmmer_MTase_filtered = df_hmmer_MTase_filtered[df_hmmer_MTase_filtered['gene_name'].str.contains("Type_IIG") & df_hmmer_MTase_filtered['RM_system'] == False]
 
 #%% Generating processed defensefinder.tsv
 df_hmmer_MTase_filtered.to_csv(snakemake.output['DF_MTase_table'], sep = "\t", index = False)

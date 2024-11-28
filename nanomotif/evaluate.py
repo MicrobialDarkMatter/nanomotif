@@ -696,7 +696,7 @@ class MotifSearcher:
         best_score = self._scoring_function(root_model, root_model)
         rounds_since_new_best = 0
         visited_nodes: set[Motif] = set()
-
+        
         # Initialize the search tree
         self.motif_graph.add_node(
             self.root_motif,
@@ -796,77 +796,51 @@ class MotifSearcher:
 
         return self.motif_graph, best_guess
 
+                    # Add neighbor to graph
+                    self.motif_graph.add_node(
+                        next_motif,
+                        model=next_model,
+                        motif=next_motif,
+                        visited=False
+                    )
+                    self.motif_graph.add_edge(current_motif, next_motif)
 
+                    score = self._scoring_function(next_model, current_model)
+                    self.motif_graph.nodes[next_motif]["score"] = score
 
+                # Add neighbor to priority queue if not visited
+                if next_motif not in visited_nodes:
+                    priority = self._priority_function(next_model, current_model)
+                    hq.heappush(priority_queue, (priority, next_motif))
 
+                if score > best_score:
+                    best_score = score
+                    best_guess = next_motif
+                    rounds_since_new_best = 0
 
+            # Stopping criteria
+            if rounds_since_new_best >= self.max_rounds_since_new_best:
+                break
 
+        return self.motif_graph, best_guess
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def count_periods_at_start(string: str) -> int:
-    """
-    Count the number of periods at the start of a string
-
-    Parameters:
-    - string (str): The string to be processed.
-
-    Returns:
-    - int: The number of periods at the start of the string.
-
-    Example:
-    >>> count_periods_at_start("...ACGT")
-    3
-    """
+def count_periods_at_start(s):
     count = 0
-    for char in string:
+    for char in s:
         if char == '.':
             count += 1
         else:
             break
     return count
-
-def count_periods_at_end(string: str) -> int:
-    """
-    Count the number of periods at the end of a string
-
-    Parameters:
-    - string (str): The string to be processed.
-
-    Returns:
-    - int: The number of periods at the end of the string.
-
-    Example:
-    >>> count_periods_at_end("ACGT...")
-    3
-    """
-    string = string[::-1]
+def count_periods_at_end(s):
+    s = s[::-1]
     count = 0
-    for char in string:
+    for char in s:
         if char == '.':
             count += 1
         else:
             break
     return count
-
 def nxgraph_to_dataframe(graph):
     return pl.DataFrame({
         "sequence":[i for i in graph.nodes],

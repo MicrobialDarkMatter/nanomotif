@@ -30,7 +30,7 @@ Please see the [documentation](https://nanomotif.readthedocs.io) for detailed in
 
 Nanomotif can easily be installed using Conda for managing your Python environments. You can create a new environment and install Nanomotif as follows:
 ```shell
-conda create -n nanomotif  python=3.9
+conda create -n nanomotif  python=3.12
 conda activate nanomotif
 conda install -c bioconda nanomotif
 ```
@@ -101,7 +101,7 @@ nanomotif MTase-linker install
 
 This will create a folder named `ML_dependencies` in your current working directory, containing the required dependencies for the MTase-linker module. You can use the `--dependency_dir` flag to change the installation location of the `ML_dependencies` folder.
 
-The installation requires conda to generate a few environments. 
+The installation requires conda to generate a few environments, and it takes a bit time as it runs the workflow on a small dataset to check the installation. 
 
 When the additional dependencies are installed you can run the workflow using `MTase-linker run`
 

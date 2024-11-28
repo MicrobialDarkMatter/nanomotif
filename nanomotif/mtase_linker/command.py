@@ -1,4 +1,4 @@
-import snakemake
+import subprocess
 import os
 import sys
 import glob
@@ -99,30 +99,60 @@ def run_MTase_linker(args):
         sys.stderr.write(msg)
         sys.exit(1)
 
+    command = [
+        "snakemake",
+        "--snakefile", snakefile,
+        "--cores", str(args.threads),
+        "--config",
+        f"THREADS={args.threads}",
+        f"ASSEMBLY={assembly_path}",
+        f"CONTIG_BIN={contig_bin}",
+        f"OUTPUTDIRECTORY={args.out}",
+        f"DEPENDENCY_PATH={dependency_dir}",
+        f"IDENTITY={args.identity}",
+        f"QCOVS={args.qcovs}",
+        f"NANOMOTIF={args.bin_motifs}",
+        "--use-conda",
+        "--conda-prefix", os.path.join(dependency_dir, "ML_envs")
+        
+        ]
+    
+    if args.forceall:
+        command.append("--forceall")
+    if args.dryrun:
+        command.append("--dryrun")
+        
+    try:
+        result = subprocess.run(command, cwd=cwd, check=True)
+        if result.returncode == 0:
+            print("MTase-Linker done!")
+    except subprocess.CalledProcessError as e:
+        print("MTase-linker failed with error:", e)
+        sys.exit(1)
 
-    workflow = None
-    workflow = {"THREADS": args.threads,
-                "ASSEMBLY": assembly_path,
-                "CONTIG_BIN": contig_bin,
-                "OUTPUTDIRECTORY": args.out,
-                "DEPENDENCY_PATH": dependency_dir,
-                "IDENTITY": args.identity,
-                "QCOVS": args.qcovs,
-                "NANOMOTIF": args.bin_motifs}
+    # workflow = None
+    # workflow = {"THREADS": args.threads,
+    #             "ASSEMBLY": assembly_path,
+    #             "CONTIG_BIN": contig_bin,
+    #             "OUTPUTDIRECTORY": args.out,
+    #             "DEPENDENCY_PATH": dependency_dir,
+    #             "IDENTITY": args.identity,
+    #             "QCOVS": args.qcovs,
+    #             "NANOMOTIF": args.bin_motifs}
 
 
-    status = snakemake.snakemake(snakefile, 
-                                config=workflow,
-                                targets = ["all"], 
-                                use_conda = True, 
-                                forceall=args.forceall, 
-                                cores = args.threads,
-                                dryrun=args.dryrun, 
-                                workdir = cwd,
-                                conda_prefix = os.path.join(dependency_dir, "ML_envs"))
+    # status = snakemake.snakemake(snakefile, 
+    #                             config=workflow,
+    #                             targets = ["all"], 
+    #                             use_conda = True, 
+    #                             forceall=args.forceall, 
+    #                             cores = args.threads,
+    #                             dryrun=args.dryrun, 
+    #                             workdir = cwd,
+    #                             conda_prefix = os.path.join(dependency_dir, "ML_envs"))
 
-    if status:
-        print("MTase-Linker done!")
-    else:
-        print("MTase-linker failed.")
+    # if status:
+    #     print("MTase-Linker done!")
+    # else:
+    #     print("MTase-linker failed.")
 

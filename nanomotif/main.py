@@ -231,6 +231,7 @@ def score_motifs(args, pl, pileup = None, assembly = None, motifs = None, min_mo
     if args.save_motif_positions:
         os.makedirs(args.out + "/motif-positions", exist_ok=True)
 
+    pileup = pileup.pileup.filter(pl.col("fraction_mod") > args.threshold_methylation_general)
     # Ensure motif are iupac
     motifs.with_columns([
         pl.col("motif").map_elements(lambda x: nm.seq.regex_to_iupac(x)).alias("motif")
@@ -565,7 +566,7 @@ def binnary(args, pl):
     print("Analysis Completed. Results are saved to:", args.out)
 
 
-from nanomotif.mtase_linker.dependencies import snakemake_create_environments, get_models, defensefinder_update
+from nanomotif.mtase_linker.dependencies import snakemake_create_environments, get_models, defensefinder_update, check_installation_MTase_linker
 from nanomotif.mtase_linker.command import run_MTase_linker
 
 def mtase_linker(args):
@@ -573,6 +574,7 @@ def mtase_linker(args):
         snakemake_create_environments(args)
         get_models(args)
         defensefinder_update(args)
+        check_installation_MTase_linker(args)
     elif args.mtase_linker_command == "run":
         run_MTase_linker(args)
     else:
