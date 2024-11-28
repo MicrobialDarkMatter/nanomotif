@@ -799,29 +799,6 @@ class MotifSearcher:
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def count_periods_at_start(string: str) -> int:
     """
     Count the number of periods at the start of a string
