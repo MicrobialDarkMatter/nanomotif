@@ -9,7 +9,7 @@ def geobacillus_plasmids_pileup_path():
 
 def geobacillus_plasmids_pileup():
     data_path = geobacillus_plasmids_pileup_path()
-    pileup = dl.load_pileup(data_path, min_fraction=0.3)
+    pileup = dl.load_pileup(data_path, min_fraction=0.3, min_coverage=5)
     return pileup
 
 def geobacillus_plasmids_assembly_path():
