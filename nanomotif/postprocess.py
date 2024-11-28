@@ -40,7 +40,7 @@ def remove_child_motifs(motifs):
 
 def remove_sub_motifs(motif_df):
     motif_df_clean = []
-    for contig, df in motif_df.groupby("contig", "mod_type"):
+    for contig, df in motif_df.groupby("contig"):
         motif_strings = df.get_column("motif").to_list()
         positions = df.get_column("mod_position").to_list()
         motifs = [nm.candidate.Motif(motif_string, pos) for motif_string, pos in zip(motif_strings, positions)]
