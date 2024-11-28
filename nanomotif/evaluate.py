@@ -363,7 +363,7 @@ def process_sample_parallel(
 
     # Put them workers to work
     log.debug("Starting workers")
-    chunksize = min(100, total_tasks // threads)
+    chunksize = max(min(100, total_tasks // threads), 1)
     results = pool.imap(worker_function, task_generator(pileup_dict, low_coverage_positions_dict), chunksize=chunksize)
     results = [result for result in results if result is not None]
     log.debug("Joining results")

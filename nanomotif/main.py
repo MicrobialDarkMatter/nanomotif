@@ -55,6 +55,7 @@ def find_motifs(args, pl,  pileup = None, assembly = None, min_mods_pr_contig = 
         pandas.DataFrame: Motif data
     """
     import polars as pl
+
     log.info("Starting nanomotif motif finder")
     if pileup is None:
         log.info("Loading pileup")
@@ -76,6 +77,10 @@ def find_motifs(args, pl,  pileup = None, assembly = None, min_mods_pr_contig = 
         (pl.col("contig") + "_" + pl.col("mod_type")).alias("contig_mod")
     ])
     contig_mods_to_keep, contig_mods_to_remove = nm.dataload.extract_contig_mods_with_sufficient_information(pileup, assembly, min_mods_pr_contig, min_mod_frequency)
+    if len(contig_mods_to_keep) == 0:
+        log.info("No contigs with sufficient information")
+        return None
+
     log.debug(f"Filtering pileup to keep contigs with more than {min_mods_pr_contig} mods and mod frequency of 1 pr. {min_mod_frequency}")
     pileup = pileup.filter(pl.col("contig_mod").is_in(contig_mods_to_keep))
 
@@ -109,7 +114,7 @@ def find_motifs(args, pl,  pileup = None, assembly = None, min_mods_pr_contig = 
         )
     motifs = pl.DataFrame(motifs)
     if motifs is None or len(motifs) == 0:
-        log.info("No motifs found")
+        log.info("No contigs with sufficient modifications")
         return
 
     log.info("Writing motifs")
@@ -342,7 +347,33 @@ def motif_discovery(args, pl):
     if not os.path.exists(args.bins):
         log.error(f"File {args.bins} does not exist")
         return
-
+    empty_find_motifs = pl.DataFrame({
+        "contig": [],
+        "motif": [],
+        "mod_position": [],
+        "mod_type": [],
+        "n_mod": [],
+        "n_nomod": [],
+        "motif_type": [],
+        "motif_complement": [],
+        "mod_position_complement": [],
+        "n_mod_complement": [],
+        "n_nomod_complement": []
+    })
+    empty_bin_motifs = pl.DataFrame({
+        "bin": [],
+        "mod_type": [],
+        "motif": [],
+        "mod_position": [],
+        "n_mod_bin": [],
+        "n_nomod_bin": [],
+        "motif_type": [],
+        "motif_complement": [],
+        "mod_position_complement": [],
+        "n_mod_complement": [],
+        "n_nomod_complement": []
+    })
+    
     # Check if output directory exists
     log.info("Loading required files")
     log.debug("Loading pileup")
@@ -357,6 +388,8 @@ def motif_discovery(args, pl):
     log.info("Finding motifs")
     motifs = find_motifs(args, pl, pileup=pileup, assembly=assembly)
     if motifs is None:
+        empty_find_motifs.write_csv(args.out + "/motifs.tsv", separator="\t")
+        empty_bin_motifs.write_csv(args.out + "/bin-motifs.tsv", separator="\t")
         log.info("Stopping workflow")
         return
 
