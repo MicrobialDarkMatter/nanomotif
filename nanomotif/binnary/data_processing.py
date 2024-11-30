@@ -231,7 +231,7 @@ def impute_unbinned_contigs(contig_methylation):
         .sort(["contig", "motif_mod"])
 
     num_rows = cross_motif_mod_contig.height
-    random_values = np.random.uniform(0.2, 0.4, size = num_rows)
+    random_values = np.random.uniform(0.0, 0.15, size = num_rows)
     
     cross_motif_mod_contig = cross_motif_mod_contig\
         .with_columns(
