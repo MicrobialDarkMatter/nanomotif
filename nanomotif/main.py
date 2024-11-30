@@ -471,6 +471,7 @@ def binnary(args):
             contig_methylation_cont, contig_lengths
         )
 
+
         data_processing.generate_output(contamination.to_pandas(), args.out, "bin_contamination.tsv")
 
     if args.command == "detect_contamination":
