@@ -27,7 +27,7 @@ def detect_contamination(contig_methylation, contig_lengths):
     contig_names, matrix = dp.create_matrix(contig_methylation)
 
     logger.info("Performing HDBSCAN")
-    clusterer = hdbscan.HDBSCAN(min_samples=10, min_cluster_size=2, metric = "euclidean", allow_single_cluster=False)
+    clusterer = hdbscan.HDBSCAN(min_samples=3, min_cluster_size=2, metric = "euclidean", allow_single_cluster=False)
     labels = clusterer.fit_predict(matrix)
 
     contig_bin = contig_methylation\
@@ -59,7 +59,8 @@ def detect_contamination(contig_methylation, contig_lengths):
         .with_columns(
             (pl.col("n_contigs") / pl.col("n_contigs_bin")).alias("fraction_contigs"),
             (pl.col("cluster_length") / pl.col("bin_length")).alias("fraction_length")
-        )
+        )\
+        .filter(pl.col("fraction_length")>0.60)
 
     assigned_cluster = cluster_sizes\
         .group_by(["bin"])\
@@ -79,7 +80,8 @@ def detect_contamination(contig_methylation, contig_lengths):
     logger.info("Finding contamination in bins")
 
     contamination_contigs = results\
-        .filter(pl.col("bin_cluster") != pl.col("cluster"))
+        .filter(pl.col("bin_cluster") != pl.col("cluster"))\
+        .sort(["bin", "contig"])
     
     logger.info("Contamination detection complete")
     
