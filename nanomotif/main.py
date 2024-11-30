@@ -457,7 +457,7 @@ def binnary(args):
 
     contig_methylation = contig_methylation\
         .filter(pl.col("mean_read_cov") >= args.min_valid_read_coverage)\
-        .filter((pl.col("N_motif_obs").cast(pl.Float64) * pl.col("mean_read_cov")) >= 40)
+        .filter((pl.col("N_motif_obs").cast(pl.Float64) * pl.col("mean_read_cov")) >= 17)
 
     # Setting up the contamination analysis
     if (args.command == "detect_contamination" and not args.contamination_file) or (args.command == "include_contigs" and args.run_detect_contamination):
@@ -516,10 +516,15 @@ def binnary(args):
         data_processing.generate_output(include_contigs_df.to_pandas(), args.out, "include_contigs.tsv")
         
         # Create a new contig_bin file
+        uniquely_assigned_contigs = include_contigs_df\
+            .filter(pl.col("assignment_is_unique"))\
+            .drop("bin")\
+            .rename({"assigned_bin": "bin"})
+
         new_contig_bins = data_processing.create_contig_bin_file(
             contig_bins=contig_bins.to_pandas(), 
             contamination= contamination.to_pandas(),
-            include=include_contigs_df.filter(pl.col("assignment_is_unique")).to_pandas()
+            include=uniquely_assigned_contigs.to_pandas()
         )
         data_processing.generate_output(new_contig_bins, args.out, "new_contig_bin.tsv")
         
