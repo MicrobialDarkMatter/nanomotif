@@ -5,7 +5,7 @@ import polars as pl
 from nanomotif.binnary import data_processing as dp
 import logging
 
-def detect_contamination(contig_methylation, contig_lengths):
+def detect_contamination(contig_methylation, contig_lengths, num_consensus = 3):
     logger = logging.getLogger(__name__)
     logger.info("Starting contamination detection analysis...")
 
@@ -111,7 +111,7 @@ def detect_contamination(contig_methylation, contig_lengths):
         .agg(
             pl.col("is_contaminant").sum().alias("sum_predictions"),
         )\
-        .filter(pl.col("sum_predictions") == 3)\
+        .filter(pl.col("sum_predictions") >= num_consensus)\
         .get_column("contig")
 
     contamination_contigs = results\

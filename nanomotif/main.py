@@ -511,7 +511,7 @@ def binnary(args, pl):
         )
 
         contamination = detect_contamination.detect_contamination(
-            contig_methylation_cont, contig_lengths
+            contig_methylation_cont, contig_lengths, args.num_consensus
         )
 
 
