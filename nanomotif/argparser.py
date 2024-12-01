@@ -94,6 +94,13 @@ def create_parser():
         default=3,
         help="Minimum read coverage for calculating methylation [used with methylation_util executable]",
     )
+    
+    parser_binnary_shared.add_argument(
+        "--num_consensus",
+        type=int,
+        default=3,
+        help="Number of models that has to agree for classifying as contaminant",
+    )
     parser_binnary_shared.add_argument(
         "--force",
         action='store_true',
