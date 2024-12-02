@@ -518,7 +518,7 @@ def binnary(args):
         
         # Create a new contig_bin file
         uniquely_assigned_contigs = include_contigs_df\
-            .filter(pl.col("assignment_is_unique"))\
+            .filter(pl.col("confidence") == "high_confidence")\
             .drop("bin")\
             .rename({"assigned_bin": "bin"})
 
