@@ -82,8 +82,7 @@ def detect_contamination(contig_methylation, contig_lengths, num_consensus = 3):
         .with_columns(
             (pl.col("n_contigs") / pl.col("n_contigs_bin")).alias("fraction_contigs"),
             (pl.col("cluster_length") / pl.col("bin_length")).alias("fraction_length")
-        )#\
-        # .filter(pl.col("fraction_length")>0.60)
+        )
 
     assigned_cluster = cluster_sizes\
         .group_by(["method","bin"])\
