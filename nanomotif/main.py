@@ -520,7 +520,9 @@ def binnary(args):
         uniquely_assigned_contigs = include_contigs_df\
             .filter(pl.col("confidence") == "high_confidence")\
             .drop("bin")\
-            .rename({"assigned_bin": "bin"})
+            .rename({"assigned_bin": "bin"})\
+            .select(["contig", "bin"])\
+            .unique()
 
         new_contig_bins = data_processing.create_contig_bin_file(
             contig_bins=contig_bins.to_pandas(), 
