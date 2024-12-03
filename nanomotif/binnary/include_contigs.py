@@ -48,7 +48,7 @@ def include_contigs(contig_methylation, contig_lengths):
 
     lda = LinearDiscriminantAnalysis()
     knn = KNeighborsClassifier(n_neighbors = 3)
-    rf = RandomForestClassifier(n_estimators=20, random_state=42)
+    rf = RandomForestClassifier(n_estimators=100, random_state=42)
 
     lda_pred = lda.fit(binned_matrix, bins.get_column("bin"))
     lda_labels = lda_pred.predict(unbinned_matrix)
