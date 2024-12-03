@@ -1,5 +1,5 @@
 import hdbscan
-from sklearn.cluster import SpectralClustering
+from sklearn.cluster import AgglomerativeClustering
 from sklearn.mixture import GaussianMixture
 import polars as pl
 from nanomotif.binnary import data_processing as dp
@@ -31,8 +31,8 @@ def detect_contamination(contig_methylation, contig_lengths, num_consensus = 3):
     
     n_bins = len(contig_methylation.get_column("bin").unique())
 
-    spectral = SpectralClustering(n_clusters=n_bins, affinity = 'nearest_neighbors', random_state=42)
-    spectral_labels = spectral.fit_predict(matrix)
+    agg = AgglomerativeClustering(n_clusters=n_bins, linkage = "ward")
+    agg_labels = agg.fit_predict(matrix)
 
     dscan = hdbscan.HDBSCAN(min_samples=3, min_cluster_size=2, metric = "euclidean", allow_single_cluster=False)
     dscan_labels = dscan.fit_predict(matrix)
@@ -48,14 +48,14 @@ def detect_contamination(contig_methylation, contig_lengths, num_consensus = 3):
 
     results = pl.DataFrame({
                     "contig": contig_names,
-                    "spectral": spectral_labels,
-                    "dscan": dscan_labels,
+                    "agg": agg_labels,
+                    "hdbscan": dscan_labels,
                     "gmm": gmm_labels
                 })\
                 .join(contig_bin, on="contig")\
                 .melt(
                     id_vars = ["contig", "bin"],
-                    value_vars=["spectral", "dscan", "gmm"],
+                    value_vars=["agg", "hdbscan", "gmm"],
                     value_name="cluster",
                     variable_name="method"
                 )
