@@ -1,5 +1,5 @@
 import polars as pl
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
 from nanomotif.binnary import data_processing as dp 
@@ -20,22 +20,6 @@ def include_contigs(contig_methylation, contig_lengths):
         contig_methylation
     )
 
-    bins_w_methylation = binned_contig_methylation\
-        .group_by(["bin", "motif_mod"])\
-        .agg(
-            pl.col("median").mean().alias("median")
-        )\
-        .with_columns(
-            (pl.col("median") > 0.25).cast(pl.Int8).alias("is_methylated")
-        )\
-        .filter(
-            pl.col("is_methylated") == 1
-        )\
-        .get_column("bin").unique()
-
-    binned_contig_methylation = binned_contig_methylation\
-        .filter(pl.col("bin").is_in(bins_w_methylation))
-
     binned_contig_names, binned_matrix = dp.create_matrix(binned_contig_methylation)
     bins = pl.DataFrame({
                             "contig": binned_contig_names,
@@ -44,14 +28,24 @@ def include_contigs(contig_methylation, contig_lengths):
 
 
     unbinned_contig_methylation = dp.impute_unbinned_contigs(contig_methylation)
-    unbinned_contig_names, unbinned_matrix = dp.create_matrix(unbinned_contig_methylation)
+    unbinned_contig_methylation_feature_completions = pl.DataFrame({
+                                                           "contig": unbinned_contig_methylation.get_column("contig").unique()
+                                                       })\
+            .join(
+                pl.DataFrame({"motif_mod": binned_contig_methylation.get_column("motif_mod").unique()}), how = "cross"
+            )\
+            .join(unbinned_contig_methylation, on = ["contig", "motif_mod"], how = "left")
+            
 
-    lda = LinearDiscriminantAnalysis()
+    
+    unbinned_contig_names, unbinned_matrix = dp.create_matrix(unbinned_contig_methylation_feature_completions)
+
+    svm = SVC(kernel = "rbf", random_state = 42, class_weight = "balanced")
     knn = KNeighborsClassifier(n_neighbors = 3)
     rf = RandomForestClassifier(n_estimators=100, random_state=42)
 
-    lda_pred = lda.fit(binned_matrix, bins.get_column("bin"))
-    lda_labels = lda_pred.predict(unbinned_matrix)
+    svm_pred = svm.fit(binned_matrix, bins.get_column("bin"))
+    svm_labels = svm.predict(unbinned_matrix)
 
     knn_pred = knn.fit(binned_matrix, bins.get_column("bin"))
     knn_labels = knn_pred.predict(unbinned_matrix)
@@ -61,14 +55,14 @@ def include_contigs(contig_methylation, contig_lengths):
     
     results = pl.DataFrame({
                     "contig": unbinned_contig_names,
-                    "lda": lda_labels,
+                    "svm": svm_labels,
                     "knn": knn_labels,
                     "rf": rf_labels,
                 })\
                 .join(contig_bin, on="contig")\
                 .melt(
                     id_vars = ["contig", "bin"],
-                    value_vars=["lda", "knn", "rf"],
+                    value_vars=["svm", "knn", "rf"],
                     value_name="cluster",
                     variable_name="method"
                 )
