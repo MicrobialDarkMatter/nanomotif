@@ -259,7 +259,8 @@ def create_matrix(contig_methylation):
             values = "median",
             index = "contig",
             columns="motif_mod",
-            aggregate_function = None
+            aggregate_function = None,
+            sort_columns = True
         )\
         .fill_null(0)
 
