@@ -499,8 +499,7 @@ def binnary(args, pl):
     )
 
     contig_methylation = contig_methylation\
-        .filter(pl.col("mean_read_cov") >= args.min_valid_read_coverage)\
-        .filter((pl.col("N_motif_obs").cast(pl.Float64) * pl.col("mean_read_cov")) >= 17)
+        .filter((pl.col("N_motif_obs").cast(pl.Float64) * pl.col("mean_read_cov")) >= 24)
 
     # Setting up the contamination analysis
     if (args.command == "detect_contamination" and not args.contamination_file) or (args.command == "include_contigs" and args.run_detect_contamination):
