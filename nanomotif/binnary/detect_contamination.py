@@ -2,11 +2,12 @@ import hdbscan
 from sklearn.cluster import AgglomerativeClustering, SpectralClustering
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 import polars as pl
 from nanomotif.binnary import data_processing as dp
 import logging
 
-def detect_contamination(contig_methylation, contig_lengths, num_consensus = 4):
+def detect_contamination(contig_methylation, contig_lengths, num_consensus = 4, threads = 1):
     logger = logging.getLogger(__name__)
     logger.info("Starting contamination detection analysis...")
 
@@ -31,20 +32,33 @@ def detect_contamination(contig_methylation, contig_lengths, num_consensus = 4):
 
     scaler = StandardScaler()
     matrix = scaler.fit_transform(matrix)
+    original_features = matrix.shape[1]
+    print(f"Original number of features: {original_features}")
 
+    print("Applying PCA for feature decorrelation")
+    pca_variance=0.90
+    pca = PCA(n_components=pca_variance, svd_solver = "full")
+    matrix = pca.fit_transform(matrix)
+
+    reduced_components = matrix.shape[1]
+    print(f"PCA reduced the feature space from {original_features} to {reduced_components}")
+    print(f"Total explained variance by pca: {pca.explained_variance_ratio_.sum():.2f}")
     
     n_bins = len(contig_methylation.get_column("bin").unique())
 
-    spectral = SpectralClustering(n_clusters=n_bins, affinity = 'nearest_neighbors', random_state=42)
+    print("Running Spectral")
+    spectral = SpectralClustering(n_clusters=n_bins, affinity = 'nearest_neighbors', random_state=42, n_jobs = threads)
     spectral_labels = spectral.fit_predict(matrix)
 
+    print("Running Agglomerative Clustering")
     agg = AgglomerativeClustering(n_clusters = n_bins)
     agg_labels = agg.fit(matrix).labels_
     
-
-    dscan = hdbscan.HDBSCAN(min_samples=2, min_cluster_size=2, metric = "euclidean", allow_single_cluster=False)
+    print("Running HDBSCAN")
+    dscan = hdbscan.HDBSCAN(min_samples=3, min_cluster_size=2, metric = "euclidean", allow_single_cluster=False)
     dscan_labels = dscan.fit_predict(matrix)
 
+    print("Running Gaussian Mixture Model")
     gmm = GaussianMixture(n_components=n_bins, covariance_type='full', random_state=42)
     gmm.fit(matrix)
     gmm_labels = gmm.predict(matrix)
