@@ -98,7 +98,7 @@ def create_parser():
     parser_binnary_shared.add_argument(
         "--num_consensus",
         type=int,
-        default=3,
+        default=4,
         help="Number of models that has to agree for classifying as contaminant",
     )
     parser_binnary_shared.add_argument(

@@ -1,11 +1,12 @@
 import hdbscan
-from sklearn.cluster import AgglomerativeClustering
+from sklearn.cluster import AgglomerativeClustering, SpectralClustering
 from sklearn.mixture import GaussianMixture
+from sklearn.preprocessing import StandardScaler
 import polars as pl
 from nanomotif.binnary import data_processing as dp
 import logging
 
-def detect_contamination(contig_methylation, contig_lengths, num_consensus = 3):
+def detect_contamination(contig_methylation, contig_lengths, num_consensus = 4):
     logger = logging.getLogger(__name__)
     logger.info("Starting contamination detection analysis...")
 
@@ -28,13 +29,20 @@ def detect_contamination(contig_methylation, contig_lengths, num_consensus = 3):
 
     contig_names, matrix = dp.create_matrix(contig_methylation)
 
+    scaler = StandardScaler()
+    matrix = scaler.fit_transform(matrix)
+
     
     n_bins = len(contig_methylation.get_column("bin").unique())
 
-    agg = AgglomerativeClustering(n_clusters=n_bins, linkage = "ward")
-    agg_labels = agg.fit_predict(matrix)
+    spectral = SpectralClustering(n_clusters=n_bins, affinity = 'nearest_neighbors', random_state=42)
+    spectral_labels = spectral.fit_predict(matrix)
 
-    dscan = hdbscan.HDBSCAN(min_samples=3, min_cluster_size=2, metric = "euclidean", allow_single_cluster=False)
+    agg = AgglomerativeClustering(n_clusters = n_bins)
+    agg_labels = agg.fit(matrix).labels_
+    
+
+    dscan = hdbscan.HDBSCAN(min_samples=2, min_cluster_size=2, metric = "euclidean", allow_single_cluster=False)
     dscan_labels = dscan.fit_predict(matrix)
 
     gmm = GaussianMixture(n_components=n_bins, covariance_type='full', random_state=42)
@@ -48,6 +56,7 @@ def detect_contamination(contig_methylation, contig_lengths, num_consensus = 3):
 
     results = pl.DataFrame({
                     "contig": contig_names,
+                    "spectral": spectral_labels,
                     "agg": agg_labels,
                     "hdbscan": dscan_labels,
                     "gmm": gmm_labels
@@ -55,7 +64,7 @@ def detect_contamination(contig_methylation, contig_lengths, num_consensus = 3):
                 .join(contig_bin, on="contig")\
                 .melt(
                     id_vars = ["contig", "bin"],
-                    value_vars=["agg", "hdbscan", "gmm"],
+                    value_vars=["spectral", "agg", "hdbscan", "gmm"],
                     value_name="cluster",
                     variable_name="method"
                 )
@@ -93,7 +102,8 @@ def detect_contamination(contig_methylation, contig_lengths, num_consensus = 3):
         .rename({
                     "cluster": "bin_cluster"
                 })\
-        .drop(["cluster_length", "n_contigs"])
+        .drop(["cluster_length", "n_contigs"])\
+        .filter(pl.col("fraction_length") >= 0.85)
 
 
 
