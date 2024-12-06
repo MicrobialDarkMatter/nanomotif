@@ -552,7 +552,8 @@ def binnary(args, pl):
         # Run the include_contigs analysis    
         include_contigs_df = include_contigs.include_contigs(
             contig_methylation_inc,
-            contig_lengths
+            contig_lengths,
+            mean_probability = args.mean_model_confidence
         )
         
         # Save the include_contigs_df results
