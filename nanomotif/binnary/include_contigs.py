@@ -2,13 +2,15 @@ import polars as pl
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 from nanomotif.binnary import data_processing as dp 
 from nanomotif.binnary import utils as ut
 import logging
 
 
 
-def include_contigs(contig_methylation, contig_lengths):
+def include_contigs(contig_methylation, contig_lengths, mean_probability):
     logger = logging.getLogger(__name__)
     logger.info("Starting include_contigs analysis...")
     
@@ -20,7 +22,16 @@ def include_contigs(contig_methylation, contig_lengths):
         contig_methylation
     )
 
+
     binned_contig_names, binned_matrix = dp.create_matrix(binned_contig_methylation)
+    scaler = StandardScaler()
+    binned_matrix = scaler.fit_transform(binned_matrix)
+
+    pca_variance=0.90
+    pca = PCA(n_components=pca_variance, svd_solver = "full")
+    binned_matrix = pca.fit_transform(binned_matrix)
+    
+    
     bins = pl.DataFrame({
                             "contig": binned_contig_names,
                         })\
@@ -39,19 +50,47 @@ def include_contigs(contig_methylation, contig_lengths):
 
     
     unbinned_contig_names, unbinned_matrix = dp.create_matrix(unbinned_contig_methylation_feature_completions)
+    unbinned_matrix = scaler.transform(unbinned_matrix)
+    unbinned_matrix = pca.transform(unbinned_matrix)
 
-    svm = SVC(kernel = "rbf", random_state = 42, class_weight = "balanced")
+    svm = SVC(kernel = "rbf", random_state = 42, class_weight = "balanced", probability=True)
     knn = KNeighborsClassifier(n_neighbors = 3)
     rf = RandomForestClassifier(n_estimators=100, random_state=42)
 
     svm_pred = svm.fit(binned_matrix, bins.get_column("bin"))
-    svm_labels = svm.predict(unbinned_matrix)
-
+    svm_labels = svm_pred.predict(unbinned_matrix)
+    svm_prob = svm_pred.predict_proba(unbinned_matrix).max(axis = 1)
+    
     knn_pred = knn.fit(binned_matrix, bins.get_column("bin"))
     knn_labels = knn_pred.predict(unbinned_matrix)
+    knn_prob = knn_pred.predict_proba(unbinned_matrix).max(axis = 1)
     
     rf_pred = rf.fit(binned_matrix, bins.get_column("bin"))
     rf_labels = rf_pred.predict(unbinned_matrix)
+    rf_prob = rf_pred.predict_proba(unbinned_matrix).max(axis = 1)
+    
+    rf_df = pl.DataFrame({
+        "contig": unbinned_contig_names,
+        "method": "rf",
+        "pred": rf_labels,
+        "prob": rf_prob
+    })
+
+    knn_df = pl.DataFrame({
+        "contig": unbinned_contig_names,
+        "method": "knn",
+        "pred": knn_labels,
+        "prob": knn_prob
+    })
+
+    svm_df = pl.DataFrame({
+        "contig": unbinned_contig_names,
+        "method": "svm",
+        "pred": svm_labels,
+        "prob": svm_prob
+    })
+
+    prob_df = pl.concat([rf_df, knn_df, svm_df])
     
     results = pl.DataFrame({
                     "contig": unbinned_contig_names,
@@ -63,44 +102,68 @@ def include_contigs(contig_methylation, contig_lengths):
                 .melt(
                     id_vars = ["contig", "bin"],
                     value_vars=["svm", "knn", "rf"],
-                    value_name="cluster",
+                    value_name="assigned_bin",
                     variable_name="method"
                 )
-
+    
+    columns = ["contig", "bin", "assigned_bin", "method", "prob", "mean_prob", "confidence"]
     n_assigned_bins = results\
         .group_by(["contig"])\
         .agg(
-            pl.col("cluster").n_unique().alias("n_assigned_bins")
+            pl.col("assigned_bin").n_unique().alias("n_assigned_bins")
         )
 
     high_confidence_assignements = results\
-        .filter(pl.col("contig").is_in(n_assigned_bins.filter(pl.col("n_assigned_bins") == 1).get_column("contig")))\
-        .with_columns(
-            pl.lit("high_confidence").alias("confidence"),
-            pl.col("cluster").alias("assigned_bin")
-        )\
-        .sort(["contig"])
+    .filter(pl.col("contig").is_in(n_assigned_bins.filter(pl.col("n_assigned_bins") == 1).get_column("contig")))
 
 
-
-    medium_confidence = results\
-        .filter(pl.col("contig").is_in(n_assigned_bins.filter(pl.col("n_assigned_bins") == 2).get_column("contig")))\
-        .group_by(["contig", "cluster"])\
+    high_mean_prob = high_confidence_assignements\
+        .join(prob_df, on = ["contig", "method"])\
+        .group_by(["contig"])\
         .agg(
-            pl.col("cluster").count().alias("n_assigned_bins"),
+            pl.col("prob").mean().alias("mean_prob")
+        )
+
+
+    high_confidence_assignements = high_confidence_assignements\
+        .join(prob_df, on = ["contig", "method"])\
+        .join(high_mean_prob, on = ["contig"])\
+        .with_columns(
+            pl.when(pl.col("mean_prob") >= mean_probability).then(pl.lit("high_confidence")).otherwise(pl.lit("medium_confidence")).alias("confidence")
+        )\
+        .sort(["contig"])\
+        .select(columns)
+
+    low_confidence_assignments = results\
+    .filter(pl.col("contig").is_in(n_assigned_bins.filter(pl.col("n_assigned_bins") == 2).get_column("contig")))
+
+    
+    low_confidence_classification = low_confidence_assignments\
+        .group_by(["contig", "assigned_bin"])\
+        .agg(
+            pl.col("assigned_bin").count().alias("n_assigned_bins"),
         )\
         .filter(pl.col("n_assigned_bins") == 2)\
+        .drop(["n_assigned_bins"])
+
+
+    low_confidence_assignments = low_confidence_classification\
+        .join(low_confidence_assignments, on = ["contig", "assigned_bin"])\
+        .join(prob_df, on = ["contig", "method"])
+        
+
+    low_mean_prob = low_confidence_assignments\
+        .group_by(["contig"])\
+        .agg(
+            pl.col("prob").mean().alias("mean_prob")
+        )
+
+    low_confidence_assignments = low_confidence_assignments\
+        .join(low_mean_prob, on = ["contig"])\
         .with_columns(
-            pl.lit("medium_confidence").alias("confidence"),
-            pl.col("cluster").alias("assigned_bin")
+            pl.lit("low_confidence").alias("confidence")
         )\
-        .select(["contig", "cluster", "confidence", "assigned_bin"])
-
-
-    medium_confidence_assignements = results\
-        .join(medium_confidence, on = ["contig", "cluster"], how = "left")\
-        .filter(pl.col("confidence").is_not_null())
-
-
-    assigned_contigs = pl.concat([high_confidence_assignements, medium_confidence_assignements])
+        .sort(["contig"])\
+        .select(columns)
+    assigned_contigs = pl.concat([high_confidence_assignements, low_confidence_assignments])
     return assigned_contigs

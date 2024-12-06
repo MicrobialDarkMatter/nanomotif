@@ -139,6 +139,12 @@ def create_parser():
         help="Include contigs in bins",
         parents=[parser_binnary_shared]
     )
+    parser_inclusion.add_argument(
+        "--mean_model_confidence",
+        type = float,
+        help = "Mean probability between models for including contig. Contigs above this value will be included. [default: 0.8]",
+        default = 0.8
+    )
     
     group = parser_inclusion.add_mutually_exclusive_group(required=False)
     group.add_argument(
