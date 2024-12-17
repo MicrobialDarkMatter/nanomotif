@@ -1,8 +1,7 @@
 import polars as pl
-from sklearn.svm import SVC
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from nanomotif.binnary import data_processing as dp 
 from nanomotif.binnary import utils as ut
@@ -24,8 +23,6 @@ def include_contigs(contig_methylation, contig_lengths, mean_probability):
 
 
     binned_contig_names, binned_matrix = dp.create_matrix(binned_contig_methylation)
-    scaler = StandardScaler()
-    binned_matrix = scaler.fit_transform(binned_matrix)
 
     pca_variance=0.90
     pca = PCA(n_components=pca_variance, svd_solver = "full")
@@ -50,16 +47,15 @@ def include_contigs(contig_methylation, contig_lengths, mean_probability):
 
     
     unbinned_contig_names, unbinned_matrix = dp.create_matrix(unbinned_contig_methylation_feature_completions)
-    unbinned_matrix = scaler.transform(unbinned_matrix)
     unbinned_matrix = pca.transform(unbinned_matrix)
 
-    svm = SVC(kernel = "rbf", random_state = 42, class_weight = "balanced", probability=True)
     knn = KNeighborsClassifier(n_neighbors = 3)
     rf = RandomForestClassifier(n_estimators=100, random_state=42)
+    lda = LinearDiscriminantAnalysis()
 
-    svm_pred = svm.fit(binned_matrix, bins.get_column("bin"))
-    svm_labels = svm_pred.predict(unbinned_matrix)
-    svm_prob = svm_pred.predict_proba(unbinned_matrix).max(axis = 1)
+    lda_pred = lda.fit(binned_matrix, bins.get_column("bin"))
+    lda_labels = lda_pred.predict(unbinned_matrix)
+    lda_prob = lda_pred.predict_proba(unbinned_matrix).max(axis = 1)
     
     knn_pred = knn.fit(binned_matrix, bins.get_column("bin"))
     knn_labels = knn_pred.predict(unbinned_matrix)
@@ -83,25 +79,25 @@ def include_contigs(contig_methylation, contig_lengths, mean_probability):
         "prob": knn_prob
     })
 
-    svm_df = pl.DataFrame({
+    lda_df = pl.DataFrame({
         "contig": unbinned_contig_names,
-        "method": "svm",
-        "pred": svm_labels,
-        "prob": svm_prob
+        "method": "lda",
+        "pred": lda_labels,
+        "prob": lda_prob
     })
 
-    prob_df = pl.concat([rf_df, knn_df, svm_df])
+    prob_df = pl.concat([rf_df, knn_df, lda_df])
     
     results = pl.DataFrame({
                     "contig": unbinned_contig_names,
-                    "svm": svm_labels,
+                    "lda": lda_labels,
                     "knn": knn_labels,
                     "rf": rf_labels,
                 })\
                 .join(contig_bin, on="contig")\
                 .melt(
                     id_vars = ["contig", "bin"],
-                    value_vars=["svm", "knn", "rf"],
+                    value_vars=["lda", "knn", "rf"],
                     value_name="assigned_bin",
                     variable_name="method"
                 )
@@ -165,5 +161,6 @@ def include_contigs(contig_methylation, contig_lengths, mean_probability):
         )\
         .sort(["contig"])\
         .select(columns)
-    assigned_contigs = pl.concat([high_confidence_assignements, low_confidence_assignments])
+    assigned_contigs = pl.concat([high_confidence_assignements, low_confidence_assignments])\
+        .sort(["confidence", "contig"])
     return assigned_contigs
