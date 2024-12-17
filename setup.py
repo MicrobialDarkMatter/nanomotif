@@ -38,6 +38,7 @@ setup(
         "Bio==1.6.1",
         "snakemake==7.32.4",
         "pymethylation_utils==0.4.0",
+        "hdbscan",
         "progressbar2>=3.53.1"
     ],
     entry_points={
