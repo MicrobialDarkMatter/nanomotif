@@ -18,8 +18,8 @@ def remove_noisy_motifs(motif_df):
     for motif in motifs:
         if not motif.have_isolated_bases(isolation_size = 3):
             clean_motifs.append(motif.string)
-    if len(clean_motifs) == 0:
-        raise ValueError("All identified motifs were noisy, stopping.")
+    if not clean_motifs:
+        return motif_df.clear()
     else: 
         motif_df_clean = motif_df.filter(pl.col("motif").is_in(clean_motifs))
         return motif_df_clean
