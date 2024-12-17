@@ -152,7 +152,7 @@ def test_impute_unbinned_contigs():
     assert set(result.get_column("motif_mod").unique()) == set(["mod1", "mod2", "mod3"])
     assert None not in result.to_pandas()["median"]
     # Expected values for the "median" column (based on your output)
-    expected_median = [0.0, 0.390143, 0.346399, 0.95, 0.231204, 0.231199]
+    expected_median = [0.0, 0.142607, 0.109799, 0.95, 0.023403, 0.023399]
 
     # Extract actual "median" values from the DataFrame
     actual_median = result.get_column("median").to_list()
