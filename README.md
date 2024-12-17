@@ -69,10 +69,10 @@ This will create three files: `motifs.tsv`,`motif-scored.tsv`, and `bin-motifs.t
 See [usage](https://nanomotif.readthedocs.io/en/latest/usage.html) and [output](https://nanomotif.readthedocs.io/en/latest/output.html) for detailed usage and output information.
 
 #### Bin contamination
-After motif identification it is possible to identify contamination in bins using the `bin-motifs.tsv`, `contig-bin.tsv` and `motif-scored.tsv` files.
+After motif identification it is possible to identify contamination in bins using the `bin-motifs.tsv`, `assembly`, `pileup` and `contig_bin` file.
 
 ```
-nanomotif detect_contamination --motifs_scored MOTIFS_SCORED.tsv --bin_motifs BIN_MOTIFS.tsv --contig_bins CONTIG_BINS.tsv -t THREADS --out OUT
+nanomotif detect_contamination --pileup PILEUP --assembly ASSEMBLY --bin_motifs BIN_MOTIFS --contig_bins CONTIG_BIN --out OUT
 ```
 This will generate a bin_contamination.tsv specifying the contigs, which is flagged as contamination.
 
@@ -81,11 +81,12 @@ If the --write_bins and the --assembly_file flags are specified new de-contamina
 See [usage](https://nanomotif.readthedocs.io/en/latest/usage.html) and [output](https://nanomotif.readthedocs.io/en/latest/output.html) for detailed usage and output information.
 
 #### Include unbinned contigs
-The `include_contigs` command assigns unbinned contigs in the assembly file to bins by comparing the methylation pattern of the contig to the bin consensus pattern. The contig must have a unique perfect match to the bin consensus pattern to be assigned to a bin. Additionally, the `include_contigs` assigns all the contigs in the `bin_contamination.tsv` file as unbinned. 
+The `include_contigs` command assigns unbinned contigs in the assembly file to bins by training three classifiers, random forest, linear discriminant analysis, and k neighbors classifier, on the methylation pattern of the bins.
 
 ```
-nanomotif include_contigs --motifs_scored MOTIFS_SCORED.tsv --bin_motifs BIN_MOTIFS.tsv --contig_bins CONTIG_BINS.tsv --run_detect_contamination -t THREADS --out OUT
+nanomotif include_contigs --pileup PILEUP --assembly ASSEMBLY --bin_motifs BIN_MOTIFS --contig_bins CONTIG_BIN --run_detect_contamination --out OUT
 ```
+> Note: this is not a binner and included contigs should be considered putative. Methylation patterns can be shared across MAGs, which is problematic for unrecovered MAGs.
 
 If decontamination should not be performed, the `include_contigs` can be run without the `--run_detect_contamination` flag or without the `--contamination_file` flag.
 
