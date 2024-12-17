@@ -429,7 +429,12 @@ def check_install(args, pl):
     bin_consensus(args, pl, pileup=pileup, assembly=assembly, motifs=motifs, motifs_scored=scored_all)
     
     log.info("Done")
-    shutil.rmtree(args.out)
+    for i in range(3):
+        try:
+            shutil.rmtree(args.out)
+            break
+        except OSError as e:
+            time.sleep(0.5) 
 
 
 ####################################################################################################
@@ -588,7 +593,10 @@ def main():
     parser = nm.argparser.create_parser()
     args = parser.parse_args()
 
-    os.environ["POLARS_MAX_THREADS"] =str(args.threads)
+    try: 
+        os.environ["POLARS_MAX_THREADS"] = str(args.threads)
+    except:
+        os.environ["POLARS_MAX_THREADS"] = "1"
     import polars as pl
     if args.command in ["detect_contamination", "include_contigs", "MTase-linker"]:
         args.verbose = False

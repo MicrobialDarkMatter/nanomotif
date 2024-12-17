@@ -44,7 +44,7 @@ def extract_contig_mods_with_sufficient_information(pileup: Pileup, assembly: As
     contigs_in_assembly = list(assembly.assembly.keys())
     pileup = pileup.filter(pl.col("contig").is_in(contigs_in_assembly))
 
-    contigmods_with_more_than_min_mods = pileup.groupby("contig_mod").count().filter(
+    contigmods_with_more_than_min_mods = pileup.group_by("contig_mod").count().filter(
             pl.col("count") > min_mods_pr_contig
         ).get_column("contig_mod").to_list()
 
@@ -53,7 +53,7 @@ def extract_contig_mods_with_sufficient_information(pileup: Pileup, assembly: As
         "length": [len(contig) for contig in assembly.assembly.values()]
     })
     contigmods_with_sufficient_mod_frequency = pileup \
-        .groupby(["contig", "mod_type"]) \
+        .group_by(["contig", "mod_type"]) \
         .agg(pl.count()) \
         .join(assm_lengths, on = "contig") \
         .filter(pl.col("count") > pl.col("length")/min_mod_frequency) \
