@@ -627,7 +627,6 @@ def main():
         motif_discovery(args, pl)
 
     elif args.command in ["detect_contamination", "include_contigs"]:
-        args.verbose = False
         shared_setup(args, args.out)
         binnary(args, pl)
 
