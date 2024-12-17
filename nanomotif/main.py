@@ -429,7 +429,12 @@ def check_install(args, pl):
     bin_consensus(args, pl, pileup=pileup, assembly=assembly, motifs=motifs, motifs_scored=scored_all)
     
     log.info("Done")
-    shutil.rmtree(args.out)
+    for i in range(3):
+        try:
+            shutil.rmtree(args.out)
+            break
+        except OSError as e:
+            time.sleep(0.5) 
 
 
 ####################################################################################################
