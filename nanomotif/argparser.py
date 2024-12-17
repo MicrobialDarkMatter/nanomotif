@@ -112,11 +112,6 @@ def create_parser():
         action='store_true',
         help="If specified, new bins will be written to a bins folder. Requires --assembly_file to be specified.",
     )
-    parser_binnary_shared.add_argument(
-        "--save_scores",
-        action='store_true',
-        help="If specified, the scores for each comparison will be saved to a scores folder in the output directory"
-    )
     
     parser_binnary_shared_mandatory.add_argument("--out", type=str, help="Path to output directory", required=True, default="nanomotif")
     
