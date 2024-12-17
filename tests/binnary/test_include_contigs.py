@@ -1,58 +1,40 @@
 import pytest
+import polars as pl
 from nanomotif.binnary import include_contigs as ic
-from nanomotif.binnary import detect_contamination as dc
-from nanomotif.binnary import data_processing as dp
-from .conftest import MockArgs
 
-def test_include_contigs(loaded_data, motifs_scored_in_bins_and_bin_motifs):
-    """
-    GIVEN loaded_data
-    WHEN include_contigs is called
-    THEN assert that the output contains only contig 3 and the expected columns
-    """
-    args = MockArgs()
+def test_include_contigs():
     
-    motifs_scored_in_bins = motifs_scored_in_bins_and_bin_motifs["motifs_scored_in_bins"]
+    contig_methylation_1 = pl.DataFrame({
+                                          "contig": ["contig_1","contig_1","contig_1","contig_2","contig_2","contig_2","contig_3","contig_3","contig_3","contig_4","contig_4","contig_4"],
+                                          "bin": ["bin1","bin1","bin1","bin1","bin1","bin1","unbinned","unbinned","unbinned","bin1","bin1","bin1"],
+                                          "median": [0.9, 0.85, 0.0, 0.9, 0.85, 0.001, 0.0, 0.001, 0.9, 0.99, 0.9, 0.05],
+                                          "N_motif_obs": [1000, 500, 600, 270, 100, 50, 50, 100, 100, 1000, 500, 600,],
+                                          "motif_mod": ["m1", "m2", "m3","m1", "m2", "m3","m1", "m2", "m3","m1", "m2", "m3"]
+                                      }) 
+    contig_methylation_2 = pl.DataFrame({
+                                          "contig": ["contig_5","contig_5","contig_5","contig_6","contig_6","contig_6","contig_7","contig_7","contig_7","contig_8","contig_8","contig_8"],
+                                          "bin": ["bin2","bin2","bin2","bin2","bin2","bin2","bin2","bin2","bin2","bin2","bin2","bin2"],
+                                          "median": [0.04, 0.01, 0.9, 0.0, 0.0, 0.97, 0.1, 0.0, 0.9, 0.0, 0.01, 0.95],
+                                          "N_motif_obs": [1000, 500, 600, 270, 100, 50, 50, 100, 100, 1000, 500, 600,],
+                                          "motif_mod": ["m1", "m2", "m3","m1", "m2", "m3","m1", "m2", "m3","m1", "m2", "m3"]
+                                      }) 
+    contig_methylation_3 = pl.DataFrame({
+                                          "contig": ["contig_9","contig_9","contig_9","contig_10","contig_10","contig_10","contig_11","contig_11","contig_11","contig_12","contig_12","contig_12"],
+                                          "bin": ["bin3","bin3","bin3","bin3","bin3","bin3","bin3","bin3","bin3","bin3","bin3","bin3"],
+                                          "median": [0.04, 0.9, 0.9, 0.0, 0.92, 0.97, 0.0, 0.99, 0.9, 0.01, 0.99, 0.95],
+                                          "N_motif_obs": [1000, 500, 600, 270, 100, 50, 50, 100, 100, 1000, 500, 600,],
+                                          "motif_mod": ["m1", "m2", "m3","m1", "m2", "m3","m1", "m2", "m3","m1", "m2", "m3"]
+                                      }) 
+
+    contig_methylation = pl.concat([contig_methylation_1, contig_methylation_2,contig_methylation_3])
+    contig_lengths = pl.DataFrame({
+                                      "contig": ["contig_1", "contig_2", "contig_3", "contig_4","contig_5", "contig_6", "contig_7", "contig_8","contig_9", "contig_10", "contig_11", "contig_12"],
+                                      "length": [100000, 60000, 20000, 80000, 100000, 60000, 20000, 80000, 100000, 60000, 20000, 80000],
+                                  })
     
-    
-    bin_motifs_from_motifs_scored_in_bins = dp.construct_bin_consensus_from_motifs_scored_in_bins(
-        motifs_scored_in_bins,
-        args
-    )
-    
-    contamination = dc.detect_contamination(motifs_scored_in_bins, bin_motifs_from_motifs_scored_in_bins, args)
-    
-    include_contigs_df = ic.include_contigs(motifs_scored_in_bins, bin_motifs_from_motifs_scored_in_bins, contamination, args)
-    
-    include_contigs_df = include_contigs_df.to_pandas()
-    
-    assert include_contigs_df is not None
-    print(include_contigs_df)
-    assert include_contigs_df.shape[0] == 2
-    assert include_contigs_df[include_contigs_df["bin"] == "b2"]["contig"].iloc[0] == "contig_6"
-    
-    
-    
-def test_include_with_too_high_min_motif_comparisons(loaded_data, motifs_scored_in_bins_and_bin_motifs):
-    """
-    GIVEN loaded_data
-    WHEN include_contigs is called with a min_motif_comparisons of 10
-    THEN assert that the output contains only contig 3 and the expected columns
-    """
-    args = MockArgs()
-    args.min_motif_comparisons = 10
-    
-    
-    
-    motifs_scored_in_bins = motifs_scored_in_bins_and_bin_motifs["motifs_scored_in_bins"]
-    bin_motifs_from_motifs_scored_in_bins = dp.construct_bin_consensus_from_motifs_scored_in_bins(
-        motifs_scored_in_bins,
-        args
-    )
-    
-    contamination = dc.detect_contamination(motifs_scored_in_bins, bin_motifs_from_motifs_scored_in_bins, args)
-    
-    include = ic.include_contigs(motifs_scored_in_bins, bin_motifs_from_motifs_scored_in_bins, contamination, args)
-    
-    # Assert df is empty
-    assert include.shape[0] == 0
+
+    included = ic.include_contigs(contig_methylation, contig_lengths, 0.80)
+
+    assert included.shape[0] == 3
+    assert included.get_column("contig").unique().to_list() == ["contig_3"]
+    assert included.get_column("assigned_bin").unique().to_list() == ["bin2"]

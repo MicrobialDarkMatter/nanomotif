@@ -1,7 +1,7 @@
 import polars as pl
 import pandas as pd
 import nanomotif.binnary.utils as ut
-from methylation_utils_wrapper.utils import run_methylation_utils
+from pymethylation_utils.utils import run_methylation_utils
 from .conftest import MockArgs
 import os
 from pathlib import Path
@@ -44,6 +44,8 @@ def test_methylation_utils():
     assert file.exists(), "motifs_scored-read-methylation.tsv does not exist"
 
     res = pl.read_csv(file, separator = "\t")
-    assert res.shape == (4, 6), "Shape does not match"
+    print(res.columns)
+    assert res.columns == ["contig",  "median", "N_motif_obs", "mean_read_cov","motif", "mod_type", "mod_position"]
+    assert res.shape == (4, 7), "Shape does not match"
 
     

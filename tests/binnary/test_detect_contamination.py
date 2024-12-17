@@ -1,73 +1,45 @@
 import pytest
-from nanomotif.binnary import detect_contamination
+from nanomotif.binnary.detect_contamination import detect_contamination
 from nanomotif.binnary import data_processing as dp
 from .conftest import MockArgs
 import os
+import polars as pl
 
 
-def test_detect_contamination(loaded_data, motifs_scored_in_bins_and_bin_motifs):
-    """
-    GIVEN loaded_data
-    WHEN detect_contamination is called
-    THEN assert that the output contains only contig 3 and the expected columns
-    """
-    args = MockArgs()
-    
-    motifs_scored_in_bins = motifs_scored_in_bins_and_bin_motifs["motifs_scored_in_bins"]
-    
-    
-    bin_motifs_from_motifs_scored_in_bins = dp.filter_motifs_for_scoring(
-        motifs_scored_in_bins,
-        args
-    )
-    
-    contaminated_contigs = detect_contamination.detect_contamination(
-        motifs_scored_in_bins,
-        bin_motifs_from_motifs_scored_in_bins,
-        args
-    )
-    print(contaminated_contigs)
-    contaminated_contigs = contaminated_contigs.to_pandas()
-    
-    assert contaminated_contigs is not None
-    assert contaminated_contigs["bin"].unique().tolist() == ["b3"]
-    assert sorted(contaminated_contigs["contig"].unique().tolist()) == ["contig_12", "contig_13", "contig_6"]
-    assert contaminated_contigs[contaminated_contigs["contig"] == "contig_6"]["binary_methylation_mismatch_score"].values[0] == 3.0
+def test_detect_contamination():
+    contig_methylation_1 = pl.DataFrame({
+                                          "contig": ["contig_1","contig_1","contig_1","contig_2","contig_2","contig_2","contig_3","contig_3","contig_3","contig_4","contig_4","contig_4"],
+                                          "bin": ["bin1","bin1","bin1","bin1","bin1","bin1","bin1","bin1","bin1","bin1","bin1","bin1"],
+                                          "median": [0.9, 0.85, 0.0, 0.9, 0.85, 0.001, 0.0, 0.001, 0.9, 0.99, 0.9, 0.05],
+                                          "N_motif_obs": [1000, 500, 600, 270, 100, 50, 50, 100, 100, 1000, 500, 600,],
+                                          "motif_mod": ["m1", "m2", "m3","m1", "m2", "m3","m1", "m2", "m3","m1", "m2", "m3"]
+                                      }) 
+    contig_methylation_2 = pl.DataFrame({
+                                          "contig": ["contig_5","contig_5","contig_5","contig_6","contig_6","contig_6","contig_7","contig_7","contig_7","contig_8","contig_8","contig_8"],
+                                          "bin": ["bin2","bin2","bin2","bin2","bin2","bin2","bin2","bin2","bin2","bin2","bin2","bin2"],
+                                          "median": [0.04, 0.01, 0.9, 0.0, 0.0, 0.97, 0.1, 0.0, 0.9, 0.0, 0.01, 0.95],
+                                          "N_motif_obs": [1000, 500, 600, 270, 100, 50, 50, 100, 100, 1000, 500, 600,],
+                                          "motif_mod": ["m1", "m2", "m3","m1", "m2", "m3","m1", "m2", "m3","m1", "m2", "m3"]
+                                      }) 
+    contig_methylation_3 = pl.DataFrame({
+                                          "contig": ["contig_9","contig_9","contig_9","contig_10","contig_10","contig_10","contig_11","contig_11","contig_11","contig_12","contig_12","contig_12"],
+                                          "bin": ["bin3","bin3","bin3","bin3","bin3","bin3","bin3","bin3","bin3","bin3","bin3","bin3"],
+                                          "median": [0.04, 0.9, 0.9, 0.0, 0.92, 0.97, 0.0, 0.99, 0.9, 0.01, 0.99, 0.95],
+                                          "N_motif_obs": [1000, 500, 600, 270, 100, 50, 50, 100, 100, 1000, 500, 600,],
+                                          "motif_mod": ["m1", "m2", "m3","m1", "m2", "m3","m1", "m2", "m3","m1", "m2", "m3"]
+                                      }) 
 
+    contig_methylation = pl.concat([contig_methylation_1, contig_methylation_2,contig_methylation_3])
+    contig_lengths = pl.DataFrame({
+                                      "contig": ["contig_1", "contig_2", "contig_3", "contig_4","contig_5", "contig_6", "contig_7", "contig_8","contig_9", "contig_10", "contig_11", "contig_12"],
+                                      "length": [100000, 60000, 20000, 80000, 100000, 60000, 20000, 80000, 100000, 60000, 20000, 80000],
+                                  })
 
-def test_load_contamination_file(loaded_data, motifs_scored_in_bins_and_bin_motifs):
-    """
-    Test that the contamination file is loaded correctly.
-    """
-    # setup
-    args = MockArgs()
-    
-    motifs_scored_in_bins = motifs_scored_in_bins_and_bin_motifs["motifs_scored_in_bins"]
+    contamination = detect_contamination(contig_methylation, contig_lengths, 4, 1, 10)
+    print(contamination)
+
+    assert contamination.shape[0] == 4
+    assert contamination.get_column("contig").unique().to_list() == ["contig_3"]
     
     
-    bin_motifs_from_motifs_scored_in_bins = dp.filter_motifs_for_scoring(
-        motifs_scored_in_bins,
-        args
-    )
-    
-    contaminated_contigs = detect_contamination.detect_contamination(
-        motifs_scored_in_bins,
-        bin_motifs_from_motifs_scored_in_bins,
-        args
-    )
-    
-    contaminated_contigs = contaminated_contigs.to_pandas().to_csv("./tests/contaminated_contigs.tsv", index=False,sep="\t")
-    
-    # test
-    
-    contamination_file = dp.load_contamination_file("./tests/contaminated_contigs.tsv")
-    required_columns = ["bin", "bin_contig_compare", "binary_methylation_mismatch_score", "non_na_comparisons", "contig"]
-    
-    contamination_file = contamination_file.to_pandas()
-    
-    assert not contamination_file.empty, "The contamination file should not be empty."
-    assert list(contamination_file.columns) == required_columns, "The contamination file columns are incorrect."
-    
-    os.remove("./tests/contaminated_contigs.tsv")
-    
-    
+  
