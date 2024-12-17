@@ -94,6 +94,12 @@ def create_parser():
         default=3,
         help="Minimum read coverage for calculating methylation [used with methylation_util executable]",
     )
+    parser_binnary_shared.add_argument(
+        "--methylation_threshold",
+        type=int,
+        default=24,
+        help="Filtering criteria for trusting contig methylation. It is the product of mean_read_coverage and N_motif_observation. Higher value means stricter criteria. [default: 24]",
+    )
     
     parser_binnary_shared.add_argument(
         "--num_consensus",

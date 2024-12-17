@@ -73,6 +73,7 @@ usage: nanomotif detect_contamination [-h] --pileup PILEUP --assembly ASSEMBLY
                                       --bin_motifs BIN_MOTIFS --contig_bins
                                       CONTIG_BINS [-t THREADS]
                                       [--min_valid_read_coverage MIN_VALID_READ_COVERAGE]
+                                      [--methylation_threshold METHYLATION_THRESHOLD]
                                       [--num_consensus NUM_CONSENSUS]
                                       [--force] [--write_bins] --out OUT
                                       [--contamination_file CONTAMINATION_FILE]
@@ -84,6 +85,11 @@ options:
   --min_valid_read_coverage MIN_VALID_READ_COVERAGE
                         Minimum read coverage for calculating methylation
                         [used with methylation_util executable]
+  --methylation_threshold METHYLATION_THRESHOLD
+                        Filtering criteria for trusting contig methylation. It
+                        is the product of mean_read_coverage and
+                        N_motif_observation. Higher value means stricter
+                        criteria. [default: 24]
   --num_consensus NUM_CONSENSUS
                         Number of models that has to agree for classifying as
                         contaminant
@@ -102,9 +108,7 @@ Mandatory Arguments:
                         Path to bin-motifs.tsv file
   --contig_bins CONTIG_BINS
                         Path to bins.tsv file for contig bins
-  --out OUT             Path to output directory
-
-```
+  --out OUT             Path to output directory```
 
 The output is a `bin_contamination.tsv` file. The each contaminant will have 4 rows, one for each clustering algorithm, along with the cluster stats.
 
@@ -137,6 +141,7 @@ usage: nanomotif include_contigs [-h] --pileup PILEUP --assembly ASSEMBLY
                                  --bin_motifs BIN_MOTIFS --contig_bins
                                  CONTIG_BINS [-t THREADS]
                                  [--min_valid_read_coverage MIN_VALID_READ_COVERAGE]
+                                 [--methylation_threshold METHYLATION_THRESHOLD]
                                  [--num_consensus NUM_CONSENSUS] [--force]
                                  [--write_bins] --out OUT
                                  [--mean_model_confidence MEAN_MODEL_CONFIDENCE]
@@ -149,6 +154,11 @@ options:
   --min_valid_read_coverage MIN_VALID_READ_COVERAGE
                         Minimum read coverage for calculating methylation
                         [used with methylation_util executable]
+  --methylation_threshold METHYLATION_THRESHOLD
+                        Filtering criteria for trusting contig methylation. It
+                        is the product of mean_read_coverage and
+                        N_motif_observation. Higher value means stricter
+                        criteria. [default: 24]
   --num_consensus NUM_CONSENSUS
                         Number of models that has to agree for classifying as
                         contaminant
@@ -174,8 +184,7 @@ Mandatory Arguments:
                         Path to bin-motifs.tsv file
   --contig_bins CONTIG_BINS
                         Path to bins.tsv file for contig bins
-  --out OUT             Path to output directory
-```
+  --out OUT             Path to output directory```
 
 ## MTase-linker
 
