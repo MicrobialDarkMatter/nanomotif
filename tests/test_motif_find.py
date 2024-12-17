@@ -42,6 +42,10 @@ class TestMotifSearcher:
     def test_init_with_valid_inputs(self):
         root_motif = Motif("ACGT", 0)
         contig_sequence = DNAsequence("ACGTACGTACGT")
+        contig_sequences_sample = contig_sequence.sample_n_subsequences(
+            2 * 2 + 1, 10
+        )
+        contig_pssm = contig_sequences_sample.pssm()
         contig_pileup = pl.DataFrame({"position": [1,2,3], "value": [0.1, 0.2, 0.3]})
         methylation_sequences = DNAarray(["ACGT", "CGTA", "GTAC"])
         padding = 2
@@ -50,6 +54,7 @@ class TestMotifSearcher:
         searcher = MotifSearcher(
             root_motif=root_motif,
             contig_sequence=contig_sequence,
+            contig_pssm=contig_pssm,
             contig_pileup=contig_pileup,
             methylation_sequences=methylation_sequences,
             padding=padding
@@ -65,13 +70,19 @@ class TestMotifSearcher:
     def test_priority_function_zero_division_beta(self):
         root_motif = Motif("ACGT", 0)
         contig_sequence = DNAsequence("ACGTACGTACGT")
+        contig_sequences_sample = contig_sequence.sample_n_subsequences(
+            2 * 2 + 1, 10
+        )
+        contig_pssm = contig_sequences_sample.pssm()
         contig_pileup = pl.DataFrame({"position": [1,2,3], "value": [0.1, 0.2, 0.3]})
-        methylation_sequences = DNAarray(["ACGT"])
+        methylation_sequences = DNAarray(["ACGT", "CGTA", "GTAC"])
         padding = 2
 
+        # Create MotifSearcher instance
         searcher = MotifSearcher(
             root_motif=root_motif,
             contig_sequence=contig_sequence,
+            contig_pssm=contig_pssm,
             contig_pileup=contig_pileup,
             methylation_sequences=methylation_sequences,
             padding=padding
@@ -96,13 +107,19 @@ class TestMotifSearcher:
     def test_scoring_function(self):
         root_motif = Motif("ACGT", 0)
         contig_sequence = DNAsequence("ACGTACGTACGT")
+        contig_sequences_sample = contig_sequence.sample_n_subsequences(
+            2 * 2 + 1, 10
+        )
+        contig_pssm = contig_sequences_sample.pssm()
         contig_pileup = pl.DataFrame({"position": [1,2,3], "value": [0.1, 0.2, 0.3]})
-        methylation_sequences = DNAarray(["ACGT"])
+        methylation_sequences = DNAarray(["ACGT", "CGTA", "GTAC"])
         padding = 2
 
+        # Create MotifSearcher instance
         searcher = MotifSearcher(
             root_motif=root_motif,
             contig_sequence=contig_sequence,
+            contig_pssm=contig_pssm,
             contig_pileup=contig_pileup,
             methylation_sequences=methylation_sequences,
             padding=padding
@@ -139,7 +156,7 @@ class TestProcessSubpileup:
         modtype = "a"
 
         pileup_path = nm.datasets.geobacillus_plasmids_pileup_path()
-        pileup = nm.dataload.load_pileup(pileup_path, min_fraction=0.5)
+        pileup = nm.dataload.load_pileup(pileup_path, min_fraction=0.5, min_coverage=5)
         subpileup = pileup.pileup.filter(pl.col("mod_type") == modtype)
         assembly = nm.datasets.geobacillus_plasmids_assembly()
 
@@ -157,19 +174,20 @@ class TestProcessSubpileup:
                 "................ACCCA....................", 
                 "................CCAAAT...................", 
                 "...............G[AG].GAAG[TC].................."],
-            "score":[1.687542, 1.475938, 1.388421, 0.572978],
+            "score":[1.97339, 1.399304, 1.388421, 0.572978],
             "contig":["contig_3", "contig_3", "contig_3", "contig_3"],
             "mod_type":["a", "a", "a", "a"],
             "alpha":[706, 65, 80, 84],
             "beta":[3, 1, 1, 1]
         })
+        print(result)
         polars.testing.assert_frame_equal(result, expected_output)
 
 
 class TestProcessSampleParallel():
     def run_function(self):
         pileup_path = nm.datasets.geobacillus_plasmids_pileup_path()
-        pileup = nm.dataload.load_pileup(pileup_path, min_fraction=0.5)
+        pileup = nm.dataload.load_pileup(pileup_path, min_fraction=0.5, min_coverage=5)
         pileup = pileup.pileup
         assembly = nm.datasets.geobacillus_plasmids_assembly()
 

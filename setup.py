@@ -35,9 +35,9 @@ setup(
         "scikit-learn>=1.5.2",
         "networkx>=3.1",
         "pyarrow>=15.0.2",
-        "Bio>=1.6.2",
-        "snakemake>=7.32.4",
-        "pymethylation_utils",
+        "pymethylation_utils=0.4.0",
+        "Bio==1.6.1",
+        "snakemake==7.32.4",
         "progressbar2>=3.53.1"
     ],
     entry_points={

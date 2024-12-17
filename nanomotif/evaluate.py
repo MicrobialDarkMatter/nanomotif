@@ -168,17 +168,7 @@ def motif_model_read(pileup: pl.DataFrame, contig: str, motif: Motif) -> BetaBer
 ##########################################
 
 def worker_function(
-        args, 
-        counter, 
-        lock, 
-        assembly, 
-        min_kl_divergence, 
-        padding, 
-        minimum_methylation_fraction_confident, 
-        read_level_methylation,
-        log_dir, 
-        verbose, 
-        seed
+        args
     ):
     """
     Process a single subpileup for one contig and one modtype
@@ -191,20 +181,24 @@ def worker_function(
     - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
     - padding (int): The padding to use for the motif.
     """
+    (contig, modtype, subpileup, low_coverage_positions, counter, lock, assembly, 
+     min_kl_divergence, padding, minimum_methylation_fraction_confident, 
+     read_level_methylation, log_dir, verbose, seed) = args
     set_seed(seed=seed)
     warnings.filterwarnings("ignore")
-    contig, modtype, subpileup, low_coverage_positions = args
+    process_id = os.getpid()
+    if log_dir is not None:
+        log_file = f"{log_dir}/find-motifs.{process_id}.log"
+        configure_logger(log_file, verbose=verbose)
+    log.info(f"Worker {process_id} started")
 
     if low_coverage_positions is not None:
+        low_coverage_positions = low_coverage_positions.explode("position", "strand")
         low_coverage_positions = {
             "fwd": low_coverage_positions.filter(pl.col("strand") == "+")["position"].to_numpy(),
             "rev": low_coverage_positions.filter(pl.col("strand") == "-")["position"].to_numpy()
         }
     
-    process_id = os.getpid()
-    if log_dir is not None:
-        log_file = f"{log_dir}/find-motifs.{process_id}.log"
-        configure_logger(log_file, verbose=verbose)
 
     try:
         result = process_subpileup(
@@ -220,8 +214,10 @@ def worker_function(
         )
         with lock:
             counter.value += 1
+            log.debug(f"Task for ({contig}, {modtype}) complete; progress: {counter.value}")
         return result
-    except:
+    except Exception as e:
+        log.error(f"Error processing {contig}, {modtype}: {e}")
         with lock:
             counter.value += 1
         return None
@@ -285,7 +281,11 @@ def process_subpileup(
             pl.col("model").map_elements(lambda x: x._beta).alias("beta")
         ]).drop("model")
         return identified_motifs
-    
+
+def set_polars_env():
+    os.environ["POLARS_MAX_THREADS"] = "1"
+
+
 
 def process_sample_parallel(
         assembly, pileup, 
@@ -309,7 +309,6 @@ def process_sample_parallel(
     - pileup (Pileup): The pileup to be processed.
     - max_candidate_size (int): The maximum size of the candidate motifs.
     - min_read_methylation_fraction (float): The minimum fraction of reads that must be methylated for a position to be considered methylated.
-    - threshold_valid_coverage (int): The minimum number of reads that must cover a position for it to be considered valid.
     - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
     - min_cdf_score (float): Minimum score of 1 - cdf(cdf_position) for a motif to be considered valid.
     - cdf_position (float): The position to evaluate the cdf at.
@@ -321,58 +320,71 @@ def process_sample_parallel(
     assert search_frame_size > 0, "search_frame_size must be greater than 0"
     assert threshold_methylation_confident >= 0 and threshold_methylation_confident <= 1, "threshold_methylation_confident must be between 0 and 1"
     assert threshold_methylation_general >= 0 and threshold_methylation_general <= 1, "threshold_methylation_general must be between 0 and 1"
-    assert threshold_valid_coverage >= 0, "min_valid_coverage must be greater than 0"
     assert minimum_kl_divergence >= 0, "mininum_kl_divergence must be greater than 0"
 
     # Infer padding size from candidate_size
     padding = search_frame_size // 2
-
-    # Filter pileup
-    pileup = pileup \
-            .filter(pl.col("Nvalid_cov") > threshold_valid_coverage) \
-            .sort("contig") 
     
-    # Create a list of tasks (TODO: not have a list of all data)
-    if low_coverage_positions is not None:
-        tasks = [(contig, modtype, subpileup, low_coverage_positions.filter((pl.col("contig")==contig) & (pl.col("mod_type") == modtype))) for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])]
-    else:
-        tasks = [(contig, modtype, subpileup, None) for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])]
+    log.debug("Partitining pileups to dict")
+    pileup_dict = pileup.partition_by(["contig", "mod_type"], as_dict=True)
+    low_coverage_positions_dict = low_coverage_positions.partition_by(["contig", "mod_type"], as_dict=True) if low_coverage_positions is not None else None
 
+    def task_generator(pileup_dict, low_coverage_positions_dict):
+        for (contig, modtype) in pileup_dict:
+            subpileup = pileup_dict[(contig, modtype)]
+            
+            if low_coverage_positions is not None:
+                if (contig, modtype) in low_coverage_positions_dict.keys():
+                    low_coverage_positions_filtered = low_coverage_positions_dict[(contig, modtype)]
+                else:
+                    low_coverage_positions_filtered = None
+            else:
+                low_coverage_positions_filtered = None
+
+            yield (contig, modtype, subpileup, low_coverage_positions_filtered, counter, lock, assembly, 
+                       minimum_kl_divergence, search_frame_size // 2, threshold_methylation_confident, 
+                       read_level_methylation, log_dir, verbose, seed)
+                
     # Create a progress manager
     manager = multiprocessing.Manager()
     counter = manager.Value('i', 0)
     lock = manager.Lock()
 
     # Create a pool of workers
-    pool = get_context("spawn").Pool(processes=threads)
+    pool = get_context("spawn").Pool(processes=threads, initializer=set_polars_env)
 
     # Create a process for the progress bar
-    progress_bar_process = multiprocessing.Process(target=update_progress_bar, args=(counter, len(tasks), True))
+    log.debug("Counting number of tasks")
+    total_tasks = len(pileup.select("contig", "mod_type").unique())
+
+    log.debug("Starting progress bar")
+    progress_bar_process = multiprocessing.Process(target=update_progress_bar, args=(counter, total_tasks, True))
     progress_bar_process.start()
 
     # Put them workers to work
-    results = pool.starmap(worker_function, [(
-        task, 
-        counter, lock, 
-        assembly, minimum_kl_divergence, padding, threshold_methylation_confident, read_level_methylation,
-        log_dir, verbose, seed
-        ) for task in tasks])
+    log.debug("Starting workers")
+    chunksize = max(min(100, total_tasks // threads), 1)
+    results = pool.imap(worker_function, task_generator(pileup_dict, low_coverage_positions_dict), chunksize=chunksize)
     results = [result for result in results if result is not None]
+    log.debug("Joining results")
 
-    # Close the pool
+    log.debug("Closing pool")
     pool.close()
     pool.join()
 
-    # Close the progress bar
+    log.debug("Joining progress bar")
     progress_bar_process.join()
 
+    log.debug("Creating final dataframe")
     if len(results) == 0:
+        log.debug("No motifs found")
         return None
     motifs = pl.concat(results, rechunk=True, parallel=False)
 
     model_col = []
     for a, b in zip(motifs.get_column("alpha").to_list(), motifs.get_column("beta").to_list()):
         model_col.append(BetaBernoulliModel(a, b))
+
 
     motifs = motifs.with_columns([
             pl.Series(model_col).alias("model"),
@@ -423,6 +435,12 @@ def find_best_candidates(
     index_plus = subpileup_confident.filter(pl.col("strand") == "+").get_column("position").to_list()
     index_minus = subpileup_confident.filter(pl.col("strand") == "-").get_column("position").to_list()
     
+    # Sample sequences in contig to get background for KL-divergence
+    contig_sequences_sample = contig_sequence.sample_n_subsequences(
+        padding * 2 + 1, 10000
+    )
+    contig_pssm = contig_sequences_sample.pssm()
+
     methylation_sequences_string = []
     if len(index_plus) >= 1:
         methylation_sequences_string += contig_sequence.sample_at_indices(index_plus, padding).sequences
@@ -450,6 +468,7 @@ def find_best_candidates(
         searcher = MotifSearcher(
             root_motif, 
             contig_sequence, 
+            contig_pssm,
             contig_pileup, 
             methylation_sequences_clone, 
             padding,
@@ -503,6 +522,7 @@ class MotifSearcher:
         self,
         root_motif: Motif,
         contig_sequence: DNAsequence,
+        contig_pssm: DNAarray,
         contig_pileup: pl.DataFrame,
         methylation_sequences: DNAarray,
         padding: int,
@@ -520,6 +540,7 @@ class MotifSearcher:
         Parameters:
             root_motif (Motif): The initial motif to start the search from.
             contig_sequence: The contig sequence object with necessary methods.
+            contig_pssm: The position-specific scoring matrix for the contig background.
             contig_pileup: The pileup data associated with the contig.
             methylation_sequences: The methylation sequences to be analyzed.
             padding (int): The padding size for sequence sampling.
@@ -539,6 +560,7 @@ class MotifSearcher:
 
         self.root_motif = root_motif
         self.contig_sequence = contig_sequence
+        self.contig_pssm = contig_pssm
         self.contig_pileup = contig_pileup
         self.methylation_sequences = methylation_sequences
         self.padding = padding
@@ -651,7 +673,7 @@ class MotifSearcher:
                 new_motif_str = "".join(new_motif_sequence)
                 yield Motif(new_motif_str, motif.mod_position)
 
-    def run(self) -> tuple[MotifTree, list[Motif]]:
+    def run(self) -> tuple[MotifTree, Motif]:
         """
         Execute the motif search algorithm.
 
@@ -674,13 +696,7 @@ class MotifSearcher:
         best_score = self._scoring_function(root_model, root_model)
         rounds_since_new_best = 0
         visited_nodes: set[Motif] = set()
-
-        # Sample sequences in contig to get background for KL-divergence
-        contig_sequences_sample = self.contig_sequence.sample_n_subsequences(
-            self.padding * 2 + 1, 10000
-        )
-        contig_pssm = contig_sequences_sample.pssm()
-
+        
         # Initialize the search tree
         self.motif_graph.add_node(
             self.root_motif,
@@ -727,7 +743,7 @@ class MotifSearcher:
             neighbors = list(self._motif_child_nodes_kl_dist_max(
                 current_motif,
                 active_methylation_sequences.pssm(),
-                contig_pssm
+                self.contig_pssm
             ))
 
             # Add neighbors to graph
@@ -783,41 +799,31 @@ class MotifSearcher:
 
 
 
+def count_periods_at_start(string: str) -> int:
+    """
+    Count the number of periods at the start of a string
 
+    Parameters:
+    - string (str): The string to be processed.
 
+    Returns:
+    - int: The number of periods at the start of the string.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def count_periods_at_start(s):
+    Example:
+    >>> count_periods_at_start("...ACGT")
+    3
+    """
     count = 0
-    for char in s:
+    for char in string:
         if char == '.':
             count += 1
         else:
             break
     return count
-def count_periods_at_end(s):
-    s = s[::-1]
+def count_periods_at_end(string):
+    string = string[::-1]
     count = 0
-    for char in s:
+    for char in string:
         if char == '.':
             count += 1
         else:
