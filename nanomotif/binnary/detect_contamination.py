@@ -1,7 +1,6 @@
 import hdbscan
 from sklearn.cluster import AgglomerativeClustering, SpectralClustering
 from sklearn.mixture import GaussianMixture
-from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import polars as pl
 from nanomotif.binnary import data_processing as dp
@@ -30,8 +29,6 @@ def detect_contamination(contig_methylation, contig_lengths, num_consensus = 4, 
 
     contig_names, matrix = dp.create_matrix(contig_methylation)
 
-    scaler = StandardScaler()
-    matrix = scaler.fit_transform(matrix)
     original_features = matrix.shape[1]
     print(f"Original number of features: {original_features}")
 
