@@ -593,7 +593,10 @@ def main():
     parser = nm.argparser.create_parser()
     args = parser.parse_args()
 
-    os.environ["POLARS_MAX_THREADS"] =str(args.threads)
+    try: 
+        os.environ["POLARS_MAX_THREADS"] = str(args.threads)
+    except:
+        os.environ["POLARS_MAX_THREADS"] = "1"
     import polars as pl
     if args.command in ["detect_contamination", "include_contigs", "MTase-linker"]:
         args.verbose = False
