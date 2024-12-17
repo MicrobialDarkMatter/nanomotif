@@ -34,7 +34,7 @@ def check_RM_system(hit_id, df_systems):
 # Checking whether MTase is part of any system
 df_hmmer_MTase[['system', 'sys_id']] = df_hmmer_MTase['hit_id'].apply(lambda x: pd.Series(check_RM_system(x, df_systems)))
 
-# Checking wether MTase is part of an RM-system
+# Checking whether MTase is part of an RM-system, MADS-system or BREX-system
 df_hmmer_MTase[['RM_system', 'sys_id']] = df_hmmer_MTase["hit_id"].apply(lambda x: pd.Series(check_RM_system(x, df_systems_RM)))
 
 # Removing MTase hits which are part of another defense system 
