@@ -6,7 +6,7 @@ import polars as pl
 from nanomotif.binnary import data_processing as dp
 import logging
 
-def detect_contamination(contig_methylation, contig_lengths, num_consensus = 4, threads = 1):
+def detect_contamination(contig_methylation, contig_lengths, num_consensus = 4, threads = 1, spectral_n_neighbors=10):
     logger = logging.getLogger(__name__)
     logger.info("Starting contamination detection analysis...")
 
@@ -44,7 +44,7 @@ def detect_contamination(contig_methylation, contig_lengths, num_consensus = 4, 
     n_bins = len(contig_methylation.get_column("bin").unique())
 
     print("Running Spectral")
-    spectral = SpectralClustering(n_clusters=n_bins, affinity = 'nearest_neighbors', random_state=42, n_jobs = threads)
+    spectral = SpectralClustering(n_clusters=n_bins, affinity = 'nearest_neighbors', random_state=42, n_jobs = threads, n_neighbors = spectral_n_neighbors)
     spectral_labels = spectral.fit_predict(matrix)
 
     print("Running Agglomerative Clustering")
@@ -79,8 +79,6 @@ def detect_contamination(contig_methylation, contig_lengths, num_consensus = 4, 
                     value_name="cluster",
                     variable_name="method"
                 )
-
-
 
 
     bin_size = contig_bin\
