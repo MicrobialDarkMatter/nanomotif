@@ -21,7 +21,40 @@ Motif discovery output two primary files: bin-motifs.tsv and motif.tsv. `bin-mot
 
 ## Bin improvement
 
-COMING SOON
+The bin improvement module has two primary outputs: `bin_contamination.tsv` and `include_contigs.tsv`.
+
+**Contamination detection**
+
+Running the nanomotif detect_contamination command will generate a `bin_contamination.tsv` specifying the contigs, which is flagged as contamination. If the --write_bins and the --assembly_file flags are specified new de-contaminated bins will be written to a bins folder. Contigs are only reported in the `bin_contamination.tsv` if 4/4 clustering methods (agg, spectral, gmm, hdbscan) assigns the contig to a different `cluster` than `bin_cluster`.
+
+
+| **Column**     | **Description**         |
+|----|------|
+| **contig**          | The identifier of a specific contig.                                                                       |
+| **bin**             | The name of the bin that this contig currently belongs to.                                    |
+| **method**          | The clustering used to assign the contig to a cluster (e.g., `agg` for agglomerative clustering, `spectral` for spectral clustering, `gmm` for Gaussian Mixture Model, `hdbscan` for HDBSCAN clustering). |
+| **cluster**         | The cluster ID assigned to the contig by the specified method. Each method may produce different cluster identifiers.                                                                     |
+| **bin_cluster**     | The cluster ID of the current bin.    |
+| **bin_length**      | The total length (in base pairs) of all current contigs within the bin.                                                                                                                           |
+| **n_contigs_bin**   | The total number of contigs that the bin currently contains.                                                                                                                                        |
+| **fraction_contigs** | The fraction of contigs in the bin that is clustered within `bin_cluster`. For example, if the bin has 12 contigs and the `bin_cluster` includes 10 of them, the fraction would be 10/12 ≈ 0.83. |
+| **fraction_length**  | The fraction of the total bin length covered by the contigs in the `bin_cluster`. Similar to `fraction_contigs` but based on sequence length.                           |
+
+
+**Contig inclusion**
+
+The include_contigs command assigns unbinned contigs in the assembly file to bins by training three classifiers, random forest, linear discriminant analysis, and k neighbors classifier, on the methylation pattern of the bins. 
+
+| Header          | Explanation                                                                                                              |
+|-----------------|--------------------------------------------------------------------------------------------------------------------------|
+| **contig**          | The identifier of a specific contig.                                                                       |
+| **bin**             | The name of the bin that this contig previously belongs to. "unbinned" indicates it was initially not assigned to a bin. |
+| **assigned_bin** | The bin to which the contig is assigned by the classification.                                     |
+| **method**       | The method used to predict the bin assignment (e.g., knn, lda, rf). "knn" = k-Nearest Neighbors, "lda" = Linear Discriminant Analysis, "rf" = Random Forest. |
+| **prob**         | The probability assigned by the method for placing the contig into the assigned bin.                          |
+| **mean_prob**    | The average probability aggregated from all methods probability for the same contig-bin pair.     |
+| **confidence**   | The qualitative confidence level of the assignment (e.g., "high_confidence", "medium_confidence", "low_confidence"). We recommend only using "high_confidence" assignments if no other verifications are performed.   |
+
 
 ## MTase-linker
 
