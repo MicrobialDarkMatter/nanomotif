@@ -441,7 +441,7 @@ def check_install(args, pl):
 # Binnary - contamination and inclusion
 from nanomotif.binnary import data_processing, detect_contamination, include_contigs
 from nanomotif.binnary.logging import set_logger_config
-
+from pymethylation_utils.utils import run_methylation_utils
 
 
 def binnary(args, pl):
@@ -450,67 +450,77 @@ def binnary(args, pl):
     Orchestrates the workflow of the tool based on the provided arguments.
     """
     
-    # Conditional check for --write_bins and --assembly_file
-    if args.write_bins and not args.assembly_file:
-        print("Error: --assembly_file must be specified when --write_bins is used.")
-        sys.exit(1)
-    elif not args.write_bins and args.assembly_file:
-        print("Error: --assembly_file can only be used when --write_bins is specified.")
-        sys.exit(1)
-    
     print("Starting Binnary ", args.command, " analysis...")
 
     
     # Settting up the logger
-    # set_logger_config(args)
-    # logger = log.getLogger(__name__)
     log.info("Starting Binnary analysis...")
-    
-    # Set number of threads for polars
-    os.environ['POLARS_MAX_THREADS'] = str(args.threads)
-    
-    POLAR_THREADS = pl.threadpool_size()
-    log.info(f"Polars is using {POLAR_THREADS} threads.")
     
     # Step 1: Load and preprocess data
     # These functions would be defined in your data_processing module
     (
-        motifs_scored,
         bin_motifs,
         contig_bins,
     ) = data_processing.load_data(args)
 
     
 
-    # Step 2: create motifs_scored_in_bins and bin_motif_binary
-    bin_motif_binary = data_processing.prepare_bin_consensus(bin_motifs, args)
-    
-    motifs_in_bin_consensus = bin_motif_binary.select("motif_mod").unique()["motif_mod"]
-    
-    motifs_scored_in_bins = data_processing.prepare_motifs_scored_in_bins(
-        motifs_scored,
-        motifs_in_bin_consensus,
-        contig_bins
+    # Step 2: create motifs_scored_in_bins and bin_consensus_motifs_filtered
+    motifs_in_bin_consensus = bin_motifs\
+        .with_columns(
+            (pl.col("motif") + "_" + pl.col("mod_type") + "_" + pl.col("mod_position").cast(pl.Utf8)).alias("motif_mod")            
+        )\
+        .get_column("motif_mod").unique()
+
+    contig_methylation_file = "motifs-scored-read-methylation.tsv"
+    if not args.force:
+        log.info(f"Check if {contig_methylation_file} exists")
+
+    if os.path.isfile(os.path.join(args.out,contig_methylation_file)) and not args.force:
+        log.info("motifs-scored-read-methylation.tsv exists. Using existing file! Use --force to override this.")
+    elif not os.path.isfile(os.path.join(args.out, contig_methylation_file)) or args.force:
+        log.info(f"Running methylation_utils to create {contig_methylation_file}")
+        # Create motifs-scored-read-methylation
+        return_code = run_methylation_utils(
+            pileup = args.pileup,
+            assembly = args.assembly,
+            motifs = motifs_in_bin_consensus,
+            threads = args.threads,
+            min_valid_read_coverage = args.min_valid_read_coverage,
+            output = os.path.join(args.out,contig_methylation_file)
+        )
+
+        if return_code != 0:
+            log.error("Error running methylation_utils")
+
+
+    log.info("Loading assembly file...")
+    assembly = data_processing.read_fasta(args.assembly)
+    contig_lengths = data_processing.find_contig_lengths(assembly) 
+
+    # Load motifs-scored-read-methylation.tsv
+    contig_methylation = pl.read_csv(
+        os.path.join(args.out, contig_methylation_file), separator="\t", has_header = True
     )
-    
-    
-    # Create the bin_consensus dataframe for scoring
-    log.info("Creating bin_consensus dataframe for scoring...")
-    bin_motifs_from_motifs_scored_in_bins = data_processing.construct_bin_consensus_from_motifs_scored_in_bins(
-        motifs_scored_in_bins,
-        args
-    )
+
+    contig_methylation = contig_methylation\
+        .filter((pl.col("N_motif_obs").cast(pl.Float64) * pl.col("mean_read_cov")) >= args.methylation_threshold)
 
     # Setting up the contamination analysis
     if (args.command == "detect_contamination" and not args.contamination_file) or (args.command == "include_contigs" and args.run_detect_contamination):
-        contamination = detect_contamination.detect_contamination(
-            motifs_scored_in_bins, bin_motifs_from_motifs_scored_in_bins, args
+    
+        contig_methylation_cont = data_processing.add_bin(
+            contig_methylation,
+            contig_bins
         )
+
+        contamination = detect_contamination.detect_contamination(
+            contig_methylation_cont, contig_lengths, args.num_consensus, args.threads
+        )
+
+
         data_processing.generate_output(contamination.to_pandas(), args.out, "bin_contamination.tsv")
-    elif args.contamination_file:
-        log.info("Loading contamination file...")
-        contamination = data_processing.load_contamination_file(args.contamination_file)
-        
+
     if args.command == "detect_contamination":
         # Create a decontaminated contig_bin file
         new_contig_bins = data_processing.create_contig_bin_file(
@@ -521,47 +531,56 @@ def binnary(args, pl):
         data_processing.generate_output(new_contig_bins, args.out, "decontaminated_contig_bin.tsv")
 
     if args.command == "include_contigs":
-        # # User provided contamination file
-        # if args.contamination_file:
-        #     log.info("Loading contamination file...")
-        #     contamination = data_processing.load_contamination_file(args.contamination_file)
-        
-        ## If run_detect_contamination is false and contamination file is not provided, then set contamination to None
+        # User provided contamination file
+        if args.contamination_file:
+            log.info("Loading contamination file...")
+            contamination = data_processing.load_contamination_file(args.contamination_file)
+        # If run_detect_contamination is false and contamination file is not provided, then set contamination to None
         if not args.run_detect_contamination and not args.contamination_file:
             contamination = pl.DataFrame(
                 {
-                    "bin": [],
-                    "bin_contig_compare": [],
-                    "binary_methylation_missmatch_score": [],
-                    "non_na_comparisons": [],
                     "contig": []
                 }
             )
         
+        # move contigs in bin_contamination to unbinned
+        contamination_contigs = contamination.get_column("contig")
+
+        log.info("Removing contaminants from bins")
+        contig_bins = contig_bins.filter(~pl.col("contig").is_in(contamination_contigs))
         
-        
+        contig_methylation_inc = data_processing.add_bin(
+            contig_methylation,
+            contig_bins
+        )
+
         # Run the include_contigs analysis    
         include_contigs_df = include_contigs.include_contigs(
-            motifs_scored_in_bins, bin_motifs_from_motifs_scored_in_bins, contamination, args
+            contig_methylation_inc,
+            contig_lengths,
+            mean_probability = args.mean_model_confidence
         )
         
         # Save the include_contigs_df results
         data_processing.generate_output(include_contigs_df.to_pandas(), args.out, "include_contigs.tsv")
         
         # Create a new contig_bin file
-        
-        
+        uniquely_assigned_contigs = include_contigs_df\
+            .filter(pl.col("confidence") == "high_confidence")\
+            .drop("bin")\
+            .rename({"assigned_bin": "bin"})\
+            .select(["contig", "bin"])\
+            .unique()
+
         new_contig_bins = data_processing.create_contig_bin_file(
             contig_bins=contig_bins.to_pandas(), 
             contamination= contamination.to_pandas(),
-            include=include_contigs_df.to_pandas()
+            include=uniquely_assigned_contigs.to_pandas()
         )
         data_processing.generate_output(new_contig_bins, args.out, "new_contig_bin.tsv")
         
     if args.write_bins:
         log.info("Write bins flag is set. Writing bins to file...")
-        log.info("Loading assembly file...")
-        assembly = data_processing.read_fasta(args.assembly_file)
         
         bin_dir = os.path.join(args.out, args.command + "_bins")
         

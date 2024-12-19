@@ -1,108 +1,56 @@
-contig	mod_type	motif	mod_position	n_mod	n_nomod	motif_type	motif_complement	mod_position_complement	n_mod_complement	n_nomod_complement
-contig_1	a	m1	1	300	700	palindrome				
-contig_1	a	m2	1	0	1000	palindrome				
-contig_1	a	m3	1	500	500	palindrome				
-contig_1	a	m4	1	0	1000	palindrome				
-contig_1	a	m5	1	0	1000	palindrome				
-contig_1	a	m6	1	0	1000	palindrome				
-contig_1	a	m7	1	100	900	palindrome				
-contig_2	a	m1	1	300	700	palindrome				
-contig_2	a	m2	1	0	1000	palindrome				
-contig_2	a	m3	1	500	500	palindrome				
-contig_2	a	m4	1	0	1000	palindrome				
-contig_2	a	m5	1	0	1000	palindrome				
-contig_2	a	m6	1	0	1000	palindrome				
-contig_2	a	m7	1	100	900	palindrome				
-contig_3	a	m1	1	300	700	palindrome				
-contig_3	a	m2	1	0	1000	palindrome				
-contig_3	a	m3	1	500	500	palindrome				
-contig_3	a	m4	1	0	1000	palindrome				
-contig_3	a	m5	1	0	1000	palindrome				
-contig_3	a	m6	1	0	1000	palindrome				
-contig_3	a	m7	1	100	900	palindrome				
-contig_4	a	m1	1	0	1000	palindrome				
-contig_4	a	m2	1	800	200	palindrome				
-contig_4	a	m3	1	0	1000	palindrome				
-contig_4	a	m4	1	0	1000	palindrome				
-contig_4	a	m5	1	0	1000	palindrome				
-contig_4	a	m6	1	0	1000	palindrome				
-contig_4	a	m7	1	0	1000	palindrome				
-contig_5	a	m1	1	0	1000	palindrome				
-contig_5	a	m2	1	800	200	palindrome				
-contig_5	a	m3	1	0	1000	palindrome				
-contig_5	a	m4	1	0	1000	palindrome				
-contig_5	a	m5	1	0	1000	palindrome				
-contig_5	a	m6	1	0	1000	palindrome				
-contig_5	a	m7	1	0	1000	palindrome				
-contig_6	a	m1	1	0	1000	palindrome				
-contig_6	a	m2	1	800	200	palindrome				
-contig_6	a	m3	1	0	1000	palindrome				
-contig_6	a	m4	1	0	1000	palindrome				
-contig_6	a	m5	1	0	1000	palindrome				
-contig_6	a	m6	1	0	1000	palindrome				
-contig_6	a	m7	1	0	1000	palindrome				
-contig_7	a	m1	1	500	500	palindrome				
-contig_7	a	m2	1	0	1000	palindrome				
-contig_7	a	m3	1	0	1000	palindrome				
-contig_7	a	m4	1	0	1000	palindrome				
-contig_7	a	m5	1	0	1000	palindrome				
-contig_7	a	m6	1	10000	0	palindrome				
-contig_7	a	m7	1	0	1000	palindrome				
-contig_8	a	m1	1	500	500	palindrome				
-contig_8	a	m2	1	0	1000	palindrome				
-contig_8	a	m3	1	0	1000	palindrome				
-contig_8	a	m4	1	0	1000	palindrome				
-contig_8	a	m5	1	0	1000	palindrome				
-contig_8	a	m6	1	10000	0	palindrome				
-contig_8	a	m7	1	0	1000	palindrome				
-contig_9	a	m1	1	500	500	palindrome				
-contig_9	a	m2	1	0	1000	palindrome				
-contig_9	a	m3	1	0	1000	palindrome				
-contig_9	a	m4	1	0	1000	palindrome				
-contig_9	a	m5	1	0	1000	palindrome				
-contig_9	a	m6	1	1000	0	palindrome				
-contig_9	a	m7	1	0	1000	palindrome				
-contig_10	a	m3	1	300	700	palindrome				
-contig_10	a	m2	1	0	1000	palindrome				
-contig_10	a	m4	1	0	1000	palindrome				
-contig_10	a	m5	1	0	1000	palindrome				
-contig_10	a	m6	1	0	1000	palindrome				
-contig_10	a	m7	1	100	900	palindrome				
-contig_11	a	m1	1	300	700	palindrome				
-contig_11	a	m2	1	0	1000	palindrome				
-contig_11	a	m4	1	0	1000	palindrome				
-contig_11	a	m5	1	0	1000	palindrome				
-contig_11	a	m7	1	100	900	palindrome				
-contig_12	a	m1	1	0	1000	palindrome				
-contig_12	a	m2	1	0	1000	palindrome				
-contig_12	a	m3	1	0	1000	palindrome				
-contig_12	a	m4	1	0	1000	palindrome				
-contig_12	a	m5	1	0	1000	palindrome				
-contig_12	a	m6	1	0	1000	palindrome				
-contig_12	a	m7	1	0	1000	palindrome				
-contig_13	a	m1	1	0	1000	palindrome				
-contig_13	a	m2	1	0	1000	palindrome				
-contig_13	a	m3	1	0	1000	palindrome				
-contig_13	a	m4	1	0	1000	palindrome				
-contig_13	a	m5	1	0	1000	palindrome				
-contig_13	a	m6	1	0	1000	palindrome				
-contig_13	a	m7	1	0	1000	palindrome				
-contig_14	a	m1	1	0	1000	palindrome				
-contig_14	a	m2	1	600	400	palindrome				
-contig_14	a	m3	1	0	1000	palindrome				
-contig_14	a	m4	1	0	1000	palindrome				
-contig_14	a	m5	1	0	1000	palindrome				
-contig_14	a	m6	1	0	1000	palindrome				
-contig_14	a	m7	1	0	1000	palindrome				
-contig_15	a	m1	1	500	500	palindrome				
-contig_15	a	m2	1	0	1000	palindrome				
-contig_15	a	m4	1	0	1000	palindrome				
-contig_15	a	m5	1	0	1000	palindrome				
-contig_15	a	m7	1	0	1000	palindrome				
-contig_16	a	m1	2	0	1000	palindrome				
-contig_16	a	m2	3	0	1000	palindrome				
-contig_16	a	m3	4	0	1000	palindrome				
-contig_16	a	m4	5	0	1000	palindrome				
-contig_16	a	m5	6	0	1000	palindrome				
-contig_16	a	m6	7	0	1000	palindrome				
-contig_16	a	m7	8	0	1000	palindrome				
+contig	motif	mod_type	mod_position	median	N_motif_obs
+contig_1	m1	a	1	0.3	9
+contig_1	m2	a	1	0.0	1000
+contig_1	m3	a	1	0.5	1000
+contig_1	m6	a	1	0.0	1000
+contig_2	m1	a	1	0.3	1000
+contig_2	m2	a	1	0.0	1000
+contig_2	m3	a	1	0.5	1000
+contig_2	m6	a	1	0.0	1000
+contig_3	m1	a	1	0.3	1000
+contig_3	m2	a	1	0.0	1000
+contig_3	m3	a	1	0.5	1000
+contig_3	m6	a	1	0.0	1000
+contig_4	m1	a	1	0.0	1000
+contig_4	m2	a	1	0.8	1000
+contig_4	m3	a	1	0.0	1000
+contig_4	m6	a	1	0.0	1000
+contig_5	m1	a	1	0.0	1000
+contig_5	m2	a	1	0.8	1000
+contig_5	m3	a	1	0.0	1000
+contig_5	m6	a	1	0.0	1000
+contig_6	m1	a	1	0.0	1000
+contig_6	m2	a	1	0.8	1000
+contig_6	m3	a	1	0.0	1000
+contig_6	m6	a	1	0.0	1000
+contig_7	m1	a	1	0.5	1000
+contig_7	m2	a	1	0.0	1000
+contig_7	m3	a	1	0.0	1000
+contig_7	m6	a	1	1.0	10000
+contig_8	m1	a	1	0.5	1000
+contig_8	m2	a	1	0.0	1000
+contig_8	m3	a	1	0.0	1000
+contig_8	m6	a	1	1.0	10000
+contig_9	m1	a	1	0.5	1000
+contig_9	m2	a	1	0.0	1000
+contig_9	m3	a	1	0.0	1000
+contig_9	m6	a	1	1.0	1000
+contig_10	m3	a	1	0.3	1000
+contig_10	m2	a	1	0.0	1000
+contig_10	m6	a	1	0.0	1000
+contig_11	m1	a	1	0.3	1000
+contig_11	m2	a	1	0.0	1000
+contig_12	m1	a	1	0.0	1000
+contig_12	m2	a	1	0.0	1000
+contig_12	m3	a	1	0.0	1000
+contig_12	m6	a	1	0.0	1000
+contig_13	m1	a	1	0.0	1000
+contig_13	m2	a	1	0.0	1000
+contig_13	m3	a	1	0.0	1000
+contig_13	m6	a	1	0.0	1000
+contig_14	m1	a	1	0.0	1000
+contig_14	m2	a	1	0.6	1000
+contig_14	m3	a	1	0.0	1000
+contig_14	m6	a	1	0.0	1000
+contig_15	m1	a	1	0.5	1000
+contig_15	m2	a	1	0.0	1000

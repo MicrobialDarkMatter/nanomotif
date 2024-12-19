@@ -1,85 +1,138 @@
+import hdbscan
+from sklearn.cluster import AgglomerativeClustering, SpectralClustering
+from sklearn.mixture import GaussianMixture
+from sklearn.decomposition import PCA
 import polars as pl
-import pandas as pd
 from nanomotif.binnary import data_processing as dp
-from nanomotif.binnary import scoring as sc
-from nanomotif.binnary.utils import split_bin_contig
 import logging
 
-def detect_contamination(motifs_scored_in_bins, bin_consensus, args):
-    """
-    Takes the bin_motif_binary and motifs_scored_in_bins DataFrames and performs the contamination detection analysis.
-    Firstly bin_motif_binary is used to create a binary representation of the methylation status of each motif in each bin.
-    This is the bases for the comparison. Only motifs that has a mean methylation value of at least 0.75 in bin_motif_binary are considered.
-    
-    Motifs_scored_in_bins is then used to create a binary representation of the methylation status of each motif in each contig.
-    This is then compared to the binary representation of the bin to identify any mismatches.
-    Only motifs that are observed more than 6 times are considered and must have a mean methylation value of at least 0.75-0.15.
-    
-    
-    params:
-        motifs_scored_in_bins: pd.DataFrame - DataFrame containing the motifs scored in each bin
-        motifs_of_interest: list - List of motifs to be considered from bin_motif_binary
-        args: argparse.Namespace - Namespace containing the arguments passed to the script
-    """
+def detect_contamination(contig_methylation, contig_lengths, num_consensus = 4, threads = 1, spectral_n_neighbors=10):
     logger = logging.getLogger(__name__)
     logger.info("Starting contamination detection analysis...")
-    motifs_scored_in_bins_wo_unbinned = motifs_scored_in_bins \
-        .filter(~pl.col("bin_contig").str.contains("unbinned"))
-    
-    
-    contig_bin_comparison_score, contigs_w_no_methylation = sc.compare_methylation_pattern_multiprocessed(
-        motifs_scored_in_bins=motifs_scored_in_bins_wo_unbinned,
-        bin_consensus=bin_consensus,
-        mode="contamination",
-        args=args,
-        num_processes=args.threads
+
+    # Create the bin_consensus dataframe for scoring
+    logger.info("Creating bin_consensus dataframe for scoring...")
+    contig_methylation = dp.impute_contig_methylation_within_bin(
+        contig_methylation
     )
+    # INFO: It does not makes sense to find contamination in bins with a single contig
+    single_contig_bins = contig_methylation\
+        .select(["bin", "contig"])\
+        .unique()\
+        .group_by("bin")\
+        .agg(pl.col("contig").count().alias("n_contigs"))\
+        .filter(pl.col("n_contigs") == 1)\
+        .get_column("bin")
+
+    contig_methylation = contig_methylation\
+        .filter(~pl.col("bin").is_in(single_contig_bins))
+
+    contig_names, matrix = dp.create_matrix(contig_methylation)
+
+    original_features = matrix.shape[1]
+    print(f"Original number of features: {original_features}")
+
+    print("Applying PCA for feature decorrelation")
+    pca_variance=0.90
+    pca = PCA(n_components=pca_variance, svd_solver = "full")
+    matrix = pca.fit_transform(matrix)
+
+    reduced_components = matrix.shape[1]
+    print(f"PCA reduced the feature space from {original_features} to {reduced_components}")
+    print(f"Total explained variance by pca: {pca.explained_variance_ratio_.sum():.2f}")
     
-    logger.info("Finding contamination in bins")
-    contig_bin_comparison_score = split_bin_contig(contig_bin_comparison_score)
+    n_bins = len(contig_methylation.get_column("bin").unique())
+
+    print("Running Spectral")
+    spectral = SpectralClustering(n_clusters=n_bins, affinity = 'nearest_neighbors', random_state=42, n_jobs = threads, n_neighbors = spectral_n_neighbors)
+    spectral_labels = spectral.fit_predict(matrix)
+
+    print("Running Agglomerative Clustering")
+    agg = AgglomerativeClustering(n_clusters = n_bins)
+    agg_labels = agg.fit(matrix).labels_
     
-    # Filter contig_bin == bin and contig_bin_comparison_score > 0
-    contamination_contigs = contig_bin_comparison_score \
-        .filter(
-            (pl.col("bin") == pl.col("contig_bin")) &
-            (pl.col("binary_methylation_missmatch_score") > 0)
+    print("Running HDBSCAN")
+    dscan = hdbscan.HDBSCAN(min_samples=3, min_cluster_size=2, metric = "euclidean", allow_single_cluster=False)
+    dscan_labels = dscan.fit_predict(matrix)
+
+    print("Running Gaussian Mixture Model")
+    gmm = GaussianMixture(n_components=n_bins, covariance_type='full', random_state=42)
+    gmm.fit(matrix)
+    gmm_labels = gmm.predict(matrix)
+
+
+    contig_bin = contig_methylation\
+        .select(["bin", "contig"])\
+        .unique() 
+
+    results = pl.DataFrame({
+                    "contig": contig_names,
+                    "spectral": spectral_labels,
+                    "agg": agg_labels,
+                    "hdbscan": dscan_labels,
+                    "gmm": gmm_labels
+                })\
+                .join(contig_bin, on="contig")\
+                .melt(
+                    id_vars = ["contig", "bin"],
+                    value_vars=["spectral", "agg", "hdbscan", "gmm"],
+                    value_name="cluster",
+                    variable_name="method"
+                )
+
+
+    bin_size = contig_bin\
+        .join(contig_lengths, on = "contig")\
+        .group_by("bin")\
+        .agg(
+            pl.col("length").sum().alias("bin_length"),
+            pl.col("contig").count().alias("n_contigs_bin")
         )
-    
-    
-    # contamination_contigs = contig_bin_comparison_score[
-    #     # NOTE: This line also removes all contigs from bins with no methylation
-    #     (contig_bin_comparison_score["bin"] == contig_bin_comparison_score["contig_bin"]) &
-    #     (contig_bin_comparison_score["binary_methylation_missmatch_score"] > 0)
-    # ]
 
-    # logger.info("Finding alternative bin for contamination contigs")
-    # # Find alternative bin for contamination contigs
-    # ## Must have a perfect match
-    # contamination_contigs_alternative_bin = contig_bin_comparison_score \
-    #     .filter(
-    #         (pl.col("bin") != pl.col("contig_bin")) &
-    #         (pl.col("binary_methylation_missmatch_score") == 0) &
-    #         (~pl.col("bin_compare").is_in(contigs_w_no_methylation))
-    #     ) \
-    #     .select(["contig", "bin", "binary_methylation_missmatch_score"]) \
-    #     .rename(
-    #         {
-    #             "bin": "alternative_bin",
-    #             "binary_methylation_missmatch_score": "alternative_bin_binary_methylation_missmatch_score"
-    #         }
-    #     )
-    
+    cluster_sizes = results\
+        .join(contig_lengths, on="contig")\
+        .group_by(["bin","method", "cluster"])\
+        .agg(
+            pl.col("contig").count().alias("n_contigs"),
+            pl.col("length").sum().alias("cluster_length")
+        )\
+        .join(bin_size, on = "bin")\
+        .with_columns(
+            (pl.col("n_contigs") / pl.col("n_contigs_bin")).alias("fraction_contigs"),
+            (pl.col("cluster_length") / pl.col("bin_length")).alias("fraction_length")
+        )
 
-    contamination_contigs = contamination_contigs \
-        .drop("contig_bin") \
-            .rename(
-                {
-                    "bin_compare": "bin_contig_compare"
-                }
-            ) \
-        .sort("bin", "bin_contig_compare")
+    assigned_cluster = cluster_sizes\
+        .group_by(["method","bin"])\
+        .agg(
+            pl.col("cluster_length").max().alias("cluster_length")
+        )\
+        .join(cluster_sizes, on = ["bin", "method","cluster_length"], how = "left")\
+        .rename({
+                    "cluster": "bin_cluster"
+                })\
+        .drop(["cluster_length", "n_contigs"])\
+        .filter(pl.col("fraction_length") >= 0.85)
 
-    
-    logger.info("Contamination detection complete")
+
+
+    results = results\
+        .join(assigned_cluster, on = ["bin", "method"])\
+        .sort(["bin", "contig"])
+
+
+    confident_contaminants = results\
+        .with_columns(
+           (pl.col("bin_cluster") != pl.col("cluster")).cast(pl.Int8).alias("is_contaminant")
+        )\
+        .group_by(["contig"])\
+        .agg(
+            pl.col("is_contaminant").sum().alias("sum_predictions"),
+        )\
+        .filter(pl.col("sum_predictions") >= num_consensus)\
+        .get_column("contig")
+
+    contamination_contigs = results\
+        .filter(pl.col("contig").is_in(confident_contaminants))
     
     return contamination_contigs

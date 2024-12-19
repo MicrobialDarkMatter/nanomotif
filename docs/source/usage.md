@@ -52,98 +52,139 @@ optional arguments:
 ## Bin improvement
 
 ### Bin contamination
-After motif identification it is possible to identify contamination in bins using the `bin-motifs.tsv`, `contig-bin.tsv` and `motif-scored.tsv` files.
+After motif identification it is possible to identify contamination in bins using the `bin-motifs.tsv`, `assembly` and `pileup`.
 
 **QUICK START**
 ```shell
-MOTIFS_SCORED="path/to/nanomotif/motifs-scored.tsv"
+ASSEMBLY="path/to/assembly.fasta"
+PILEUP="path/to/pileup.bed"
 BIN_MOTIFS="path/to/nanomotif/bin-motifs.tsv"
 CONTIG_BIN="path/to/contig_bin.tsv"
 OUT="path/to/output"
-nanomotif detect_contamination --motifs_scored $MOTIFS_SCORED --bin_motifs $BIN_MOTIFS --contig_bins $CONTIG_BIN --out $OUT
+nanomotif detect_contamination --pileup $PILEUP --assembly $ASSEMBLY --bin_motifs $BIN_MOTIFS --contig_bins $CONTIG_BIN --out $OUT
 ```
 
 This will generate a bin_contamination.tsv specifying the contigs, which is flagged as contamination.
 
-If the `--write_bins` and the `--assembly_file` flags are specified new de-contaminated bins will be written to a bins folder.
-
-If `detect_contamination` was run without the `--write_bins` flag, bins can be written as a post processing step if the `--contamination_file` is specified along with the `--write_bins` flag and the `--assembly_file` flag.
-
+If the `--write_bins` flag is specified new de-contaminated bins will be written to a bins folder.
 
 ```
-usage: nanomotif detect_contamination [-h] --motifs_scored MOTIFS_SCORED --bin_motifs BIN_MOTIFS --contig_bins
-                                      CONTIG_BINS [-t THREADS] [--mean_methylation_cutoff MEAN_METHYLATION_CUTOFF]
-                                      [--n_motif_contig_cutoff N_MOTIF_CONTIG_CUTOFF]
-                                      [--n_motif_bin_cutoff N_MOTIF_BIN_CUTOFF]
-                                      [--ambiguous_motif_percentage_cutoff AMBIGUOUS_MOTIF_PERCENTAGE_CUTOFF]
-                                      [--write_bins] [--assembly_file ASSEMBLY_FILE] [--save_scores] --out OUT
+usage: nanomotif detect_contamination [-h] --pileup PILEUP --assembly ASSEMBLY
+                                      --bin_motifs BIN_MOTIFS --contig_bins
+                                      CONTIG_BINS [-t THREADS]
+                                      [--min_valid_read_coverage MIN_VALID_READ_COVERAGE]
+                                      [--methylation_threshold METHYLATION_THRESHOLD]
+                                      [--num_consensus NUM_CONSENSUS]
+                                      [--force] [--write_bins] --out OUT
                                       [--contamination_file CONTAMINATION_FILE]
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
-  --motifs_scored MOTIFS_SCORED
-                        Path to motifs-scored.tsv from nanomotif
+  -t THREADS, --threads THREADS
+                        Number of threads to use for multiprocessing
+  --min_valid_read_coverage MIN_VALID_READ_COVERAGE
+                        Minimum read coverage for calculating methylation
+                        [used with methylation_util executable]
+  --methylation_threshold METHYLATION_THRESHOLD
+                        Filtering criteria for trusting contig methylation. It
+                        is the product of mean_read_coverage and
+                        N_motif_observation. Higher value means stricter
+                        criteria. [default: 24]
+  --num_consensus NUM_CONSENSUS
+                        Number of models that has to agree for classifying as
+                        contaminant
+  --force               Force override of motifs-scored-read-methylation.tsv.
+                        If not set existing file will be used.
+  --write_bins          If specified, new bins will be written to a bins
+                        folder. Requires --assembly_file to be specified.
+  --contamination_file CONTAMINATION_FILE
+                        Path to an existing contamination file if bins should
+                        be outputtet as a post-processing step
+
+Mandatory Arguments:
+  --pileup PILEUP       Path to pileup.bed
+  --assembly ASSEMBLY   Path to assembly file [fasta format required]
   --bin_motifs BIN_MOTIFS
                         Path to bin-motifs.tsv file
   --contig_bins CONTIG_BINS
                         Path to bins.tsv file for contig bins
-  -t THREADS, --threads THREADS
-                        Number of threads to use for multiprocessing
-  --mean_methylation_cutoff MEAN_METHYLATION_CUTOFF
-                        Cutoff value for considering a motif as methylated
-  --n_motif_contig_cutoff N_MOTIF_CONTIG_CUTOFF
-                        Number of motifs that needs to be observed in a contig before it is considered valid for scoring
-  --n_motif_bin_cutoff N_MOTIF_BIN_CUTOFF
-                        Number of motifs that needs to be observed in a bin to be considered valid for scoring
-  --ambiguous_motif_percentage_cutoff AMBIGUOUS_MOTIF_PERCENTAGE_CUTOFF
-                        Percentage of ambiguous motifs defined as mean methylation between 0.05 and 0.40 in a bin.
-                        Motifs with an ambiguous methylation percentage of more than this value are removed from
-                        scoring. Default is 0.40
-  --write_bins          If specified, new bins will be written to a bins folder. Requires --assembly_file to be
-                        specified.
-  --assembly_file ASSEMBLY_FILE
-                        Path to assembly.fasta file
-  --save_scores         If specified, the scores for each comparison will be saved to a scores folder in the output
-                        directory
-  --out OUT             Path to output directory
-  --contamination_file CONTAMINATION_FILE
-                        Path to an existing contamination file if bins should be outputtet as a post-processing step
+  --out OUT             Path to output directory```
 
-```
+The output is a `bin_contamination.tsv` file. The each contaminant will have 4 rows, one for each clustering algorithm, along with the cluster stats.
 
 ### Include unbinned contigs
-The `include_contigs` command assigns unbinned contigs in the assembly file to bins by comparing the methylation pattern of the contig to the bin consensus pattern. The contig must have a unique perfect match to the bin consensus pattern to be assigned to a bin. Additionally, the `include_contigs` assigns all the contigs in the `bin_contamination.tsv` file as unbinned. 
+The `include_contigs` command assigns unbinned contigs in the assembly file to bins by training three supervised classifiers, random forest, linear discriminant analysis, and k-neighbors classifier.
+In case all three classifiers assigns a unbinned contig to the same bin with a join mean probability above 0.80, the contig is assigned. This is called a `high_confidence` assignment.
+
 
 **QUICK START**
 ```shell
-MOTIFS_SCORED="path/to/nanomotif/motifs-scored.tsv"
+ASSEMBLY="path/to/assembly.fasta"
+PILEUP="path/to/pileup.bed"
 BIN_MOTIFS="path/to/nanomotif/bin-motifs.tsv"
 CONTIG_BIN="path/to/contig_bin.tsv"
 OUT="path/to/output"
-nanomotif include_contigs --motifs_scored $MOTIFS_SCORED --bin_motifs $BIN_MOTIFS --contig_bins $CONTIG_BIN --run_detect_contamination --out $OUT
+nanomotif include_contigs --pileup $PILEUP --assembly $ASSEMBLY --bin_motifs $BIN_MOTIFS --contig_bins $CONTIG_BIN --run_detect_contamination --out $OUT
 ```
 
-The output is two files: `include_contigs.tsv` and `new_contig_bin.tsv`. The `include_contigs.tsv` file is the contigs that were assigned based on the methylation pattern and the `new_contig_bin.tsv` is the updated contig_bin file.
+The output file is a `include_contigs.tsv`, which will show the classifier assignment stats. Besides the aforementioned `high_confidence` assignment there is also a medium and low confidence assigment.
+`medium_confidence` assignments are contigs where all three classifiers agree but the join probability is below 0.8. `low_confidence` is when only two classifiers agree.
+
+`high_confidence` assignments are outputted in a `new_contig_bin.tsv` file. 
 
 If decontamination should not be performed, the `include_contigs` can be run without the `--run_detect_contamination` flag or without the `--contamination_file` flag.
 
-#### save_scores
-Save scores will create a csv file for each contig, which contains all the information for scoring the contig. Columns are:
-- bin: The bin the contig is compared to
-- motif_mod: The motif being compared `motif_string + "_" + mod_type + "-" + mod_position`
-- n_mod: The number of modified motifs in bin
-- n_nomod: The number of unmodified motifs in bin
-- n_motifs_bin: The total number of motifs in bin
-- mean_methylation: n_mod / n_motifs_bin
-- mean_methylation_bin: If the motif is methylated, this number represent the mean methylation degree only for contigs where the mean mean_methylation was above 0.25
-- std_methylation_bin: The std deviation for the above calculation
-- n_contigs: The number of contigs used in above calculation
-- methylation_binary: Indicates if the bin is methylated or not
-- contig_bin: The bin where the contig originally was assigned
-- bin_compare: `bin + "_" + contig` for where the contig was originally assigned
-- mean: The mean methylation degree for the contig
-- methylation_mean_theshold: The threshold for assigning the contig as methylated or not. This depends on the variation of the bin methylation for the given motif
-- methylation_binary_compare: The binary methylation for the contig
+> Note: Assigning contigs based purely on methylation patterns can lead to errors as MAGs can share methylation patterns, which is especially problematic for unrecovered MAGs.
+
+```
+usage: nanomotif include_contigs [-h] --pileup PILEUP --assembly ASSEMBLY
+                                 --bin_motifs BIN_MOTIFS --contig_bins
+                                 CONTIG_BINS [-t THREADS]
+                                 [--min_valid_read_coverage MIN_VALID_READ_COVERAGE]
+                                 [--methylation_threshold METHYLATION_THRESHOLD]
+                                 [--num_consensus NUM_CONSENSUS] [--force]
+                                 [--write_bins] --out OUT
+                                 [--mean_model_confidence MEAN_MODEL_CONFIDENCE]
+                                 [--contamination_file CONTAMINATION_FILE | --run_detect_contamination]
+
+options:
+  -h, --help            show this help message and exit
+  -t THREADS, --threads THREADS
+                        Number of threads to use for multiprocessing
+  --min_valid_read_coverage MIN_VALID_READ_COVERAGE
+                        Minimum read coverage for calculating methylation
+                        [used with methylation_util executable]
+  --methylation_threshold METHYLATION_THRESHOLD
+                        Filtering criteria for trusting contig methylation. It
+                        is the product of mean_read_coverage and
+                        N_motif_observation. Higher value means stricter
+                        criteria. [default: 24]
+  --num_consensus NUM_CONSENSUS
+                        Number of models that has to agree for classifying as
+                        contaminant
+  --force               Force override of motifs-scored-read-methylation.tsv.
+                        If not set existing file will be used.
+  --write_bins          If specified, new bins will be written to a bins
+                        folder. Requires --assembly_file to be specified.
+  --mean_model_confidence MEAN_MODEL_CONFIDENCE
+                        Mean probability between models for including contig.
+                        Contigs above this value will be included. [default:
+                        0.8]
+  --contamination_file CONTAMINATION_FILE
+                        Path to an existing contamination file to include in
+                        the analysis
+  --run_detect_contamination
+                        Indicate that the detect_contamination workflow should
+                        be run first
+
+Mandatory Arguments:
+  --pileup PILEUP       Path to pileup.bed
+  --assembly ASSEMBLY   Path to assembly file [fasta format required]
+  --bin_motifs BIN_MOTIFS
+                        Path to bin-motifs.tsv file
+  --contig_bins CONTIG_BINS
+                        Path to bins.tsv file for contig bins
+  --out OUT             Path to output directory```
 
 ## MTase-linker
 

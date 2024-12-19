@@ -3,6 +3,9 @@ nanomotif/flamegraph*
 austin
 results
 reports
+
+!bin/.gitkeep
+bin/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

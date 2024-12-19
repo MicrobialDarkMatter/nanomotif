@@ -13,7 +13,7 @@ def test_create_contig_bin_contamination(loaded_data):
     contamination = pd.DataFrame({
         'bin': ['b3', 'b3', 'b3'],
         'bin_contig_compare': ['b3_contig_12', 'b3_contig_13', 'b3_contig_6'],
-        'binary_methylation_missmatch_score': [2, 2, 3],
+        'binary_methylation_mismatch_score': [2, 2, 3],
         'non_na_comparisons': [4, 4, 4],
         'contig': ['contig_12', 'contig_13', 'contig_6']
     })
@@ -36,7 +36,7 @@ def test_create_contig_bin_include_and_no_contamination(loaded_data):
     contamination = pd.DataFrame({
         'bin': ['b3', 'b3', 'b3'],
         'bin_contig_compare': ['b3_contig_12', 'b3_contig_13', 'b3_contig_6'],
-        'binary_methylation_missmatch_score': [2, 2, 3],
+        'binary_methylation_mismatch_score': [2, 2, 3],
         'non_na_comparisons': [4, 4, 4],
         'contig': ['contig_12', 'contig_13', 'contig_6']
     })
@@ -44,7 +44,7 @@ def test_create_contig_bin_include_and_no_contamination(loaded_data):
     include = pd.DataFrame({
         'bin': ['b2', 'b2', 'b3'],
         'bin_compare': ['b3_contig_6', 'unbinned_contig_14', 'unbinned_contig_15'],
-        'binary_methylation_missmatch_score': [0, 0, 0],
+        'binary_methylation_mismatch_score': [0, 0, 0],
         'non_na_comparisons': [4, 4, 2],
         'contig_bin': ['b3', 'unbinned', 'unbinned'],
         'contig': ['contig_6', 'contig_14', 'contig_15']
@@ -52,7 +52,7 @@ def test_create_contig_bin_include_and_no_contamination(loaded_data):
     contamination_dummy = pd.DataFrame({
         'bin': [],
         'bin_contig_compare': [],
-        'binary_methylation_missmatch_score': [],
+        'binary_methylation_mismatch_score': [],
         'non_na_comparisons': [],
         'contig': []
     })
@@ -75,7 +75,7 @@ def test_create_contig_bin_include_and_contamination(loaded_data):
     contamination = pd.DataFrame({
         'bin': ['b3', 'b3', 'b3'],
         'bin_contig_compare': ['b3_contig_12', 'b3_contig_13', 'b3_contig_6'],
-        'binary_methylation_missmatch_score': [2, 2, 3],
+        'binary_methylation_mismatch_score': [2, 2, 3],
         'non_na_comparisons': [4, 4, 4],
         'contig': ['contig_12', 'contig_13', 'contig_6']
     })
@@ -83,7 +83,7 @@ def test_create_contig_bin_include_and_contamination(loaded_data):
     include = pd.DataFrame({
         'bin': ['b2', 'b2', 'b3'],
         'bin_compare': ['b3_contig_6', 'unbinned_contig_14', 'unbinned_contig_15'],
-        'binary_methylation_missmatch_score': [0, 0, 0],
+        'binary_methylation_mismatch_score': [0, 0, 0],
         'non_na_comparisons': [4, 4, 2],
         'contig_bin': ['b3', 'unbinned', 'unbinned'],
         'contig': ['contig_6', 'contig_14', 'contig_15']
@@ -107,7 +107,7 @@ def test_write_bins(loaded_data):
     contamination = pd.DataFrame({
         'bin': ['b3', 'b3', 'b3'],
         'bin_contig_compare': ['b3_contig_12', 'b3_contig_13', 'b3_contig_6'],
-        'binary_methylation_missmatch_score': [2, 2, 3],
+        'binary_methylation_mismatch_score': [2, 2, 3],
         'non_na_comparisons': [4, 4, 4],
         'contig': ['contig_12', 'contig_13', 'contig_6']
     })
