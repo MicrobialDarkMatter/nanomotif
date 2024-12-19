@@ -118,5 +118,3 @@ MTase-linker uses external tools for gene prediction and annotation:
 - **All predicted protein sequences:** `.../prodigal/{assembly_name}_processed.faa` contains amino acid sequences for all predicted proteins, including MTases.
 
 ---
-
-**In summary**, these outputs provide a comprehensive overview of methylation motifs, bin quality, contamination checks, and the linkage between motifs and MTase genes. By reviewing the columns and their meanings, you can more easily interpret these results in the context of your analyses.
