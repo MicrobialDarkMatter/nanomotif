@@ -1,5 +1,7 @@
 # Usage
 
+---
+
 ## Motif discovery
 
 Motif discovery is meant for identifying motif at contig and bin level. It consist of three commands `find_motifs`, `score_motifs` & `bin_consensus`. We provide a wrapper command that executes these three commands togehter; `motif_discovery`.
@@ -48,6 +50,8 @@ optional arguments:
                         Default: 0.05
 ```
 
+
+---
 
 ## Bin improvement
 
@@ -109,6 +113,7 @@ Mandatory Arguments:
   --contig_bins CONTIG_BINS
                         Path to bins.tsv file for contig bins
   --out OUT             Path to output directory```
+```
 
 The output is a `bin_contamination.tsv` file. The each contaminant will have 4 rows, one for each clustering algorithm, along with the cluster stats.
 
@@ -185,6 +190,9 @@ Mandatory Arguments:
   --contig_bins CONTIG_BINS
                         Path to bins.tsv file for contig bins
   --out OUT             Path to output directory```
+```
+
+---
 
 ## MTase-linker
 
