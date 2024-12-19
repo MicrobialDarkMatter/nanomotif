@@ -1,7 +1,23 @@
 # Output explanation
 ## Motif discovery
 
-COMING SOON
+Motif discovery output two primary files: bin-motifs.tsv and motif.tsv. `bin-motifs.tsv` contains the motifs found in each bin, while `motif.tsv` contains motifs found for each contig. Both files follow the format in the table below.
+
+| **Column**                   | **Description**                                                                                                                                                               |
+|---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **contig/bin**                   | Te contig/bin wherein the motif has been discovered |
+| **mod_type**              | Modification type of the motif. Follows single letter code (a=6mA, m=5mC, 21839=4mC)                                                         |
+| **motif**                 | The sequence of the motif.  [IUPAC](https://www.bioinformatics.org/sms/iupac.html) letters are used for positions matching multiple nucleotides                                        |
+| **mod_position**          | The position of the modified base within the motif sequence following in 0-based index.                            |
+| **n_mod(_bin)**             | Number of motif position where the fraction of mapped bases methylated is above the generally methylated threshold (default: 0.7)                                                          |
+| **n_nomod(_bin)**             | Number of motif position where the fraction of mapped bases methylated is below the generally methylated threshold (default: 0.7)                                                                                             |
+| **motif_type**            | Indicates whether the motif sequence is a palindrome, non-palindromic or bipartite. |
+| **motif_complement**      | The corresponding reverse complement motif if identified.                                                 |
+| **mod_position_complement** | Same as `mod_position`, but for reverse complement |
+| **n_mod_complement**      | Same as `n_mod`, but for reverse complement                                                   |
+| **n_nomod_complement**    | Same as `n_nomod`, but for reverse complement                                               |
+
+
 
 ## Bin improvement
 
