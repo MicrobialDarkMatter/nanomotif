@@ -4,9 +4,7 @@
 
 ## Motif discovery
 
-Motif discovery is meant for identifying motif at contig and bin level. It consist of three commands `find_motifs`, `score_motifs` & `bin_consensus`. We provide a wrapper command that executes these three commands togehter; `motif_discovery`.
-
-We recommend always using `motif_discovery` unless there is a specific reason for using the seperate commands. 
+The motif discovery process identifies motifs at both the contig and bin levels. It consists of three underlying commands: `find_motifs`, `score_motifs`, and `bin_consensus`. To simplify usage, a wrapper command, `motif_discovery`, runs all three steps in sequence. We recommend using `motif_discovery` unless you have a specific reason to run the individual commands separately. See [here](https://nanomotif.readthedocs.io/en/latest/output.html#motifs-tsv) for detailed output description.
 
 **QUICK START**
 ```shell
@@ -20,7 +18,8 @@ nanomotif motif_discovery $ASSEMBLY $PILEUP $CONTIG_BIN --out $OUT
 ```
 usage: nanomotif motif_discovery [-h] [--out OUT] [-t THREADS] [-v] [--seed SEED] [--threshold_methylation_general THRESHOLD_METHYLATION_GENERAL]
                                  [--search_frame_size SEARCH_FRAME_SIZE] [--threshold_methylation_confident THRESHOLD_METHYLATION_CONFIDENT]
-                                 [--threshold_valid_coverage THRESHOLD_VALID_COVERAGE] [--minimum_kl_divergence MINIMUM_KL_DIVERGENCE]
+                                 [--threshold_valid_coverage THRESHOLD_VALID_COVERAGE] [--minimum_kl_divergence MINIMUM_KL_DIVERGENCE] [--min_motifs_contig MIN_MOTIFS_CONTIG]
+                                 [--read_level_methylation] [--min_motif_score MIN_MOTIF_SCORE] [--min_motifs_bin MIN_MOTIFS_BIN] [--save-motif-positions]
                                  assembly pileup bins
 
 positional arguments:
@@ -36,18 +35,27 @@ optional arguments:
   -v, --verbose         increase output verbosity. (set logger to debug level)
   --seed SEED           seed for random number generator. Default: 1
   --threshold_methylation_general THRESHOLD_METHYLATION_GENERAL
-                        minimum fraction of reads that must be methylated at a position for the position to be methylated. These position are used for counting
-                        number of methylated position of a motif. Default: 0.7
+                        minimum fraction of reads that must be methylated at a position for the position to be methylated. These position are used for counting number of
+                        methylated position of a motif. Default: 0.7
   --search_frame_size SEARCH_FRAME_SIZE
                         length of the sequnces sampled around confident methylatyion sites. Default: 40
   --threshold_methylation_confident THRESHOLD_METHYLATION_CONFIDENT
-                        minimum fraction of reads that must be methylated at a position for the position to be considered confiently methylated. These position are
-                        used to search for candidate motifs. Default: 0.8
+                        minimum fraction of reads that must be methylated at a position for the position to be considered confiently methylated. These position are used to
+                        search for candidate motifs. Default: 0.8
   --threshold_valid_coverage THRESHOLD_VALID_COVERAGE
                         minimum valid base coverage for a position to be considered. Default: 5
   --minimum_kl_divergence MINIMUM_KL_DIVERGENCE
-                        minimum KL-divergence for a position to considered for expansion in motif search. Higher value means less exhaustive, but faster search.
-                        Default: 0.05
+                        minimum KL-divergence for a position to considered for expansion in motif search. Higher value means less exhaustive, but faster search. Default: 0.05
+  --min_motifs_contig MIN_MOTIFS_CONTIG
+                        minimum number of times a motif has to have been oberserved in a contig. Default: 20
+  --read_level_methylation
+                        If specified, methylation is calculated on read level instead of contig level. This is slower but produces more stable motifs.
+  --min_motif_score MIN_MOTIF_SCORE
+                        minimum score for a motif to be kept after identification considered valid. Default: 0.2
+  --min_motifs_bin MIN_MOTIFS_BIN
+                        minimum number of times a motif has to have been oberserved in a bin. Default: 50
+  --save-motif-positions
+                        save motif positions in the output folder
 ```
 
 
@@ -56,7 +64,9 @@ optional arguments:
 ## Bin improvement
 
 ### Bin contamination
-After motif identification it is possible to identify contamination in bins using the `bin-motifs.tsv`, `assembly` and `pileup`.
+After motif identification it is possible to identify contamination in bins using the `bin-motifs.tsv`, `assembly` and `pileup`. This will generate a `bin_contamination.tsv` specifying the contigs, which is flagged as contamination. 
+The `detect_contamination` command detects putative contamination using  four clustering methods (agg, spectral, gmm, hdbscan), all of which have to flag the contig as a contaminant. 
+See [here](https://nanomotif.readthedocs.io/en/latest/output.html#bin-contamination-tsv) for detailed output description.
 
 **QUICK START**
 ```shell
@@ -68,42 +78,28 @@ OUT="path/to/output"
 nanomotif detect_contamination --pileup $PILEUP --assembly $ASSEMBLY --bin_motifs $BIN_MOTIFS --contig_bins $CONTIG_BIN --out $OUT
 ```
 
-This will generate a bin_contamination.tsv specifying the contigs, which is flagged as contamination.
 
-If the `--write_bins` flag is specified new de-contaminated bins will be written to a bins folder.
 
 ```
-usage: nanomotif detect_contamination [-h] --pileup PILEUP --assembly ASSEMBLY
-                                      --bin_motifs BIN_MOTIFS --contig_bins
-                                      CONTIG_BINS [-t THREADS]
-                                      [--min_valid_read_coverage MIN_VALID_READ_COVERAGE]
-                                      [--methylation_threshold METHYLATION_THRESHOLD]
-                                      [--num_consensus NUM_CONSENSUS]
-                                      [--force] [--write_bins] --out OUT
-                                      [--contamination_file CONTAMINATION_FILE]
+usage: nanomotif detect_contamination [-h] --pileup PILEUP --assembly ASSEMBLY --bin_motifs BIN_MOTIFS --contig_bins CONTIG_BINS [-t THREADS]
+                                      [--min_valid_read_coverage MIN_VALID_READ_COVERAGE] [--methylation_threshold METHYLATION_THRESHOLD] [--num_consensus NUM_CONSENSUS]
+                                      [--force] [--write_bins] --out OUT [--contamination_file CONTAMINATION_FILE]
 
-options:
+optional arguments:
   -h, --help            show this help message and exit
   -t THREADS, --threads THREADS
                         Number of threads to use for multiprocessing
   --min_valid_read_coverage MIN_VALID_READ_COVERAGE
-                        Minimum read coverage for calculating methylation
-                        [used with methylation_util executable]
+                        Minimum read coverage for calculating methylation [used with methylation_util executable]
   --methylation_threshold METHYLATION_THRESHOLD
-                        Filtering criteria for trusting contig methylation. It
-                        is the product of mean_read_coverage and
-                        N_motif_observation. Higher value means stricter
+                        Filtering criteria for trusting contig methylation. It is the product of mean_read_coverage and N_motif_observation. Higher value means stricter
                         criteria. [default: 24]
   --num_consensus NUM_CONSENSUS
-                        Number of models that has to agree for classifying as
-                        contaminant
-  --force               Force override of motifs-scored-read-methylation.tsv.
-                        If not set existing file will be used.
-  --write_bins          If specified, new bins will be written to a bins
-                        folder. Requires --assembly_file to be specified.
+                        Number of models that has to agree for classifying as contaminant
+  --force               Force override of motifs-scored-read-methylation.tsv. If not set existing file will be used.
+  --write_bins          If specified, new bins will be written to a bins folder. Requires --assembly_file to be specified.
   --contamination_file CONTAMINATION_FILE
-                        Path to an existing contamination file if bins should
-                        be outputtet as a post-processing step
+                        Path to an existing contamination file if bins should be outputtet as a post-processing step
 
 Mandatory Arguments:
   --pileup PILEUP       Path to pileup.bed
@@ -112,15 +108,19 @@ Mandatory Arguments:
                         Path to bin-motifs.tsv file
   --contig_bins CONTIG_BINS
                         Path to bins.tsv file for contig bins
-  --out OUT             Path to output directory```
+  --out OUT             Path to output directory
 ```
 
-The output is a `bin_contamination.tsv` file. The each contaminant will have 4 rows, one for each clustering algorithm, along with the cluster stats.
+
 
 ### Include unbinned contigs
-The `include_contigs` command assigns unbinned contigs in the assembly file to bins by training three supervised classifiers, random forest, linear discriminant analysis, and k-neighbors classifier.
-In case all three classifiers assigns a unbinned contig to the same bin with a join mean probability above 0.80, the contig is assigned. This is called a `high_confidence` assignment.
 
+After motif identification, it is possible to assign unbinned contigs to bins using the `bin-motifs.tsv`, `assembly`, and `pileup`.
+The `include_contigs` command assigns unbinned contigs in the assembly file to bins by training three supervised classifiers, random forest, linear discriminant analysis, and k-neighbors classifier. This will generate `include_contigs.tsv` specifying the contigs, assighned a new bin. See [here](https://nanomotif.readthedocs.io/en/latest/output.html#include-contigs-tsv) for detailed output description.
+
+If decontamination should not be performed, the `include_contigs` can be run without the `--run_detect_contamination` flag or without the `--contamination_file` flag.
+
+> Note: Assigning contigs based purely on methylation patterns can lead to errors as MAGs can share methylation patterns, which is especially problematic for unrecovered MAGs.
 
 **QUICK START**
 ```shell
@@ -132,14 +132,7 @@ OUT="path/to/output"
 nanomotif include_contigs --pileup $PILEUP --assembly $ASSEMBLY --bin_motifs $BIN_MOTIFS --contig_bins $CONTIG_BIN --run_detect_contamination --out $OUT
 ```
 
-The output file is a `include_contigs.tsv`, which will show the classifier assignment stats. Besides the aforementioned `high_confidence` assignment there is also a medium and low confidence assigment.
-`medium_confidence` assignments are contigs where all three classifiers agree but the join probability is below 0.8. `low_confidence` is when only two classifiers agree.
 
-`high_confidence` assignments are outputted in a `new_contig_bin.tsv` file. 
-
-If decontamination should not be performed, the `include_contigs` can be run without the `--run_detect_contamination` flag or without the `--contamination_file` flag.
-
-> Note: Assigning contigs based purely on methylation patterns can lead to errors as MAGs can share methylation patterns, which is especially problematic for unrecovered MAGs.
 
 ```
 usage: nanomotif include_contigs [-h] --pileup PILEUP --assembly ASSEMBLY
@@ -205,11 +198,9 @@ The `MTase-linker` module requires that conda is available on your system.
 nanomotif MTase-linker install
 ```
 
-This will create a folder named `ML_dependencies` in your current working directory, containing the required dependencies for the MTase-linker module. You can use the `--dependency_dir` flag to change the installation location of the `ML_dependencies` folder.
-
-The installation requires conda to generate a few environments. 
-
-When the additional dependencies are installed you can run the workflow using `MTase-linker run`
+This will create a folder named `ML_dependencies` in your current working directory, containing the required dependencies for the MTase-linker module. You can use the `--dependency_dir` flag to change the installation location of the `ML_dependencies` folder. 
+The installation requires conda to generate required environments. 
+When the additional dependencies are installed you can run the workflow using `MTase-linker run`. See [here](https://nanomotif.readthedocs.io/en/latest/output.html#mtase-linker) for detailed output description.
 
 **QUICK START**
 ```shell
