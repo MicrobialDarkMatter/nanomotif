@@ -62,11 +62,11 @@ def motif_type_predictions(df, subtype_column):
     It then assigns a corresponding label to each row in the new 'motif type' column.
     """
 
-    # Predefined matching strings and output strings
-    match_string1 = ['Type_I']  # String to match for 'bipartite'
-    match_string2 = ['Type_II']  # String to match for 'palindromic'
-    match_string3 = ['Type_III']  # Strings to match for 'non-palindromic'
-    match_string4 = ['Type_IIG'] # String to match for both "bipartite" and "non-palindromic"
+   
+    match_string1 = ['Type_I']  
+    match_string2 = ['Type_II'] 
+    match_string3 = ['Type_III']  
+    match_string4 = ['Type_IIG'] 
     output_string1 = 'bipartite'
     output_string2 = 'palindrome'
     output_string3 = 'non-palindrome'
@@ -82,7 +82,7 @@ def motif_type_predictions(df, subtype_column):
         elif x in match_string4:
             return output_string4
         else:
-            return 'undefined'  # Default value for non-matching entries
+            return 'undefined' 
 
     df['motif_type'] = df[subtype_column].apply(classify_motif)
 
@@ -105,7 +105,7 @@ def RM_type_converter(df, gene_name_column):
     It then assigns a corresponding RM type to each entry in the new 'sub_type' column.
     """
 
-    # Predefined matching strings and output strings
+ 
     match_string1 = ['RM__Type_I_MTases'] 
     match_string2 = ['RM_Type_II__Type_II_MTases']
     match_string3 = ['RM_Type_IIG__Type_IIG']
@@ -125,7 +125,7 @@ def RM_type_converter(df, gene_name_column):
         elif x in match_string4:
             return output_string4
         else:
-            return 'undefined'  # Default value for non-matching entries
+            return 'undefined'  
 
     df['sub_type'] = df[gene_name_column].apply(classify_motif)
 
