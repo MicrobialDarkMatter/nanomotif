@@ -1,7 +1,7 @@
 import polars as pl
 import pandas as pd
 import nanomotif.binnary.utils as ut
-from pymethylation_utils.utils import run_methylation_utils
+from pymethylation_utils.utils import run_epimetheus
 from .conftest import MockArgs
 import os
 from pathlib import Path
@@ -31,7 +31,7 @@ def test_split_bin_contig():
 def test_methylation_utils():
     args = MockArgs()
 
-    run_methylation_utils(
+    run_epimetheus(
         pileup = "nanomotif/datasets/geobacillus-plasmids.pileup.bed",
         assembly = "nanomotif/datasets/geobacillus-plasmids.assembly.fasta",
         motifs = ["GATC_m_3", "GATC_a_1"],
@@ -45,7 +45,7 @@ def test_methylation_utils():
 
     res = pl.read_csv(file, separator = "\t")
     print(res.columns)
-    assert res.columns == ["contig",  "median", "N_motif_obs", "mean_read_cov","motif", "mod_type", "mod_position"]
-    assert res.shape == (4, 7), "Shape does not match"
+    assert res.columns == ['contig', 'motif', 'mod_type', 'mod_position', 'median', 'mean_read_cov', 'N_motif_obs', 'motif_occurences_total']
+    assert res.shape == (4, 8), "Shape does not match"
 
     
