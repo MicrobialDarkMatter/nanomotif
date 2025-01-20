@@ -32,7 +32,7 @@ Nanomotif can easily be installed using Conda for managing your Python environme
 ```shell
 conda create -n nanomotif  python=3.12
 conda activate nanomotif
-conda install -c bioconda nanomotif
+conda install -c conda-forge -c bioconda nanomotif
 ```
 
 #### Check installation
