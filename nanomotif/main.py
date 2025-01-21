@@ -299,7 +299,7 @@ def bin_consensus(args, pl, pileup = None, assembly = None, motifs = None, motif
         motifs_scored = pl.read_csv(args.motifs_scored, separator="\t")
     if pileup is None:
         log.info("Loading pileup")
-        pileup =  nm.load_pileup(args.pileup, threads = args.threads, min_fraction = args.threshold_methylation_general)
+        pileup =  nm.load_pileup(args.pileup, min_fraction = args.threshold_methylation_general)
     if assembly is None:
         log.info("Loading assembly")
         assembly = nm.load_assembly(args.assembly)
