@@ -47,6 +47,7 @@ def create_parser():
     )
     parser_score_motifs.add_argument("motifs", type=str, help="path to the motifs file.")
     parser_score_motifs.add_argument("--save-motif-positions", action="store_true", help="save motif positions in the output folder")
+    parser_score_motifs.add_argument("--threshold_valid_coverage", type=int, default=5, help="minimum valid base coverage for a position to be considered. Default: %(default)s")
     
     ###########################################################################
     # Bin consensus
@@ -60,6 +61,7 @@ def create_parser():
     parser_bin_consensus.add_argument("motifs", type=str, help="path to the motifs file.")
     parser_bin_consensus.add_argument("bins", type=str, help="tsv file specifying which bin contigs belong.")
     parser_bin_consensus.add_argument("motifs_scored", metavar="motifs-scored", type=str, help="path to the motif-scored file.")
+    parser_bin_consensus.add_argument("--threshold_valid_coverage", type=int, default=5, help="minimum valid base coverage for a position to be considered. Default: %(default)s")
 
     ###########################################################################
     # Complete workflow

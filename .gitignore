@@ -1,4 +1,5 @@
 data
+tests/cli/
 nanomotif/flamegraph*
 austin
 results

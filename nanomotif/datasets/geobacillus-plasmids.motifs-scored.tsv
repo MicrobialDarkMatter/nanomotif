@@ -1,0 +1,9 @@
+contig	mod_type	motif	mod_position	n_mod	n_nomod	motif_type	motif_complement	mod_position_complement	n_mod_complement	n_nomod_complement
+contig_2	a	ACCCA	4	75	17	non-palindrome				
+contig_2	a	CCAAAT	4	71	5	non-palindrome				
+contig_2	a	GATC	1	679	74	palindrome	GATC	1	679	74
+contig_2	a	GRNGAAGY	5	85	6	non-palindrome				
+contig_3	a	ACCCA	4	58	8	non-palindrome				
+contig_3	a	CCAAAT	4	80	1	non-palindrome				
+contig_3	a	GATC	1	680	29	palindrome	GATC	1	680	29
+contig_3	a	GRNGAAGY	5	83	2	non-palindrome				
