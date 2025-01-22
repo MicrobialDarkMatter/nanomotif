@@ -221,7 +221,7 @@ def score_motifs(args, pl, pileup = None, assembly = None, motifs = None, min_mo
     log.info("Starting nanomotif motif scorer")
     if pileup is None:
         log.info("Loading pileup")
-        pileup =  nm.load_pileup(args.pileup, min_fraction = args.threshold_methylation_general)
+        pileup =  nm.load_pileup(args.pileup, min_fraction = args.threshold_methylation_general, min_coverage = args.threshold_valid_coverage)
     if assembly is None:
         log.info("Loading assembly")
         assembly = nm.load_assembly(args.assembly)
@@ -299,7 +299,7 @@ def bin_consensus(args, pl, pileup = None, assembly = None, motifs = None, motif
         motifs_scored = pl.read_csv(args.motifs_scored, separator="\t")
     if pileup is None:
         log.info("Loading pileup")
-        pileup =  nm.load_pileup(args.pileup, min_fraction = args.threshold_methylation_general)
+        pileup =  nm.load_pileup(args.pileup, min_fraction = args.threshold_methylation_general, min_coverage = args.threshold_valid_coverage)
     if assembly is None:
         log.info("Loading assembly")
         assembly = nm.load_assembly(args.assembly)
