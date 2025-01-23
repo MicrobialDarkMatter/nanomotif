@@ -1,0 +1,5 @@
+bin	mod_type	motif	mod_position	n_mod_bin	n_nomod_bin	motif_type	motif_complement	mod_position_complement	n_mod_complement	n_nomod_complement
+bin1	a	ACCCA	4	75	17	non-palindrome				
+bin1	a	CCAAAT	4	71	5	non-palindrome				
+bin1	a	GRNGAAGY	5	85	6	non-palindrome				
+bin1	a	GATC	1	679	74	palindrome	GATC	1	679	74
