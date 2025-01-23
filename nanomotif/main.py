@@ -6,7 +6,7 @@ import sys
 import shutil
 from pathlib import Path
 import json
-
+import time
 import numpy as np
 import random
 import warnings
@@ -429,12 +429,13 @@ def check_install(args, pl):
     bin_consensus(args, pl, pileup=pileup, assembly=assembly, motifs=motifs, motifs_scored=scored_all)
     
     log.info("Done")
-    for i in range(3):
+    for _ in range(3):
         try:
             shutil.rmtree(args.out)
             break
         except OSError as e:
             time.sleep(0.5) 
+
 
 
 ####################################################################################################
