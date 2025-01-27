@@ -502,7 +502,7 @@ def binnary(args, pl):
     # Load motifs-scored-read-methylation.tsv
     contig_methylation = pl.read_csv(
         os.path.join(args.out, contig_methylation_file), separator="\t", has_header = True, schema = {
-            'contig': pl.String(), 'motif': pl.String(), 'mod_type': pl.String(), 'mod_position': pl.Int(),  'mean_read_cov': pl.Float64(), 'N_motif_obs': pl.Int32(), 'motif_occurences_total': pl.Int32(),
+            'contig': pl.String(), 'motif': pl.String(), 'mod_type': pl.String(), 'mod_position': pl.Int8(), 'median': pl.Float64(),  'mean_read_cov': pl.Float64(), 'N_motif_obs': pl.Int32(), 'motif_occurences_total': pl.Int32(),
         }
     )
 
