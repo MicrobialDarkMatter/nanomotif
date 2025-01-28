@@ -2,6 +2,7 @@
 import polars as pl
 from .seq import Assembly
 from .feature import Pileup
+import sys
 
 def load_fasta(path, trim_names=False, trim_character=" ") -> dict:
     """
@@ -37,12 +38,22 @@ def load_pileup(path: str, min_coverage: int, min_fraction: float = 0):
         .with_columns(pl.col("column_11") / 100)
         .collect()
     )
+
+    if pileup.is_empty():
+        # TODO: import logger for this
+        print("Pileup is empty after initial load")
+        sys.exit(1)
     pileup = pileup.rename({"column_1":"contig", "column_2": "position", "column_4": "mod_type", "column_6": "strand", "column_11": "fraction_mod", "column_10":"Nvalid_cov"})
     return Pileup(pileup)
 
 def extract_contig_mods_with_sufficient_information(pileup: Pileup, assembly: Assembly, min_mods_pr_contig: int, min_mod_frequency: int):
     contigs_in_assembly = list(assembly.assembly.keys())
     pileup = pileup.filter(pl.col("contig").is_in(contigs_in_assembly))
+
+    if pileup.is_empty():
+        #TODO: 
+        print("Pileup empty after filtering contigs in assembly. Check pileup and assembly mismatch!")
+        sys.exit(1)
 
     contigmods_with_more_than_min_mods = pileup.group_by("contig_mod").count().filter(
             pl.col("count") > min_mods_pr_contig
