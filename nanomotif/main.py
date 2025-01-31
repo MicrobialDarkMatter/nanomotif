@@ -17,7 +17,7 @@ def shared_setup(args, working_dir):
     # Set up logging
     LOG_DIR = working_dir + "/logs"
     Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
-    configure_logger(LOG_DIR + f"/{args.command}.main.log", args.verbose)
+    configure_logger(LOG_DIR + f"/{args.command}.main.log", args.verbose, stdout=True)
     warnings.filterwarnings("ignore")
     # Check if output directory exists
     if not os.path.exists(args.out):

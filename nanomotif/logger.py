@@ -1,7 +1,7 @@
 import logging
 import os
 
-def configure_logger(log_file, verbose=False):
+def configure_logger(log_file, verbose=False, stdout=False):
     # Get a logger instance specific to the current process
     logger = logging.getLogger()
     
@@ -20,4 +20,13 @@ def configure_logger(log_file, verbose=False):
         
         # Add the handler to the logger
         logger.addHandler(file_handler)
+
+        if stdout:
+            # Create a stream handler for logging to the console
+            stream_handler = logging.StreamHandler()
+            stream_handler.setLevel(logger.level)
+            stream_handler.setFormatter(formatter)
+
+            logger.addHandler(stream_handler)
+
 
