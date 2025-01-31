@@ -218,37 +218,29 @@ class Motif(str):
     
     def merge(self, other):
         assert isinstance(other, Motif)
-        mod_pos = self.mod_position
-        mod_pos_other = other.mod_position
+        self_trim = self.new_stripped_motif()
+        other_trim = other.new_stripped_motif()
+        self_seq = self_trim.split()
+        other_seq = other_trim.split()
 
-        # Determine the offset required to align the modification positions
-        offset =  mod_pos - mod_pos_other
+        offset = self_trim.mod_position - other_trim.mod_position
+        if offset > 0:
+            self_seq = self_seq[offset:]
+        elif offset < 0:
+            other_seq = other_seq[-offset:]
 
-        # Split the motifs into lists of bases
-        motif_split = self.split()
-        other_split = other.split()
-
-        motif_right = len(motif_split) - mod_pos 
-        other_right = len(other_split) - mod_pos_other
-
-        # Pad the shorter motif with '.' to ensure equal lengths for merging
-        if mod_pos < mod_pos_other:
-            motif_split = ['.'] * abs(offset) + motif_split
-        elif mod_pos > mod_pos_other:
-            other_split = ['.'] * abs(offset) + other_split
-
-        if motif_right < other_right:
-            motif_split = motif_split + ['.'] * (other_right - motif_right)
-        elif motif_right > other_right:
-            other_split = other_split + ['.'] * (motif_right - other_right)
+        final_length = min(len(self_seq), len(other_seq))
+        self_seq = self_seq[:final_length]
+        other_seq = other_seq[:final_length]
+        
         # Merge the motifs base by base, keeping the modification position aligned
-        merged_motif_string = ''.join([self.merge_bases(base, base_other) for base, base_other in zip(motif_split, other_split)])
-
-        # The modification position in the merged motif is the same as in the original motifs
-        merged_mod_position = mod_pos + abs(offset)
+        merged_motif_string = ''.join([self_trim.merge_bases(base, base_other) for base, base_other in zip(self_seq, other_seq)])
+        merged_mod_position = min(self_trim.mod_position, other_trim.mod_position)
 
         # Create and return a new Motif object with the merged motif string and modification position
-        return Motif(merged_motif_string, merged_mod_position)
+        merged_motif = Motif(merged_motif_string, merged_mod_position)
+        merged_motif = merged_motif.new_stripped_motif(".")
+        return merged_motif
         
     def merge_bases(self, base1, base2):
         canonical_bases = {'A', 'C', 'G', 'T'}

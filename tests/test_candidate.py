@@ -179,22 +179,30 @@ class TestMotif:
         motif1 = Motif("CG", 0)
         motif2 = Motif("C..CG...[GC]", 3)
         assert motif1.distance(motif2) == 2
+
     def test_merge(self):
         motif1 = Motif("..A..", 2)
         motif2 = Motif("..C..", 2)
-        assert motif1.merge(motif2) == Motif("..[AC]..", 2)
+        assert motif1.merge(motif2) == Motif("[AC]", 0)
 
         motif1 = Motif(".ATGC.", 1)
-        motif2 = Motif(".TCAG", 2)
+        motif2 = Motif(".TAAG", 2)
         merged = motif1.merge(motif2)
-        assert merged == Motif("..[AC][AT]G..", 2)
-        assert merged.mod_position == 2
+        assert merged == Motif("A[AT]G", 0)
+        assert merged.mod_position == 0
 
-        motif1 = Motif(".[AT]T.C.[CT]T", 2)
-        motif2 = Motif(".[GC].CA.[CG]G", 2)
+        motif1 = Motif("AGG", 0)
+        motif2 = Motif("VAAG", 1)
         merged = motif1.merge(motif2)
-        assert merged == Motif("....[AC].[CGT][GT]", 2)
-        assert merged.mod_position == 2
+        assert merged == Motif("A[AG]G", 1)
+        assert merged.mod_position == 0
+
+        motif1 = Motif("GATC...R", 1)
+        motif2 = Motif("A...TATC", 5)
+        merged = motif1.merge(motif2)
+        assert merged == Motif("[GT]ATC", 1)
+
+
     
     def test_iupac(self):
         motif = Motif("A[TCG]CG", 0)
