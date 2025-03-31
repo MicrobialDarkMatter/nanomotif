@@ -129,30 +129,3 @@ def run_MTase_linker(args):
     except subprocess.CalledProcessError as e:
         print("MTase-linker failed with error:", e)
         sys.exit(1)
-
-    # workflow = None
-    # workflow = {"THREADS": args.threads,
-    #             "ASSEMBLY": assembly_path,
-    #             "CONTIG_BIN": contig_bin,
-    #             "OUTPUTDIRECTORY": args.out,
-    #             "DEPENDENCY_PATH": dependency_dir,
-    #             "IDENTITY": args.identity,
-    #             "QCOVS": args.qcovs,
-    #             "NANOMOTIF": args.bin_motifs}
-
-
-    # status = snakemake.snakemake(snakefile, 
-    #                             config=workflow,
-    #                             targets = ["all"], 
-    #                             use_conda = True, 
-    #                             forceall=args.forceall, 
-    #                             cores = args.threads,
-    #                             dryrun=args.dryrun, 
-    #                             workdir = cwd,
-    #                             conda_prefix = os.path.join(dependency_dir, "ML_envs"))
-
-    # if status:
-    #     print("MTase-Linker done!")
-    # else:
-    #     print("MTase-linker failed.")
-
