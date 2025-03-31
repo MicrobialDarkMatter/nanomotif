@@ -99,6 +99,36 @@ def run_MTase_linker(args):
         sys.stderr.write(msg)
         sys.exit(1)
 
+    try:
+        identity = float(args.identity)
+    except ValueError:
+        sys.stderr.write("Error: identity must be a number.\n")
+        sys.exit(1)
+
+    if identity < 0 or identity > 100:
+        sys.stderr.write("Error: identity must be between 0 and 100.\n")
+        sys.exit(1)
+
+    try:
+        QCOVS = float(args.qcovs)
+    except ValueError:
+        sys.stderr.write("Error: query coverage must be a number.\n")
+        sys.exit(1)
+
+    if QCOVS < 0 or QCOVS > 100:
+        sys.stderr.write("Error: query coverage must be between 0 and 100.\n")
+        sys.exit(1)
+
+    try:
+        MINIMUM_METHYLATION = float(args.minimum_motif_methylation)
+    except ValueError:
+        sys.stderr.write("Error: minimum motif methylation must be a number.\n")
+        sys.exit(1)
+
+    if MINIMUM_METHYLATION < 0 or MINIMUM_METHYLATION > 1:
+        sys.stderr.write("Error: minimum motif methylation must be between 0 and 1.\n")
+        sys.exit(1)
+
     command = [
         "snakemake",
         "--snakefile", snakefile,
@@ -112,6 +142,7 @@ def run_MTase_linker(args):
         f"IDENTITY={args.identity}",
         f"QCOVS={args.qcovs}",
         f"NANOMOTIF={args.bin_motifs}",
+        f"MINIMUM_METHYLATION={args.minimum_motif_methylation}",
         "--use-conda",
         "--conda-prefix", os.path.join(dependency_dir, "ML_envs")
         

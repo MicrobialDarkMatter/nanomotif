@@ -592,6 +592,8 @@ def binnary(args, pl):
     log.info(f"Analysis Completed. Results are saved to: {args.out}")
     print("Analysis Completed. Results are saved to:", args.out)
 
+####################################################################################################
+# MTaser-linker
 
 from nanomotif.mtase_linker.dependencies import snakemake_create_environments, get_models, defensefinder_update, check_installation_MTase_linker
 from nanomotif.mtase_linker.command import run_MTase_linker

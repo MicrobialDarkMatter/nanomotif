@@ -191,6 +191,8 @@ rule motif_assignment:
     output:
         MTase_assignment_table = os.path.join(OUTPUTDIR, "mtase_assignment_table.tsv"),
         nanomotif_assignment_table = os.path.join(OUTPUTDIR, "nanomotif_assignment_table.tsv")
+    params:
+        MINIMUM_METHYLATION = config["MINIMUM_METHYLATION"],
     conda:
         "envs/python_env-3.12.0.yaml"
     script:
