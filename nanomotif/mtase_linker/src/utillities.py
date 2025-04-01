@@ -106,23 +106,23 @@ def RM_type_converter(df, gene_name_column):
     """
 
  
-    match_string1 = ['RM__Type_I_MTases'] 
-    match_string2 = ['RM_Type_II__Type_II_MTases']
-    match_string3 = ['RM_Type_IIG__Type_IIG']
-    match_string4 = ['RM_Type_III__Type_III_MTases']
+    match_string1 = 'RM__Type_I_MTases' 
+    match_string2 = 'RM_Type_II__Type_II_MTases'
+    match_string3 = 'RM_Type_IIG__Type_IIG'
+    match_string4 = 'RM_Type_III__Type_III_MTases'
     output_string1 = 'Type_I'
     output_string2 = 'Type_II'
     output_string3 = 'Type_IIG'
     output_string4 = 'Type_III'
 
     def classify_motif(x):
-        if x in match_string1:
+        if match_string1 in x:
             return output_string1
-        elif x in match_string2:
+        elif match_string2 in x:
             return output_string2
-        elif x in match_string3:
+        elif match_string3 in x:
             return output_string3
-        elif x in match_string4:
+        elif match_string4 in x:
             return output_string4
         else:
             return 'undefined'  

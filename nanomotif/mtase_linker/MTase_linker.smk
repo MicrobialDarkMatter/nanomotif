@@ -67,7 +67,7 @@ rule defenseFinder:
         outputdir = os.path.join(OUTPUTDIR, "defensefinder")
     threads: config["THREADS"]
     conda:
-        "envs/defensefinder-1.2.0.yaml"
+        "envs/defensefinder-2.0.0.yaml"
     shell:
         """
         defense-finder run --db-type gembase --workers {threads} --models-dir {params.modelsdir} --out-dir {params.outputdir} {input.faa}
@@ -148,7 +148,7 @@ rule run_pfam_hmm:
         hmm_profiles = os.path.join(DEPENDENCYDIR, "PFAM_MTase_profiles.hmm")
     threads: config["THREADS"]
     conda: 
-        "envs/defensefinder-1.2.0.yaml"
+        "envs/defensefinder-2.0.0.yaml"
     shell:
         """
         if [ -s {input.DF_MTase_AA} ]; then
@@ -191,6 +191,8 @@ rule motif_assignment:
     output:
         MTase_assignment_table = os.path.join(OUTPUTDIR, "mtase_assignment_table.tsv"),
         nanomotif_assignment_table = os.path.join(OUTPUTDIR, "nanomotif_assignment_table.tsv")
+    params:
+        MINIMUM_METHYLATION = config["MINIMUM_METHYLATION"],
     conda:
         "envs/python_env-3.12.0.yaml"
     script:

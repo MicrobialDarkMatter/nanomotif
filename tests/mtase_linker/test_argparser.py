@@ -15,7 +15,8 @@ def test_argparse():
         '-d', 'ML_dependencies_dir', 
         '--identity', '90', 
         '--qcovs', '90', 
-        '--out', 'output_dir'
+        '--out', 'output_dir',
+        '--minimum_motif_methylation', '0.9'
     ])
 
     # Check that the arguments are correctly parsed
@@ -29,6 +30,7 @@ def test_argparse():
     assert args.identity == '90' 
     assert args.qcovs == '90' 
     assert args.out == 'output_dir'
+    assert args.minimum_motif_methylation == 0.9
     
     print("All assertions passed!")
 
