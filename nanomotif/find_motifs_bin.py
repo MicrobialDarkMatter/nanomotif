@@ -68,8 +68,8 @@ def process_binned_sample_parallel(
     # Infer padding size from candidate_size
     padding = search_frame_size // 2
     
-    pileup = pileup.join(bin_contig, on="contig", how = "left")
-    low_coverage_positions = low_coverage_positions.join(bin_contig, on="contig", how = "left") if low_coverage_positions is not None else None
+    pileup = pileup.join(bin_contig, on="contig", how = "inner")
+    low_coverage_positions = low_coverage_positions.join(bin_contig, on="contig", how = "inner") if low_coverage_positions is not None else None
 
     log.debug("Partitining pileups to dict")
     pileup_dict = pileup.partition_by(["bin", "mod_type"], as_dict=True)
