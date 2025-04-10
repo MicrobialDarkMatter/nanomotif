@@ -14,16 +14,17 @@ from nanomotif._version import __version__
 
 
 def shared_setup(args, working_dir):
-    # Set up logging
-    LOG_DIR = working_dir + "/logs"
-    Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
-    configure_logger(LOG_DIR + f"/{args.command}.main.log", args.verbose, stdout=True)
-    warnings.filterwarnings("ignore")
     # Check if output directory exists
     if not os.path.exists(args.out):
         os.makedirs(args.out)
     else:
         log.warning(f"Output directory {args.out} already exists")
+
+    # Set up logging
+    LOG_DIR = working_dir + "/logs"
+    Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
+    configure_logger(LOG_DIR + f"/{args.command}.main.log", args.verbose, stdout=True)
+    warnings.filterwarnings("ignore")
 
 
     # Log arguments
@@ -337,6 +338,88 @@ def bin_consensus(args, pl, pileup = None, assembly = None, motifs = None, motif
     output = output.unique(["motif", "bin", "mod_type", "mod_position", "n_mod_bin", "n_nomod_bin"])
     output.write_csv(args.out + "/bin-motifs.tsv", separator="\t")
 
+def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_contig = 50, min_mod_frequency = 10000):
+    """
+    Nanomotif motif finder module
+
+    Args:
+        args (argparse.Namespace): Arguments
+        pileup (pandas.DataFrame): Pileup data
+        assembly (nanomotif.Assembly): Assembly data
+    
+    Returns:
+        pandas.DataFrame: Motif data
+    """
+    import polars as pl
+
+    log.info("Starting nanomotif motif finder")
+    # Pileup 
+    if pileup is None:
+        log.info("Loading pileup")
+        if not os.path.exists(args.pileup):
+            log.error(f"File {args.pileup} does not exist")
+            return None
+        if args.read_level_methylation:
+            pileup = nm.load_pileup(args.pileup, min_coverage = args.threshold_valid_coverage, min_fraction = 0)
+        else:
+            pileup = nm.load_pileup(args.pileup, min_coverage = args.threshold_valid_coverage, min_fraction = args.threshold_methylation_general)
+    
+
+    # Assembly
+    if assembly is None:
+        log.info("Loading assembly")
+        assembly = nm.load_assembly(args.assembly)
+
+    # Bin contig relationsship
+    bin_contig = pl.read_csv(args.bins, separator="\t", has_header=False, infer_schema_length=10000) \
+        .rename({"column_1":"contig", "column_2":"bin"})
+
+    
+    pileup = pileup.pileup.with_columns([
+        (pl.col("contig") + "_" + pl.col("mod_type")).alias("contig_mod")
+    ])
+    contig_mods_to_keep, contig_mods_to_remove = nm.dataload.extract_contig_mods_with_sufficient_information(pileup, assembly, min_mods_pr_contig, min_mod_frequency)
+    if len(contig_mods_to_keep) == 0:
+        log.info("No contigs with sufficient information")
+        return None
+
+    log.debug(f"Filtering pileup to keep contigs with more than {min_mods_pr_contig} mods and mod frequency of 1 pr. {min_mod_frequency}")
+    pileup = pileup.filter(pl.col("contig_mod").is_in(contig_mods_to_keep))
+
+    # Load low coverage positions
+    log.info("Loading low coverage positions")
+    low_coverage_positions = nm.load_low_coverage_positions(args.pileup, contig_mods_to_keep, min_coverage = args.threshold_valid_coverage)
+    
+    # Writing temperary files
+    os.makedirs(args.out + "/temp/", exist_ok=True)
+    pileup.write_csv(args.out + "/temp/filtered_pileup.tsv", separator="\t")
+    with open(args.out + '/temp/contig_mod_combinations_not_processed.tsv', 'w') as f:
+        for line in contig_mods_to_remove:
+            f.write(f"{line}\n")
+    with open(args.out + '/temp/contig_mod_combinations_processed.tsv', 'w') as f:
+        for line in contig_mods_to_keep:
+            f.write(f"{line}\n")
+
+    log.info("Identifying motifs")
+    motifs = nm.find_motifs_bin.process_binned_sample_parallel(
+            assembly, pileup, bin_contig,
+            low_coverage_positions = low_coverage_positions,
+            read_level_methylation = args.read_level_methylation,
+            threads = args.threads,
+            search_frame_size = args.search_frame_size,
+            threshold_methylation_confident = args.threshold_methylation_confident,
+            threshold_methylation_general = args.threshold_methylation_general,
+            minimum_kl_divergence = args.minimum_kl_divergence,
+            verbose = args.verbose,
+            log_dir = args.out + "/logs",
+            seed = args.seed
+        )
+    motifs = pl.DataFrame(motifs)
+    if motifs is None or len(motifs) == 0:
+        log.info("No contigs with sufficient modifications")
+        return
+
+
 def motif_discovery(args, pl):
     # Check if all required files exist
     if not os.path.exists(args.pileup):
@@ -633,6 +716,9 @@ def main():
     elif args.command == "bin_consensus":
         shared_setup(args, args.out)
         bin_consensus(args, pl)
+    elif args.command == "find_motifs_bin":
+        shared_setup(args, args.out)
+        find_motifs_bin(args, pl)
     elif args.command == "motif_discovery":
         shared_setup(args, args.out)
         motif_discovery(args, pl)

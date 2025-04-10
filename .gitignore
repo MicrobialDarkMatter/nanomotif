@@ -4,6 +4,8 @@ nanomotif/flamegraph*
 austin
 results
 reports
+run_defaults.sh
+test_output
 
 !bin/.gitkeep
 bin/
