@@ -9,6 +9,7 @@ from scipy.stats import entropy
 import multiprocessing
 from multiprocessing import get_context
 import progressbar
+import nanomotif as nm
 from nanomotif.constants import *
 from nanomotif.model import BetaBernoulliModel
 from nanomotif.utils import subseq_indices, calculate_match_length
@@ -344,19 +345,11 @@ def find_best_candidates(
         else:
             methylation_sequences = methylation_sequences + methylation_sequences_contig
     methylation_sequences = methylation_sequences.convert_to_DNAarray()
-
-    log.debug("asd")
-    total_sequences = methylation_sequences.shape[0]
-    print("asd")
-    root_motif = Motif("." * padding + MOD_TYPE_TO_CANONICAL[mod_type] + "." * padding, padding)
-    
-    print("asd")
-    methylation_sequences_clone = methylation_sequences.copy()
-    
-    print("asd")
     bin_pssm = background_sequences.pssm()
-    
-    print("asd")
+
+    total_sequences = methylation_sequences.shape[0]
+    root_motif = Motif("." * padding + MOD_TYPE_TO_CANONICAL[mod_type] + "." * padding, padding)
+    methylation_sequences_clone = methylation_sequences.copy()
     best_candidates = []
     continue_search = True
     dead_ends = 0
@@ -778,6 +771,25 @@ def methylated_motif_occourances(
 
     return meth_occurences, nonmeth_occurences
 
+def motif_model_bin(
+        pileup,
+        contigs: dict[str, str],
+        motif: str,
+        na_positions = None
+):
+    bin_model = BetaBernoulliModel(0, 0)
+    for contig, contig_sequence in contigs.items():
+        pileup_contig = pileup.filter(pl.col("contig") == contig)
+        na_positions = na_positions.get(contig) if na_positions else None
+        model = motif_model_contig(
+            pileup_contig,
+            contig_sequence,
+            motif,
+            na_positions=na_positions
+        )
+        bin_model.update(model._alpha, model._beta)
+    return bin_model
+
 def motif_model_contig(
         pileup, 
         contig: str, 
@@ -856,3 +868,92 @@ def methylated_reads_counts(
     return n_mod, n_nonmod
 
 
+
+def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_coverage_positions = None, mean_shift_threshold = -0.2):
+    new_df = []
+    for (bin_name, mod_type), df in motif_df.groupby("bin", "mod_type"):
+        contigs = contig_bin.filter(col("bin") == bin_name).get_column("contig").unique().to_list()
+        
+        # Create dictionary of bin contigs to sequence
+        bin_sequences = {contig: assembly.assembly[contig].sequence for contig in contigs}
+
+        # Get Na positions
+        na_positions = {}
+        if low_coverage_positions is not None:
+            for contig in low_coverage_positions.get_column("contig").unique():
+                low_coverage_positions_contig = low_coverage_positions.filter(pl.col("contig") == contig)
+                low_coverage_positions_contig = low_coverage_positions_contig.explode("position", "strand")
+                low_coverage_positions_dict = {
+                    contig: {
+                        "fwd": low_coverage_positions_contig.filter(pl.col("strand") == "+")["position"].to_numpy(),
+                        "rev": low_coverage_positions_contig.filter(pl.col("strand") == "-")["position"].to_numpy()
+                    }
+                }
+                na_positions.update(low_coverage_positions_dict)
+        # Get list of motifs
+        motif_seq = df["motif"].to_list()
+        motif_pos = df["mod_position"].to_list()
+        motifs = [nm.candidate.Motif(seq, pos) for seq, pos in zip(motif_seq, motif_pos)]
+
+        # Merge motifs
+        merged_motifs = nm.candidate.merge_motifs(motifs)
+        all_merged_motifs = []
+        all_premerge_motifs = []
+        # Check mean shift of premerge motifs to merged motif is high enough
+        for cluster, motifs in merged_motifs.items():
+            merged_motif = motifs[0]
+            premerge_motifs = motifs[1]
+            merge_mean = motif_model_bin(
+                pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)), 
+                bin_sequences,
+                merged_motif,
+                na_positions=na_positions
+            ).mean()
+            pre_merge_means = []
+            for pre_merge_motif in premerge_motifs:
+                pre_merge_means.append(
+                    motif_model_bin(
+                        pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)),
+                        bin_sequences,
+                        pre_merge_motif,
+                        na_positions=na_positions
+                    ).mean()
+                )
+            
+            pre_merge_mean = sum(np.array(pre_merge_means)) / len(pre_merge_means)
+            mean_shift = merge_mean - pre_merge_mean
+            if mean_shift < mean_shift_threshold:
+                log.info(f"Mean shift of merged motif {merged_motif} is {mean_shift}, keeping original motifs")
+            
+            else:
+                log.info(f"Mean shift of merged motif {merged_motif} is {mean_shift}")
+                all_merged_motifs.append(merged_motif)
+                all_premerge_motifs.extend(premerge_motifs)
+
+        # Create a new dataframe with the non merged motifs
+        if  len(all_premerge_motifs) == 0:
+            # No motifs were merged
+            new_df.append(df)
+            continue
+        single_df = df.filter(col("motif").is_in(all_premerge_motifs).not_())
+        new_df.append(single_df)
+        merged_df = []
+        for motif in all_merged_motifs:
+            merged_model = motif_model_bin(
+                pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)), 
+                bin_sequences,
+                motif,
+                na_positions=na_positions
+            )
+            merged_df.append(pl.DataFrame({
+                "sequence": motif.string,
+                "score": -1.,
+                "bin": bin_name,
+                "mod_type": mod_type,
+                "model": merged_model,
+                "motif": motif.string,
+                "mod_position": motif.mod_position
+            }))
+        new_df.append(pl.concat(merged_df))
+    new_df = pl.concat(new_df)
+    return new_df
