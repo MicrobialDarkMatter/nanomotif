@@ -5,7 +5,8 @@ austin
 results
 reports
 run_defaults.sh
-test_output
+test_output*
+job_*
 
 !bin/.gitkeep
 bin/
