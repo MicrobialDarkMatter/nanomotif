@@ -37,7 +37,7 @@ nanomotif_table['assign_mod_type'] = nanomotif_table['mod_type'].apply(recode_mo
 
 #Set motif acceptance threshold as >=0.5 mean_methylation and remove ambiguous motifs in nanomotif_table
 mean_methylation = nanomotif_table['n_mod_bin'] / (nanomotif_table['n_mod_bin'] + nanomotif_table['n_nomod_bin'])
-nanomotif_table_mm50 = nanomotif_table[mean_methylation >= 0.5]
+nanomotif_table_mm50 = nanomotif_table[mean_methylation >= snakemake.params['MINIMUM_METHYLATION']]
 
 
 

@@ -209,13 +209,13 @@ CONTIG_BIN="path/to/contig_bin.tsv"
 BIN_MOTIFS="path/to/nanomotif/bin-motifs.tsv"
 ML_DEPENDICIES="path/to/ML_dependencies"
 OUT="path/to/output"
-nanomotif MTase-linker run --asembly $ASSEMBLY --contig_bin $CONTIG_BIN --bin_motifs $BIN_MOTIFS -d $ML_DEPENDICIES --out $OUT
+nanomotif MTase-linker run --assembly $ASSEMBLY --contig_bin $CONTIG_BIN --bin_motifs $BIN_MOTIFS -d $ML_DEPENDICIES --out $OUT
 ```
 
 ```
-usage: nanomotif MTase-linker run [-h] [-t THREADS] [--forceall FORCEALL] [--dryrun DRYRUN] --assembly ASSEMBLY --contig_bin CONTIG_BIN --bin_motifs BIN_MOTIFS [-d DEPENDENCY_DIR] [-o OUT] [--identity IDENTITY] [--qcovs QCOVS]
+usage: nanomotif MTase-linker run [-h] [-t THREADS] [--forceall FORCEALL] [--dryrun DRYRUN] --assembly ASSEMBLY --contig_bin CONTIG_BIN --bin_motifs BIN_MOTIFS [-d DEPENDENCY_DIR] [-o OUT] [--identity IDENTITY] [--qcovs QCOVS] [--minimum_motif_methylation MINIMUM_MOTIF_METHYLATION]
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   -t THREADS, --threads THREADS
                         Number of threads to use. Default is 1
@@ -231,4 +231,6 @@ optional arguments:
   -o OUT, --out OUT     Path to output directory. Default is cwd
   --identity IDENTITY   Identity threshold for motif prediction. Default is 80
   --qcovs QCOVS         Query coverage for motif prediction. Default is 80
+  --minimum_motif_methylation MINIMUM_MOTIF_METHYLATION
+                        Minimum fraction of motif occurrences in the bin that must be methylated for the motif to be considered. Default is 0.5
 ```

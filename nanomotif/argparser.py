@@ -196,6 +196,7 @@ def create_parser():
     parser_mtase_linker_run.add_argument("-o", "--out", type=str, default=os.path.join(os.getcwd(), "mtase_linker"), help="Path to output directory. Default is cwd")
     parser_mtase_linker_run.add_argument("--identity", type=str, default=80, help="Identity threshold for motif prediction. Default is 80")
     parser_mtase_linker_run.add_argument("--qcovs", type=str, default=80, help="Query coverage for motif prediction. Default is 80")
+    parser_mtase_linker_run.add_argument("--minimum_motif_methylation", type=float, default=0.5, help="Minimum fraction of motif occurrences in the bin that must be methylated for the motif to be considered. Default is 0.5")
 
     parser_mtase_linker_install = mtase_linker_subparsers.add_parser(
         'install', 

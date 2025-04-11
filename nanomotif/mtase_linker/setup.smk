@@ -3,7 +3,7 @@
 rule all:
     input:
         "envs/prodigal-2.6.3.yaml",
-        "envs/defensefinder-1.2.0.yaml",
+        "envs/defensefinder-2.0.0.yaml",
         "envs/python_env-3.12.0.yaml",
         "envs/blast-2.14.1.yaml"
 
@@ -21,9 +21,9 @@ rule prodigal:
 # Rule for specifying defensefinder environment
 rule defensefinder:
     output:
-        touch("envs/defensefinder-1.2.0.yaml")
+        touch("envs/defensefinder-2.0.0.yaml")
     conda:
-        "envs/defensefinder-1.2.0.yaml"
+        "envs/defensefinder-2.0.0.yaml"
     shell:
         """
         touch {output}
@@ -55,7 +55,7 @@ rule blastp:
 
 rule defense_finder_update:
     conda:
-        "envs/defensefinder-1.2.0.yaml"
+        "envs/defensefinder-2.0.0.yaml"
     output:
         dummy=touch(os.path.join(config["DEPENDENCYDIR"], "df_models", "defense-finder_update.done"))
     params: 
