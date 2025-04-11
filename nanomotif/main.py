@@ -14,16 +14,17 @@ from nanomotif._version import __version__
 
 
 def shared_setup(args, working_dir):
-    # Set up logging
-    LOG_DIR = working_dir + "/logs"
-    Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
-    configure_logger(LOG_DIR + f"/{args.command}.main.log", args.verbose, stdout=True)
-    warnings.filterwarnings("ignore")
     # Check if output directory exists
     if not os.path.exists(args.out):
         os.makedirs(args.out)
     else:
         log.warning(f"Output directory {args.out} already exists")
+
+    # Set up logging
+    LOG_DIR = working_dir + "/logs"
+    Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
+    configure_logger(LOG_DIR + f"/{args.command}.main.log", args.verbose, stdout=True)
+    warnings.filterwarnings("ignore")
 
 
     # Log arguments
@@ -337,7 +338,194 @@ def bin_consensus(args, pl, pileup = None, assembly = None, motifs = None, motif
     output = output.unique(["motif", "bin", "mod_type", "mod_position", "n_mod_bin", "n_nomod_bin"])
     output.write_csv(args.out + "/bin-motifs.tsv", separator="\t")
 
-def motif_discovery(args, pl):
+def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_contig = 50, min_mod_frequency = 10000):
+    """
+    Nanomotif motif finder module
+
+    Args:
+        args (argparse.Namespace): Arguments
+        pileup (pandas.DataFrame): Pileup data
+        assembly (nanomotif.Assembly): Assembly data
+    
+    Returns:
+        pandas.DataFrame: Motif data
+    """
+    import polars as pl
+
+    log.info("Starting nanomotif motif finder")
+    # Pileup 
+    if pileup is None:
+        log.info("Loading pileup")
+        if not os.path.exists(args.pileup):
+            log.error(f"File {args.pileup} does not exist")
+            return None
+        if args.read_level_methylation:
+            pileup = nm.load_pileup(args.pileup, min_coverage = args.threshold_valid_coverage, min_fraction = 0)
+        else:
+            pileup = nm.load_pileup(args.pileup, min_coverage = args.threshold_valid_coverage, min_fraction = args.threshold_methylation_general)
+    
+
+    # Assembly
+    if assembly is None:
+        log.info("Loading assembly")
+        assembly = nm.load_assembly(args.assembly)
+
+    # Bin contig relationsship
+    bin_contig = pl.read_csv(args.bins, separator="\t", has_header=False, infer_schema_length=10000) \
+        .rename({"column_1":"contig", "column_2":"bin"})
+
+    
+    pileup = pileup.pileup.with_columns([
+        (pl.col("contig") + "_" + pl.col("mod_type")).alias("contig_mod")
+    ])
+    contig_mods_to_keep, contig_mods_to_remove = nm.dataload.extract_contig_mods_with_sufficient_information(pileup, assembly, min_mods_pr_contig, min_mod_frequency)
+    if len(contig_mods_to_keep) == 0:
+        log.info("No contigs with sufficient information")
+        return None
+
+    log.debug(f"Filtering pileup to keep contigs with more than {min_mods_pr_contig} mods and mod frequency of 1 pr. {min_mod_frequency}")
+    pileup = pileup.filter(pl.col("contig_mod").is_in(contig_mods_to_keep))
+
+    # Load low coverage positions
+    log.info("Loading low coverage positions")
+    low_coverage_positions = nm.load_low_coverage_positions(args.pileup, contig_mods_to_keep, min_coverage = args.threshold_valid_coverage)
+    
+    # Writing temperary files
+    os.makedirs(args.out + "/temp/", exist_ok=True)
+    pileup.write_csv(args.out + "/temp/filtered_pileup.tsv", separator="\t")
+    with open(args.out + '/temp/contig_mod_combinations_not_processed.tsv', 'w') as f:
+        for line in contig_mods_to_remove:
+            f.write(f"{line}\n")
+    with open(args.out + '/temp/contig_mod_combinations_processed.tsv', 'w') as f:
+        for line in contig_mods_to_keep:
+            f.write(f"{line}\n")
+
+    log.info("Identifying motifs")
+    motifs = nm.find_motifs_bin.process_binned_sample_parallel(
+            assembly, pileup, bin_contig,
+            low_coverage_positions = low_coverage_positions,
+            read_level_methylation = args.read_level_methylation,
+            threads = args.threads,
+            search_frame_size = args.search_frame_size,
+            threshold_methylation_confident = args.threshold_methylation_confident,
+            threshold_methylation_general = args.threshold_methylation_general,
+            minimum_kl_divergence = args.minimum_kl_divergence,
+            verbose = args.verbose,
+            log_dir = args.out + "/logs",
+            seed = args.seed
+        )
+    motifs = pl.DataFrame(motifs)
+    if motifs is None or len(motifs) == 0:
+        log.info("No contigs with sufficient modifications")
+        return
+
+    log.info("Writing motifs")
+    def format_motif_df(df):
+        if "model" in df.columns:
+            n_mod = [x._alpha for x in df["model"]]
+            n_nomod = [x._beta for x in df["model"]]
+        motif_iupac = [nm.seq.regex_to_iupac(x) for x in df["motif"]]
+        motif_type = [nm.utils.motif_type(x) for x in motif_iupac]
+
+        df_out = df.with_columns([
+            pl.Series("motif", motif_iupac),
+            pl.Series("motif_type", motif_type)
+        ])
+        if "model" in df.columns:
+            df_out = df_out.with_columns([
+                pl.Series("n_mod", n_mod),
+                pl.Series("n_nomod", n_nomod)
+            ])
+        try:
+            df_out = df_out.select([
+                "bin", "motif", "mod_position", "mod_type", "n_mod", "n_nomod", "motif_type",
+                "motif_complement", "mod_position_complement", "n_mod_complement", "n_nomod_complement"
+            ])
+        except:
+            df_out = df_out.select([
+                "bin", "motif", "mod_position", "mod_type", "n_mod", "n_nomod", "motif_type",
+            ])
+        # Subtract prior alpha and beta from n_mod and n_nomod
+        if "model" in df.columns:
+            df_out = df_out.with_columns([
+                pl.col("n_mod") - nm.model.DEFAULT_PRIOR_BETA,
+                pl.col("n_nomod") - nm.model.DEFAULT_PRIOR_ALPHA
+            ])
+        return df_out
+    def save_motif_df(df, name):
+        df = format_motif_df(df)
+        df = df.sort(["bin", "mod_type", "motif"])
+        df.write_csv(args.out + "/" + name + ".tsv", separator="\t")
+    os.makedirs(args.out + "/precleanup-motifs/", exist_ok=True)
+    motifs.drop("model").write_csv(args.out + "/precleanup-motifs/motifs-raw-unformatted.tsv", separator="\t")
+    save_motif_df(motifs, "precleanup-motifs/motifs-raw")
+
+    log.info("Postprocessing motifs")
+    motifs_file_name = "precleanup-motifs/motifs"
+
+    log.info(" - Writing motifs")
+    motifs = motifs.filter(pl.col("score") > args.min_motif_score)
+    if len(motifs) == 0:
+        log.info("No motifs found")
+        return
+    
+    motifs_file_name = motifs_file_name + "-score"
+    save_motif_df(motifs, motifs_file_name)
+
+
+    log.info(" - Removing noisy motifs")
+    motifs = nm.postprocess.remove_noisy_motifs(motifs)
+    if len(motifs) == 0:
+        log.info("No motifs found")
+        return
+    motifs_file_name = motifs_file_name +   "-noise"
+    save_motif_df(motifs, motifs_file_name)
+
+    log.info(" - Merging motifs")
+    motifs = nm.find_motifs_bin.merge_motifs_in_df(motifs, pileup, assembly, bin_contig, low_coverage_positions = low_coverage_positions)
+    if len(motifs) == 0:
+        log.info("No motifs found")
+        return
+    motifs_file_name = motifs_file_name +   "-merge"
+    save_motif_df(motifs, motifs_file_name)
+
+    log.info(" - Removing sub motifs")
+    motifs = motifs.rename({"bin":"contig"})
+    motifs = nm.postprocess.remove_sub_motifs(motifs)
+    if len(motifs) == 0:
+        log.info("No motifs found")
+        return
+    motifs_file_name = motifs_file_name +   "-sub"
+    motifs = motifs.rename({"contig":"bin"})
+    save_motif_df(motifs, motifs_file_name)
+
+    log.info(" - Joining motif complements")
+    motifs = motifs.rename({"bin":"contig"})
+    motifs = nm.postprocess.join_motif_complements(motifs)
+    if len(motifs) == 0:
+        log.info("No motifs found")
+        return
+    motifs_file_name = motifs_file_name +   "-complement"
+    motifs = motifs.rename({"contig":"bin"})
+    save_motif_df(motifs, motifs_file_name)
+
+    log.info(" - Removing motifs observed less than min count")
+    motifs = motifs.filter((pl.col("n_mod") + pl.col("n_nomod")) > args.min_motifs_contig)
+    if len(motifs) == 0:
+        log.info("No motifs found")
+        return
+    motifs_file_name = motifs_file_name +   "-mincount"
+    save_motif_df(motifs, motifs_file_name)
+
+
+
+    save_motif_df(motifs, "bin-motifs")
+
+    log.info("Done finding motifs")
+    return format_motif_df(motifs)
+
+
+def motif_discovery_legacy(args, pl):
     # Check if all required files exist
     if not os.path.exists(args.pileup):
         log.error(f"File {args.pileup} does not exist")
@@ -427,6 +615,10 @@ def check_install(args, pl):
     log.info("Finding bin consensus motifs")
     args.bins = nm.datasets.geobacillus_plasmids_bin_path()
     bin_consensus(args, pl, pileup=pileup, assembly=assembly, motifs=motifs, motifs_scored=scored_all)
+
+    # Find motifs bin
+    log.info("Finding bin motifs")
+    find_motifs_bin(args, pl, pileup=pileup, assembly=assembly)
     
     log.info("Done")
     for _ in range(3):
@@ -637,7 +829,11 @@ def main():
         bin_consensus(args, pl)
     elif args.command == "motif_discovery":
         shared_setup(args, args.out)
-        motif_discovery(args, pl)
+        find_motifs_bin(args, pl)
+    
+    elif args.command == "motif_discovery_legacy":
+        shared_setup(args, args.out)
+        motif_discovery_legacy(args, pl)
 
     elif args.command in ["detect_contamination", "include_contigs"]:
         shared_setup(args, args.out)

@@ -64,8 +64,17 @@ def create_parser():
     parser_bin_consensus.add_argument("--threshold_valid_coverage", type=int, default=5, help="minimum valid base coverage for a position to be considered. Default: %(default)s")
 
     ###########################################################################
+    # Find motifs on bin level
+    parser_find_motifs_bin = subparsers.add_parser(
+        'motif_discovery',
+        parents=[parser_positional, parser_optional, parser_shared_find_motifs],
+        help="Finds motifs directly on bin level in provided assembly"
+    )
+    parser_find_motifs_bin.add_argument("bins", type=str, help="tsv file specifying which bin contigs belong.")
+
+    ###########################################################################
     # Complete workflow
-    parser_complete_workflow = subparsers.add_parser('motif_discovery', help='Runs find_motifs, score_motifs and bin_consensus', parents=[parser_positional, parser_optional, parser_shared_find_motifs, parser_shared_bin_consensus], conflict_handler="resolve")
+    parser_complete_workflow = subparsers.add_parser('motif_discovery_legacy', help='Runs find_motifs, score_motifs and bin_consensus', parents=[parser_positional, parser_optional, parser_shared_find_motifs, parser_shared_bin_consensus], conflict_handler="resolve")
     parser_complete_workflow.add_argument("bins", type=str, help="tsv file specifying which bin contigs belong.")
 
     parser_complete_workflow.add_argument("--save-motif-positions", action="store_true", help="save motif positions in the output folder")
