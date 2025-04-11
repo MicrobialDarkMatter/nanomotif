@@ -615,6 +615,10 @@ def check_install(args, pl):
     log.info("Finding bin consensus motifs")
     args.bins = nm.datasets.geobacillus_plasmids_bin_path()
     bin_consensus(args, pl, pileup=pileup, assembly=assembly, motifs=motifs, motifs_scored=scored_all)
+
+    # Find motifs bin
+    log.info("Finding bin motifs")
+    find_motifs_bin(args, pl, pileup=pileup, assembly=assembly)
     
     log.info("Done")
     for _ in range(3):
