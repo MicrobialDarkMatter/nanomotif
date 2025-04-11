@@ -873,15 +873,17 @@ def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_coverage_posi
     new_df = []
     for (bin_name, mod_type), df in motif_df.groupby("bin", "mod_type"):
         contigs = contig_bin.filter(col("bin") == bin_name).get_column("contig").unique().to_list()
+        low_coverage_positions_bin = low_coverage_positions.filter(pl.col("contig").is_in(contigs)) if low_coverage_positions is not None else None
+        log.debug(f"Merging motifs of bin: {bin_name}, modtype: {mod_type}")
         
         # Create dictionary of bin contigs to sequence
         bin_sequences = {contig: assembly.assembly[contig].sequence for contig in contigs}
 
         # Get Na positions
         na_positions = {}
-        if low_coverage_positions is not None:
-            for contig in low_coverage_positions.get_column("contig").unique():
-                low_coverage_positions_contig = low_coverage_positions.filter(pl.col("contig") == contig)
+        if low_coverage_positions_bin is not None:
+            for contig in low_coverage_positions_bin.get_column("contig").unique():
+                low_coverage_positions_contig = low_coverage_positions_bin.filter(pl.col("contig") == contig)
                 low_coverage_positions_contig = low_coverage_positions_contig.explode("position", "strand")
                 low_coverage_positions_dict = {
                     contig: {
@@ -923,18 +925,20 @@ def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_coverage_posi
             pre_merge_mean = sum(np.array(pre_merge_means)) / len(pre_merge_means)
             mean_shift = merge_mean - pre_merge_mean
             if mean_shift < mean_shift_threshold:
-                log.info(f"Mean shift of merged motif {merged_motif} is {mean_shift}, keeping original motifs")
+                log.debug(f"Mean shift of merged motif {merged_motif} is {mean_shift}, keeping original motifs")
             
             else:
-                log.info(f"Mean shift of merged motif {merged_motif} is {mean_shift}")
+                log.debug(f"Mean shift of merged motif {merged_motif} is {mean_shift}, merging motifs")
                 all_merged_motifs.append(merged_motif)
                 all_premerge_motifs.extend(premerge_motifs)
-
+        log.info(f"Motif merge for bin {bin_name} modtype {mod_type} complete")
         # Create a new dataframe with the non merged motifs
         if  len(all_premerge_motifs) == 0:
             # No motifs were merged
             new_df.append(df)
+            log.info(f"No motifs were merged for bin {bin_name} modtype {mod_type}")
             continue
+        log.info(f"New merged motifs: {all_merged_motifs}")
         single_df = df.filter(col("motif").is_in(all_premerge_motifs).not_())
         new_df.append(single_df)
         merged_df = []
