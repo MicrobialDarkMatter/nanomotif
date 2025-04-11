@@ -84,6 +84,7 @@ def test_motif_discovery_legacy():
         "-t", "1",
         "nanomotif/datasets/geobacillus-plasmids.assembly.fasta",
         "nanomotif/datasets/geobacillus-plasmids.pileup.bed",
+        "nanomotif/datasets/geobacillus-contig-bin.tsv",
         "--out", outdir
     ]
     
