@@ -498,7 +498,7 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
     motifs_file_name = motifs_file_name +   "-sub"
     motifs = motifs.rename({"contig":"bin"})
     save_motif_df(motifs, motifs_file_name)
-    
+
     log.info(" - Joining motif complements")
     motifs = motifs.rename({"bin":"contig"})
     motifs = nm.postprocess.join_motif_complements(motifs)
@@ -519,13 +519,13 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
 
 
 
-    save_motif_df(motifs, "motifs")
+    save_motif_df(motifs, "bin-motifs")
 
     log.info("Done finding motifs")
     return format_motif_df(motifs)
 
 
-def motif_discovery(args, pl):
+def motif_discovery_legacy(args, pl):
     # Check if all required files exist
     if not os.path.exists(args.pileup):
         log.error(f"File {args.pileup} does not exist")
@@ -821,12 +821,13 @@ def main():
     elif args.command == "bin_consensus":
         shared_setup(args, args.out)
         bin_consensus(args, pl)
-    elif args.command == "find_motifs_bin":
-        shared_setup(args, args.out)
-        find_motifs_bin(args, pl)
     elif args.command == "motif_discovery":
         shared_setup(args, args.out)
-        motif_discovery(args, pl)
+        find_motifs_bin(args, pl)
+    
+    elif args.command == "motif_discovery_legacy":
+        shared_setup(args, args.out)
+        motif_discovery_legacy(args, pl)
 
     elif args.command in ["detect_contamination", "include_contigs"]:
         shared_setup(args, args.out)
