@@ -365,7 +365,6 @@ def merge_motifs(motifs, connectivity_dist=2, min_length=4):
         cluster_motifs = []
         merged_motif = None
         for node in cluster:
-            log.debug(f' - {node}')
             cluster_motifs.append(node)
             # Merge motifs
             if merged_motif is None:
@@ -374,7 +373,7 @@ def merge_motifs(motifs, connectivity_dist=2, min_length=4):
                 merged_motif = merged_motif.merge(node)
 
 
-        log.debug(f' - Merged motif: {merged_motif}')
+        log.debug(f'Merged motif: {merged_motif}')
         motif_merged[i] = [merged_motif, cluster_motifs]
     return motif_merged
 
