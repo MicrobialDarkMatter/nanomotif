@@ -372,7 +372,8 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
 
     # Bin contig relationsship
     bin_contig = pl.read_csv(args.bins, separator="\t", has_header=False, infer_schema_length=10000) \
-        .rename({"column_1":"contig", "column_2":"bin"})
+        .rename({"column_1":"contig", "column_2":"bin"}) \
+        .cast({'contig': pl.String, 'bin': pl.String})
 
     
     pileup = pileup.pileup.with_columns([
