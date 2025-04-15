@@ -957,7 +957,9 @@ def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_coverage_posi
                 "model": merged_model,
                 "motif": motif.string,
                 "mod_position": motif.mod_position
-            }))
-        new_df.append(pl.concat(merged_df))
+            }).cast({'bin': pl.String}))
+
+        merged_df_con = pl.concat(merged_df)
+        new_df.append(merged_df_con)
     new_df = pl.concat(new_df)
     return new_df
