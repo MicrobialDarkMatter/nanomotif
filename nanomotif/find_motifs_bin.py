@@ -322,8 +322,8 @@ def find_best_candidates(
         
         # Sample sequences in bin to get background for KL-divergence
         log.debug(f"Sampling {n_samples} sequences from {contig}")
-        contig_sequences_sample = contig_sequence.sample_n_subsequences(
-            padding * 2 + 1, n_samples
+        contig_sequences_sample = contig_sequence.sample_n_at_subsequences(
+            padding, MOD_TYPE_TO_CANONICAL[mod_type], n_samples
         )
         if background_sequences is None:
             background_sequences = contig_sequences_sample
