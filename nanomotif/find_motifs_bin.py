@@ -315,7 +315,7 @@ def find_best_candidates(
         subpileup_confident_contig = subpileup_confident.filter(pl.col("contig") == contig)
         contig_sequence = bin_sequences[contig]
         contig_length = len(contig_sequence)
-        n_samples = int(max(contig_length/400, 100))
+        n_samples = int(max(contig_length/400, 10))
         # Extract the sequences for confidently methylated positions
         index_plus = subpileup_confident_contig.filter(pl.col("strand") == "+").get_column("position").to_list()
         index_minus = subpileup_confident_contig.filter(pl.col("strand") == "-").get_column("position").to_list()
