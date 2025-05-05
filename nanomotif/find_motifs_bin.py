@@ -184,6 +184,8 @@ def worker_function(
                     "rev": low_coverage_positions_contig.filter(pl.col("strand") == "-")["position"].to_numpy()
                 }
             }
+    else:
+        low_coverage_positions_dict = None
     
 
     try:
