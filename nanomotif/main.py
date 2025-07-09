@@ -1,5 +1,6 @@
 import nanomotif as nm
 from nanomotif.logger import configure_logger
+from nanomotif._version import __version__
 import logging as log
 import os
 import sys
@@ -10,7 +11,6 @@ import time
 import numpy as np
 import random
 import warnings
-from nanomotif._version import __version__
 
 
 def shared_setup(args, working_dir):
@@ -72,7 +72,7 @@ def find_motifs(args, pl,  pileup = None, assembly = None, min_mods_pr_contig = 
     # Assembly
     if assembly is None:
         log.info("Loading assembly")
-        assembly = nm.load_assembly(args.assembly)
+        assembly = nm.fasta.load_assembly(args.assembly)
     
     pileup = pileup.pileup.with_columns([
         (pl.col("contig") + "_" + pl.col("mod_type")).alias("contig_mod")
@@ -225,7 +225,7 @@ def score_motifs(args, pl, pileup = None, assembly = None, motifs = None, min_mo
         pileup =  nm.load_pileup(args.pileup, min_fraction = args.threshold_methylation_general, min_coverage = args.threshold_valid_coverage)
     if assembly is None:
         log.info("Loading assembly")
-        assembly = nm.load_assembly(args.assembly)
+        assembly = nm.fasta.load_assembly(args.assembly)
     if motifs is None:
         log.info("Loading motifs")
         motifs = pl.read_csv(args.motifs, separator="\t")
@@ -303,7 +303,7 @@ def bin_consensus(args, pl, pileup = None, assembly = None, motifs = None, motif
         pileup =  nm.load_pileup(args.pileup, min_fraction = args.threshold_methylation_general, min_coverage = args.threshold_valid_coverage)
     if assembly is None:
         log.info("Loading assembly")
-        assembly = nm.load_assembly(args.assembly)
+        assembly = nm.fasta.load_assembly(args.assembly)
 
     
     if any([item for item in motifs_scored.columns if "_complement" in item]):
@@ -368,7 +368,7 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
     # Assembly
     if assembly is None:
         log.info("Loading assembly")
-        assembly = nm.load_assembly(args.assembly)
+        assembly = nm.fasta.load_assembly(args.assembly)
 
     # Bin contig relationsship
     bin_contig = pl.read_csv(args.bins, separator="\t", has_header=False, infer_schema_length=10000) \
@@ -572,7 +572,7 @@ def motif_discovery_legacy(args, pl):
     else:
         pileup = nm.load_pileup(args.pileup,min_coverage = args.threshold_valid_coverage, min_fraction = args.threshold_methylation_general)
         log.debug("Loading assembly")
-    assembly = nm.load_assembly(args.assembly)
+    assembly = nm.fasta.load_assembly(args.assembly)
 
     # Find motifs
     log.info("Finding motifs")
