@@ -139,12 +139,12 @@ def generate_contig_bin(args):
         all_results.extend(results)
     
     # Write output
-    output_path = os.join(args.output, "temp", "contig_bin.tsv") if args.output else sys.stdout
+    output_path = os.join(args.out, "temp", "contig_bin.tsv") if args.out else sys.stdout
     if output_path:
         try:
             output_file = open(output_path, 'w')
         except IOError as e:
-            log.error(f"Error opening output file '{args.output}': {e}")
+            log.error(f"Error opening output file '{args.out}': {e}")
             sys.exit(1)
     
     try:
