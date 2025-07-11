@@ -30,7 +30,32 @@ def load_pileup(path: str, min_coverage: int, min_fraction: float = 0):
     Load pileup file from path to pileup.bed output of modkit pileup
     """
     pileup = (
-        pl.scan_csv(path, separator = "\t", has_header = False)
+        pl.scan_csv(
+            path, 
+            separator = "\t", 
+            has_header = False,
+            schema = {
+                "column_1": pl.Utf8,
+                "column_2": pl.Int64,
+                "column_3": pl.Int64,
+                "column_4": pl.Utf8,
+                "column_5": pl.Int64,
+                "column_6": pl.Utf8,
+                "column_7": pl.Int64,
+                "column_8": pl.Int64,
+                "column_9": pl.Utf8,
+                "column_10": pl.Int64,
+                "column_11": pl.Float64,
+                "column_12": pl.Int64,
+                "column_13": pl.Int64,
+                "column_14": pl.Int64,
+                "column_15": pl.Int64,
+                "column_16": pl.Int64,
+                "column_17": pl.Int64,
+                "column_18": pl.Int64
+            }
+        )
+
         .filter(pl.col("column_10") > min_coverage)
         .filter(pl.col("column_11") > min_fraction*100)
         .filter(pl.col("column_10") / (pl.col("column_10") + pl.col("column_17")) > 0.3)
@@ -84,7 +109,31 @@ def load_low_coverage_positions(path_pileup: str, contig_mods_to_load: list[str]
     Load pileup file from path to pileup.bed output of modkit pileup
     """
     pileup = (
-        pl.scan_csv(path_pileup, separator = "\t", has_header = False)
+        pl.scan_csv(
+            path_pileup, 
+            separator = "\t", 
+            has_header = False,
+            # Schema overrides to match the expected columns
+            schema = {
+                "column_1": pl.Utf8,
+                "column_2": pl.Int64,
+                "column_3": pl.Int64,
+                "column_4": pl.Utf8,
+                "column_5": pl.Int64,
+                "column_6": pl.Utf8,
+                "column_7": pl.Int64,
+                "column_8": pl.Int64,
+                "column_9": pl.Utf8,
+                "column_10": pl.Int64,
+                "column_11": pl.Float64,
+                "column_12": pl.Int64,
+                "column_13": pl.Int64,
+                "column_14": pl.Int64,
+                "column_15": pl.Int64,
+                "column_16": pl.Int64,
+                "column_17": pl.Int64
+            }
+        )
         .filter(pl.col("column_10") <= min_coverage)
         .filter(pl.col("column_10") / (pl.col("column_10") + pl.col("column_17")) > 0.3)
         .select(["column_1", "column_2","column_4", "column_6", "column_10"])
