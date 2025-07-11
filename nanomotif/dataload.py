@@ -47,7 +47,7 @@ def load_pileup(path: str, min_coverage: int, min_fraction: float = 0):
     return Pileup(pileup)
 
 def extract_contig_mods_with_sufficient_information(pileup: Pileup, assembly: Assembly, min_mods_pr_contig: int, min_mod_frequency: int):
-    contigs_in_assembly = list(assembly.assembly.keys())
+    contigs_in_assembly = list(assembly.keys())
     pileup = pileup.filter(pl.col("contig").is_in(contigs_in_assembly))
 
     if pileup.is_empty():
@@ -60,8 +60,8 @@ def extract_contig_mods_with_sufficient_information(pileup: Pileup, assembly: As
         ).get_column("contig_mod").to_list()
 
     assm_lengths = pl.DataFrame({
-        "contig": list(assembly.assembly.keys()),
-        "length": [len(contig) for contig in assembly.assembly.values()]
+        "contig": list(assembly.keys()),
+        "length": [len(contig) for contig in assembly.values()]
     })
     contigmods_with_sufficient_mod_frequency = pileup \
         .group_by(["contig", "mod_type"]) \

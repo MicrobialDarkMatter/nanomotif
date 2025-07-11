@@ -1,5 +1,6 @@
 import nanomotif as nm
 from nanomotif.logger import configure_logger
+from nanomotif._version import __version__
 import logging as log
 import os
 import sys
@@ -10,7 +11,7 @@ import time
 import numpy as np
 import random
 import warnings
-from nanomotif._version import __version__
+import subprocess
 
 
 def shared_setup(args, working_dir):
@@ -72,7 +73,7 @@ def find_motifs(args, pl,  pileup = None, assembly = None, min_mods_pr_contig = 
     # Assembly
     if assembly is None:
         log.info("Loading assembly")
-        assembly = nm.load_assembly(args.assembly)
+        assembly = nm.fasta.load_fasta(args.assembly)
     
     pileup = pileup.pileup.with_columns([
         (pl.col("contig") + "_" + pl.col("mod_type")).alias("contig_mod")
@@ -225,7 +226,7 @@ def score_motifs(args, pl, pileup = None, assembly = None, motifs = None, min_mo
         pileup =  nm.load_pileup(args.pileup, min_fraction = args.threshold_methylation_general, min_coverage = args.threshold_valid_coverage)
     if assembly is None:
         log.info("Loading assembly")
-        assembly = nm.load_assembly(args.assembly)
+        assembly = nm.fasta.load_fasta(args.assembly)
     if motifs is None:
         log.info("Loading motifs")
         motifs = pl.read_csv(args.motifs, separator="\t")
@@ -290,8 +291,8 @@ def score_motifs(args, pl, pileup = None, assembly = None, motifs = None, min_mo
     return scored_all
 
 def bin_consensus(args, pl, pileup = None, assembly = None, motifs = None, motifs_scored = None):
-    bins = pl.read_csv(args.bins, separator="\t", has_header=False, infer_schema_length=10000) \
-        .rename({"column_1":"contig", "column_2":"bin"})
+    # Bin contig relationsship
+    bins = nm.fasta.generate_contig_bin(args)
     if motifs is None:
         log.info("Loading motifs-scored")
         motifs = pl.read_csv(args.motifs, separator="\t")
@@ -303,7 +304,7 @@ def bin_consensus(args, pl, pileup = None, assembly = None, motifs = None, motif
         pileup =  nm.load_pileup(args.pileup, min_fraction = args.threshold_methylation_general, min_coverage = args.threshold_valid_coverage)
     if assembly is None:
         log.info("Loading assembly")
-        assembly = nm.load_assembly(args.assembly)
+        assembly = nm.fasta.load_fasta(args.assembly)
 
     
     if any([item for item in motifs_scored.columns if "_complement" in item]):
@@ -353,6 +354,13 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
     import polars as pl
 
     log.info("Starting nanomotif motif finder")
+    # Bin contig relationsship
+    bin_contig = nm.fasta.generate_contig_bin(args)
+
+    # Assembly
+    if assembly is None:
+        log.info("Loading assembly")
+        assembly = nm.fasta.load_fasta(args.assembly)
     # Pileup 
     if pileup is None:
         log.info("Loading pileup")
@@ -364,16 +372,6 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
         else:
             pileup = nm.load_pileup(args.pileup, min_coverage = args.threshold_valid_coverage, min_fraction = args.threshold_methylation_general)
     
-
-    # Assembly
-    if assembly is None:
-        log.info("Loading assembly")
-        assembly = nm.load_assembly(args.assembly)
-
-    # Bin contig relationsship
-    bin_contig = pl.read_csv(args.bins, separator="\t", has_header=False, infer_schema_length=10000) \
-        .rename({"column_1":"contig", "column_2":"bin"}) \
-        .cast({'contig': pl.String, 'bin': pl.String})
 
     
     pileup = pileup.pileup.with_columns([
@@ -572,7 +570,7 @@ def motif_discovery_legacy(args, pl):
     else:
         pileup = nm.load_pileup(args.pileup,min_coverage = args.threshold_valid_coverage, min_fraction = args.threshold_methylation_general)
         log.debug("Loading assembly")
-    assembly = nm.load_assembly(args.assembly)
+    assembly = nm.fasta.load_fasta(args.assembly)
 
     # Find motifs
     log.info("Finding motifs")
@@ -844,9 +842,18 @@ def main():
         mtase_linker(args)
 
     elif args.command == "check_installation":
-        args.out = "nanomotif_install_check"
-        shared_setup(args, args.out)
-        check_install(args, pl)
+        
+        outdir = "tests/cli_test_motif_discovery"
+        cmd = [
+            "nanomotif", "motif_discovery",
+            "-t", "1",
+            "nanomotif/datasets/geobacillus-plasmids.assembly.fasta",
+            "nanomotif/datasets/geobacillus-plasmids.pileup.bed",
+            "-c", "nanomotif/datasets/geobacillus-contig-bin.tsv",
+            "--out", outdir
+        ]
+        subprocess.run(cmd)
+        shutil.rmtree(outdir, ignore_errors=True)
 
     else:
         parser.print_help()
