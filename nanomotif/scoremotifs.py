@@ -155,9 +155,9 @@ def score_sample_parallel(
     
     # Create a list of tasks (TODO: not have a list of all data)
     if na_position is not None:
-        tasks = [(contig, modtype, subpileup, na_position.filter((pl.col("contig")==contig) & (pl.col("mod_type") == modtype))) for (contig, modtype), subpileup in pileup.groupby(["contig", "mod_type"])]
+        tasks = [(contig, modtype, subpileup, na_position.filter((pl.col("contig")==contig) & (pl.col("mod_type") == modtype))) for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])]
     else:
-        tasks = [(contig, modtype, subpileup, None) for (contig, modtype), subpileup in pileup.groupby(["contig", "mod_type"])]
+        tasks = [(contig, modtype, subpileup, None) for (contig, modtype), subpileup in pileup.group_by(["contig", "mod_type"])]
     # Create a progress manager
     manager = multiprocessing.Manager()
     counter = manager.Value('i', 0)

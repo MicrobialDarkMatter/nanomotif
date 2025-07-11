@@ -123,7 +123,7 @@ def test_impute_contig_methylation_within_bin2():
 
 
     # Select and sort columns for comparison
-    output = output.select(expected_output.columns).sort(["bin", "contig", "motif_mod"]).drop("mean_bin_median")
+    output = output.select(expected_output.columns).sort(["bin", "contig", "motif_mod"])
     expected_output = expected_output.sort(["bin", "contig", "motif_mod"])
     print(output)
     print(expected_output)
