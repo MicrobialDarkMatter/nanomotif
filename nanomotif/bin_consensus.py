@@ -20,15 +20,15 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins, m
         motifs.select("contig", "motif", "mod_type", "mod_position", "directly_detected"), on=["contig", "motif", "mod_type", "mod_position"], how="left"
     ).with_columns(
         pl.col("directly_detected").fill_null(False)
-    ).groupby("bin", "motif", "mod_position", "mod_type") \
-            .apply(lambda group: group.filter(pl.col("directly_detected").any()))
+    ).group_by("bin", "motif", "mod_position", "mod_type") \
+            .map_groups(lambda group: group.filter(pl.col("directly_detected").any()))
     
     methylated_contig_mass = motifs_scored.filter(
             ((pl.col("n_mod") / (pl.col("n_mod") + pl.col("n_nomod"))) > minimum_contig_motif_methylation)
-        ).groupby(["bin", "motif", "mod_type", "mod_position"]).agg([
+        ).group_by(["bin", "motif", "mod_type", "mod_position"]).agg([
             (pl.col("n_mod") + pl.col("n_nomod")).sum().alias("n_motif_meth_contigs")
         ])
-    all_contig_mass = motifs_scored.groupby(["bin", "motif", "mod_type", "mod_position"]).agg([
+    all_contig_mass = motifs_scored.group_by(["bin", "motif", "mod_type", "mod_position"]).agg([
             (pl.col("n_mod") + pl.col("n_nomod")).sum().alias("n_motif_contigs"),
         ])
     result = methylated_contig_mass.join(all_contig_mass, on=["bin", "motif", "mod_type", "mod_position"]) \
@@ -46,13 +46,13 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins, m
             pl.col("motif").map_elements(lambda x: nm.seq.regex_to_iupac(x), return_dtype = pl.Utf8).alias("motif"),
             (pl.col("n_mod")  / (pl.col("n_mod") + pl.col("n_nomod"))).alias("mean")
         )
-    bin_motifs = contig_motifs.groupby("bin", "motif", "mod_position", "mod_type") \
+    bin_motifs = contig_motifs.group_by("bin", "motif", "mod_position", "mod_type") \
         .agg(
             pl.col("n_mod").sum().alias("n_mod_bin"),
             pl.col("n_nomod").sum().alias("n_nomod_bin"),
             pl.col("contig").count().alias("contig_count")
         ).with_columns( 
-            pl.col("motif").apply(lambda x: nm.utils.motif_type(x)).alias("motif_type"),
+            pl.col("motif").map_elements(lambda x: nm.utils.motif_type(x)).alias("motif_type"),
             (pl.col("n_mod_bin") / (pl.col("n_mod_bin") + pl.col("n_nomod_bin"))).alias("mean_methylation")
         )
     return bin_motifs
@@ -60,7 +60,7 @@ def within_bin_motifs_consensus(pileup, assembly, motifs, motifs_scored, bins, m
 def merge_bin_motifs(bin_motifs, bins, pileup, assembly):
     assert list(bin_motifs.schema.keys()) == ['bin', 'motif', 'mod_position', 'mod_type', 'n_mod_bin', 'n_nomod_bin', 'contig_count', 'motif_type', 'mean_methylation']
 
-    for (bin, mod_type), df in bin_motifs.groupby("bin", "mod_type"):
+    for (bin, mod_type), df in bin_motifs.group_by("bin", "mod_type"):
         log.debug(f"Starting motif merge for bin {bin} and mod_type {mod_type}")
         contig_count = df.get_column("contig_count").max()
         
