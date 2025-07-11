@@ -11,6 +11,7 @@ import time
 import numpy as np
 import random
 import warnings
+import subprocess
 
 
 def shared_setup(args, working_dir):
@@ -290,8 +291,8 @@ def score_motifs(args, pl, pileup = None, assembly = None, motifs = None, min_mo
     return scored_all
 
 def bin_consensus(args, pl, pileup = None, assembly = None, motifs = None, motifs_scored = None):
-    bins = pl.read_csv(args.bins, separator="\t", has_header=False, infer_schema_length=10000) \
-        .rename({"column_1":"contig", "column_2":"bin"})
+    # Bin contig relationsship
+    bins = nm.fasta.generate_contig_bin(args)
     if motifs is None:
         log.info("Loading motifs-scored")
         motifs = pl.read_csv(args.motifs, separator="\t")
@@ -841,9 +842,18 @@ def main():
         mtase_linker(args)
 
     elif args.command == "check_installation":
-        args.out = "nanomotif_install_check"
-        shared_setup(args, args.out)
-        check_install(args, pl)
+        
+        outdir = "tests/cli_test_motif_discovery"
+        cmd = [
+            "nanomotif", "motif_discovery",
+            "-t", "1",
+            "nanomotif/datasets/geobacillus-plasmids.assembly.fasta",
+            "nanomotif/datasets/geobacillus-plasmids.pileup.bed",
+            "-c", "nanomotif/datasets/geobacillus-contig-bin.tsv",
+            "--out", outdir
+        ]
+        subprocess.run(cmd)
+        shutil.rmtree(outdir, ignore_errors=True)
 
     else:
         parser.print_help()

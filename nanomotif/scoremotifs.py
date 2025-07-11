@@ -174,7 +174,7 @@ def score_sample_parallel(
     results = pool.starmap(worker_function, [(
         task, 
         counter, lock, 
-        assembly.assembly[task[0]].sequence, motifs,
+        assembly[task[0]], motifs,
         log_dir, verbose, seed, save_motif_positions, positions_outdir
         ) for task in tasks])
     results = [result for result in results if result is not None]

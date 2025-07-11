@@ -33,6 +33,7 @@ def create_parser():
         help="path to the assembly file.")
     parser_find_motifs.add_argument("pileup", type=str, 
         help="path to the modkit pileup file.")   
+    
     parser_find_motifs.add_argument("--out", type=str, 
         help="path to the output folder", default="nanomotif")
     parser_find_motifs.add_argument("-t", "--threads", type=int, default=1, 
@@ -69,6 +70,9 @@ def create_parser():
         help="path to the assembly file.")
     parser_score_motifs.add_argument("pileup", type=str, 
         help="path to the modkit pileup file.")      
+    parser_score_motifs.add_argument("motifs", type=str, 
+        help="path to the motifs file.")
+    
     parser_score_motifs.add_argument("--out", type=str, 
         help="path to the output folder", default="nanomotif")
     parser_score_motifs.add_argument("-t", "--threads", type=int, default=1, 
@@ -79,32 +83,30 @@ def create_parser():
         help="seed for random number generator. Default: %(default)s")
     parser_score_motifs.add_argument("--threshold_methylation_general", type=float, default=0.70, 
         help="minimum fraction of reads that must be methylated at a position for the position to be methylated. These position are used for counting number of methylated position of a motif. Default: %(default)s")
-    parser_score_motifs.add_argument("motifs", type=str, 
-        help="path to the motifs file.")
     parser_score_motifs.add_argument("--save-motif-positions", action="store_true", 
         help="save motif positions in the output folder")
     parser_score_motifs.add_argument("--threshold_valid_coverage", type=int, default=5, 
         help="minimum valid base coverage for a position to be considered. Default: %(default)s")
-    
     ###########################################################################
     # Bin consensus
     parser_bin_consensus = subparsers.add_parser(
         'bin_consensus', 
         help="Indentifies highly methylated motifs in bins"
     )
-    parser_bin_consensus.add_argument("motifs", type=str, 
-        help="path to the motifs file.")
-    add_contig_bin_arguments(parser_bin_consensus)
-    parser_bin_consensus.add_argument("motifs_scored", metavar="motifs-scored", type=str, 
-        help="path to the motif-scored file.")
-    parser_bin_consensus.add_argument("--threshold_valid_coverage", type=int, default=5, 
-        help="minimum valid base coverage for a position to be considered. Default: %(default)s")
-    parser_bin_consensus.add_argument("--min_motifs_bin", type=int, default=50, 
-        help="minimum number of times a motif has to have been oberserved in a bin. Default: %(default)s")
     parser_bin_consensus.add_argument("assembly", type=str, 
         help="path to the assembly file.")
     parser_bin_consensus.add_argument("pileup", type=str, 
-        help="path to the modkit pileup file.")      
+        help="path to the modkit pileup file.")   
+    parser_bin_consensus.add_argument("motifs", type=str, 
+        help="path to the motifs file.")
+    parser_bin_consensus.add_argument("motifs_scored", metavar="motifs-scored", type=str, 
+        help="path to the motif-scored file.")
+    add_contig_bin_arguments(parser_bin_consensus)
+
+    parser_bin_consensus.add_argument("--threshold_valid_coverage", type=int, default=5, 
+        help="minimum valid base coverage for a position to be considered. Default: %(default)s")
+    parser_bin_consensus.add_argument("--min_motifs_bin", type=int, default=50, 
+        help="minimum number of times a motif has to have been oberserved in a bin. Default: %(default)s")    
     parser_bin_consensus.add_argument("--out", type=str, 
         help="path to the output folder", default="nanomotif")
     parser_bin_consensus.add_argument("-t", "--threads", type=int, default=1, 
@@ -127,6 +129,7 @@ def create_parser():
     parser_find_motifs_bin.add_argument("pileup", type=str, 
         help="path to the modkit pileup file.") 
     add_contig_bin_arguments(parser_find_motifs_bin)
+    
     parser_find_motifs_bin.add_argument("--out", type=str, 
         help="path to the output folder", default="nanomotif")
     parser_find_motifs_bin.add_argument("-t", "--threads", type=int, default=1, 
@@ -281,7 +284,7 @@ def create_parser():
 
     ###########################################################################
     # Check installation
-    parser_check_installation = subparsers.add_parser('check_installation', parents=[parser_find_motifs_bin], add_help=False, help="Performs small test run to verify that the installation is correct.")
+    parser_check_installation = subparsers.add_parser('check_installation', help="Performs small test run to verify that the installation is correct.")
     
     
     return parser
