@@ -4,6 +4,27 @@ from .seq import Assembly
 from .feature import Pileup
 import sys
 
+PILEUP_SCHEMA = {
+    "column_1": pl.Utf8,
+    "column_2": pl.Int64,
+    "column_3": pl.Int64,
+    "column_4": pl.Utf8,
+    "column_5": pl.Int64,
+    "column_6": pl.Utf8,
+    "column_7": pl.Int64,
+    "column_8": pl.Int64,
+    "column_9": pl.Utf8,
+    "column_10": pl.Int64,
+    "column_11": pl.Float64,
+    "column_12": pl.Int64,
+    "column_13": pl.Int64,
+    "column_14": pl.Int64,
+    "column_15": pl.Int64,
+    "column_16": pl.Int64,
+    "column_17": pl.Int64,
+    "column_18": pl.Int64
+}
+
 def load_fasta(path, trim_names=False, trim_character=" ") -> dict:
     """
     Reads a fasta file and returns a dictionary with the contig names as 
@@ -34,26 +55,7 @@ def load_pileup(path: str, min_coverage: int, min_fraction: float = 0):
             path, 
             separator = "\t", 
             has_header = False,
-            schema = {
-                "column_1": pl.Utf8,
-                "column_2": pl.Int64,
-                "column_3": pl.Int64,
-                "column_4": pl.Utf8,
-                "column_5": pl.Int64,
-                "column_6": pl.Utf8,
-                "column_7": pl.Int64,
-                "column_8": pl.Int64,
-                "column_9": pl.Utf8,
-                "column_10": pl.Int64,
-                "column_11": pl.Float64,
-                "column_12": pl.Int64,
-                "column_13": pl.Int64,
-                "column_14": pl.Int64,
-                "column_15": pl.Int64,
-                "column_16": pl.Int64,
-                "column_17": pl.Int64,
-                "column_18": pl.Int64
-            }
+            schema = PILEUP_SCHEMA
         )
 
         .filter(pl.col("column_10") > min_coverage)
@@ -114,25 +116,7 @@ def load_low_coverage_positions(path_pileup: str, contig_mods_to_load: list[str]
             separator = "\t", 
             has_header = False,
             # Schema overrides to match the expected columns
-            schema = {
-                "column_1": pl.Utf8,
-                "column_2": pl.Int64,
-                "column_3": pl.Int64,
-                "column_4": pl.Utf8,
-                "column_5": pl.Int64,
-                "column_6": pl.Utf8,
-                "column_7": pl.Int64,
-                "column_8": pl.Int64,
-                "column_9": pl.Utf8,
-                "column_10": pl.Int64,
-                "column_11": pl.Float64,
-                "column_12": pl.Int64,
-                "column_13": pl.Int64,
-                "column_14": pl.Int64,
-                "column_15": pl.Int64,
-                "column_16": pl.Int64,
-                "column_17": pl.Int64
-            }
+            schema = PILEUP_SCHEMA
         )
         .filter(pl.col("column_10") <= min_coverage)
         .filter(pl.col("column_10") / (pl.col("column_10") + pl.col("column_17")) > 0.3)
