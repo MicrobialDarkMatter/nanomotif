@@ -23,6 +23,15 @@ class TestPileupLoad:
         assert pileup.pileup["fraction_mod"].dtype == pl.Float64
         assert pileup.pileup["Nvalid_cov"].dtype == pl.Int64
 
+    def test_exotic_seq_name_format(self):
+        pileup = nm.load_pileup("nanomotif/datasets/test_pileup.bed", min_coverage=5, min_fraction=0.5)
+        assert pileup.pileup["contig"].dtype == pl.Utf8
+        assert pileup.pileup["position"].dtype == pl.Int64
+        assert pileup.pileup["mod_type"].dtype == pl.Utf8
+        assert pileup.pileup["strand"].dtype == pl.Utf8
+        assert pileup.pileup["fraction_mod"].dtype == pl.Float64
+        assert pileup.pileup["Nvalid_cov"].dtype == pl.Int64
+
     def test_fraction_filter(self):
         pileup_path = nm.datasets.geobacillus_plasmids_pileup_path()
         pileup = nm.dataload.load_pileup(pileup_path, min_fraction=0.5, min_coverage=5)
