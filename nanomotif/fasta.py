@@ -139,7 +139,13 @@ def generate_contig_bin(args):
         all_results.extend(results)
     
     # Write output
-    output_path = os.join(args.out, "temp", "contig_bin.tsv") if args.out else sys.stdout
+    output_path = os.path.join(args.out, "temp", "contig_bin.tsv") if args.out else sys.stdout
+    if not os.path.exists(os.path.dirname(output_path)):
+        try:
+            os.makedirs(os.path.dirname(output_path))
+        except OSError as e:
+            log.error(f"Error creating output directory: {e}")
+            sys.exit(1)
     if output_path:
         try:
             output_file = open(output_path, 'w')

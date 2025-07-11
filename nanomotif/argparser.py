@@ -45,7 +45,7 @@ def create_parser():
     parser_find_motifs.add_argument("--threshold_methylation_general", type=float, default=0.70, 
         help="minimum fraction of reads that must be methylated at a position for the position to be methylated. These position are used for counting number of methylated position of a motif. Default: %(default)s")
     parser_find_motifs.add_argument("--search_frame_size", type=int, default=40, 
-        help="length of the sequnces sampled around confident methylatyion sites. Default: %(default)s")
+        help="length of the sequences sampled around confident methylation sites. Default: %(default)s")
     parser_find_motifs.add_argument("--threshold_methylation_confident", type=float, default=0.80, 
         help="minimum fraction of reads that must be methylated at a position for the position to be considered confiently methylated. These position are used to search for candidate motifs. Default: %(default)s")
     parser_find_motifs.add_argument("--threshold_valid_coverage", type=int, default=5, 
@@ -141,7 +141,7 @@ def create_parser():
     parser_find_motifs_bin.add_argument("--threshold_methylation_general", type=float, default=0.70, 
         help="minimum fraction of reads that must be methylated at a position for the position to be methylated. These position are used for counting number of methylated position of a motif. Default: %(default)s")
     parser_find_motifs_bin.add_argument("--search_frame_size", type=int, default=40, 
-        help="length of the sequnces sampled around confident methylatyion sites. Default: %(default)s")
+        help="length of the sequnces sampled around confident methylation sites. Default: %(default)s")
     parser_find_motifs_bin.add_argument("--threshold_methylation_confident", type=float, default=0.80, 
         help="minimum fraction of reads that must be methylated at a position for the position to be considered confiently methylated. These position are used to search for candidate motifs. Default: %(default)s")
     parser_find_motifs_bin.add_argument("--threshold_valid_coverage", type=int, default=5, 
