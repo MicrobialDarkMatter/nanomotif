@@ -12,7 +12,7 @@ import polars.testing
 import numpy as np
 
 
-class TestMethylatedMotifOccourances:
+class TestMethylatedMotifOccurrences:
     def test_known_motif_sequence(self):
         motif = nm.motif.Motif('ACG', 0)
         sequence = 'TACGGACGCCACG'
