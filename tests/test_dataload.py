@@ -1,4 +1,4 @@
-from nanomotif.candidate import *
+from nanomotif.motif import *
 from nanomotif.constants import *
 import nanomotif as nm
 import pytest

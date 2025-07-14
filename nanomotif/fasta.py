@@ -6,6 +6,7 @@ from .seq import Assembly
 from .feature import Pileup
 import sys
 import os
+from nanomotif.seq import DNAsequence
 
 def load_fasta(path, trim_names=False, trim_character=" ") -> dict:
     """
@@ -26,6 +27,9 @@ def load_fasta(path, trim_names=False, trim_character=" ") -> dict:
                 data[active_sequence_name] = ''
         else:
             data[active_sequence_name] += line
+    # Convert sequences to DNAsequence objects
+    for key in data:
+        data[key] = DNAsequence(data[key])
     return data
 
 

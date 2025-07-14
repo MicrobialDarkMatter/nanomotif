@@ -1,7 +1,7 @@
 from nanomotif.constants import *
-from nanomotif.candidate import Motif
+from nanomotif.motif import Motif
 from nanomotif.seq import DNAsequence, DNAarray
-from nanomotif.evaluate import MotifSearcher
+from nanomotif.find_motifs import MotifSearcher
 import nanomotif as nm
 import pytest
 from hypothesis import given, strategies as st
@@ -14,7 +14,7 @@ import numpy as np
 
 class TestMethylatedMotifOccourances:
     def test_known_motif_sequence(self):
-        motif = nm.candidate.Motif('ACG', 0)
+        motif = nm.motif.Motif('ACG', 0)
         sequence = 'TACGGACGCCACG'
         methylated_positions = np.array([1, 5])
 
@@ -26,7 +26,7 @@ class TestMethylatedMotifOccourances:
         np.testing.assert_array_equal(result[1], expected_nonmethylated)
 
     def test_known_motif_sequence_no_methylated(self):
-        motif = nm.candidate.Motif('ACG', 0)
+        motif = nm.motif.Motif('ACG', 0)
         sequence = 'TACGGACGCCACG'
         methylated_positions = np.array([])
 
