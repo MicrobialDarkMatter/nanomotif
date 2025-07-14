@@ -1,7 +1,7 @@
 from nanomotif.constants import *
-from nanomotif.candidate import Motif
+from nanomotif.motif import Motif
 from nanomotif.seq import DNAsequence, DNAarray
-from nanomotif.evaluate import MotifSearcher
+from nanomotif.find_motifs import MotifSearcher
 import nanomotif as nm
 import pytest
 from hypothesis import given, strategies as st
@@ -12,28 +12,30 @@ import polars.testing
 import numpy as np
 
 
-class TestMethylatedMotifOccourances:
+class TestMethylatedMotifOccurrences:
     def test_known_motif_sequence(self):
-        motif = nm.candidate.Motif('ACG', 0)
+        motif = nm.motif.Motif('ACG', 0)
         sequence = 'TACGGACGCCACG'
         methylated_positions = np.array([1, 5])
+        non_methylated_positions = np.array([10])
 
         expected_methylated = np.array([1, 5])
         expected_nonmethylated = np.array([10])
         
-        result = nm.evaluate.methylated_motif_occourances(motif, sequence, methylated_positions)
+        result = nm.find_motifs.methylated_motif_occourances(motif, sequence, methylated_positions, non_methylated_positions)
         np.testing.assert_array_equal(result[0], expected_methylated)
         np.testing.assert_array_equal(result[1], expected_nonmethylated)
 
     def test_known_motif_sequence_no_methylated(self):
-        motif = nm.candidate.Motif('ACG', 0)
+        motif = nm.motif.Motif('ACG', 0)
         sequence = 'TACGGACGCCACG'
         methylated_positions = np.array([])
+        non_methylated_positions = np.array([1, 10])
 
         expected_methylated = np.array([])
-        expected_nonmethylated = np.array([1, 5, 10])
+        expected_nonmethylated = np.array([1, 10])
         
-        result = nm.evaluate.methylated_motif_occourances(motif, sequence, methylated_positions)
+        result = nm.find_motifs.methylated_motif_occourances(motif, sequence, methylated_positions, non_methylated_positions)
         np.testing.assert_array_equal(result[0], expected_methylated)
         np.testing.assert_array_equal(result[1], expected_nonmethylated)
 
@@ -52,12 +54,14 @@ class TestMotifSearcher:
 
         # Create MotifSearcher instance
         searcher = MotifSearcher(
-            root_motif=root_motif,
-            contig_sequence=contig_sequence,
-            contig_pssm=contig_pssm,
-            contig_pileup=contig_pileup,
-            methylation_sequences=methylation_sequences,
-            padding=padding
+            root_motif,
+            contig_sequence,
+            contig_pssm,
+            contig_pileup,
+            methylation_sequences,
+            padding,
+            0.7,
+            0.3
         )
 
         # Check that attributes are set correctly
@@ -80,12 +84,14 @@ class TestMotifSearcher:
 
         # Create MotifSearcher instance
         searcher = MotifSearcher(
-            root_motif=root_motif,
-            contig_sequence=contig_sequence,
-            contig_pssm=contig_pssm,
-            contig_pileup=contig_pileup,
-            methylation_sequences=methylation_sequences,
-            padding=padding
+            root_motif,
+            contig_sequence,
+            contig_pssm,
+            contig_pileup,
+            methylation_sequences,
+            padding,
+            0.7,
+            0.3
         )
 
         class MockModel:
@@ -117,12 +123,14 @@ class TestMotifSearcher:
 
         # Create MotifSearcher instance
         searcher = MotifSearcher(
-            root_motif=root_motif,
-            contig_sequence=contig_sequence,
-            contig_pssm=contig_pssm,
-            contig_pileup=contig_pileup,
-            methylation_sequences=methylation_sequences,
-            padding=padding
+            root_motif,
+            contig_sequence,
+            contig_pssm,
+            contig_pileup,
+            methylation_sequences,
+            padding,
+            0.7,
+            0.3
         )
 
         class MockModel:
@@ -146,58 +154,3 @@ class TestMotifSearcher:
         expected_score = 0.6 * 1 * 0.2
 
         assert score == pytest.approx(expected_score)
-
-class TestProcessSubpileup:
-    def find_motifs(self):
-        contig = "contig_3"
-        min_kl_divergence = 0.1
-        padding = 20
-        minimum_methylation_fraction_confident = 0.75
-        modtype = "a"
-
-        pileup_path = nm.datasets.geobacillus_plasmids_pileup_path()
-        pileup = nm.dataload.load_pileup(pileup_path, min_fraction=0.5, min_coverage=5)
-        subpileup = pileup.pileup.filter(pl.col("mod_type") == modtype)
-        assembly = nm.datasets.geobacillus_plasmids_assembly()
-
-        result = nm.evaluate.process_subpileup(contig, modtype, subpileup, assembly, min_kl_divergence, padding, minimum_methylation_fraction_confident, False)
-        return result
-
-    def test_no_errors(self):
-        self.find_motifs()
-    
-    def test_correct_output(self):
-        result = self.find_motifs()
-        expected_output = pl.DataFrame({
-            "sequence":[
-                "...................GATC..................", 
-                "................ACCCA....................", 
-                "................CCAAAT...................", 
-                "...............G[AG].GAAG[TC].................."],
-            "score":[1.97339, 1.399304, 1.388421, 0.572978],
-            "contig":["contig_3", "contig_3", "contig_3", "contig_3"],
-            "mod_type":["a", "a", "a", "a"],
-            "alpha":[706, 65, 80, 84],
-            "beta":[3, 1, 1, 1]
-        })
-        print(result)
-        polars.testing.assert_frame_equal(result, expected_output)
-
-
-class TestProcessSampleParallel():
-    def run_function(self):
-        pileup_path = nm.datasets.geobacillus_plasmids_pileup_path()
-        pileup = nm.dataload.load_pileup(pileup_path, min_fraction=0.5, min_coverage=5)
-        pileup = pileup.pileup
-        assembly = nm.datasets.geobacillus_plasmids_assembly()
-
-        return nm.evaluate.process_sample_parallel(assembly, pileup, threads=2, seed=1)
-    
-    def test_no_errors(self):
-        self.run_function()
-
-    def test_reprocuible_result(self):
-        res1 = self.run_function().drop("model").sort(["contig", "mod_type", "motif"])
-        res2 = self.run_function().drop("model").sort(["contig", "mod_type", "motif"])
-        polars.testing.assert_frame_equal(res1, res2)
-

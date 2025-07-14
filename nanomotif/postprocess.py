@@ -13,7 +13,7 @@ def remove_noisy_motifs(motif_df):
     assert len(motif_df) > 0
     motif_strings = motif_df.get_column("motif").to_list()
     positions = motif_df.get_column("mod_position").to_list()
-    motifs = [nm.candidate.Motif(motif_string, pos) for motif_string, pos in zip(motif_strings, positions)]
+    motifs = [nm.motif.Motif(motif_string, pos) for motif_string, pos in zip(motif_strings, positions)]
     clean_motifs = []
     for motif in motifs:
         if not motif.have_isolated_bases(isolation_size = 3):
@@ -40,10 +40,10 @@ def remove_child_motifs(motifs):
 
 def remove_sub_motifs(motif_df):
     motif_df_clean = []
-    for contig, df in motif_df.groupby("contig"):
+    for contig, df in motif_df.group_by("contig"):
         motif_strings = df.get_column("motif").to_list()
         positions = df.get_column("mod_position").to_list()
-        motifs = [nm.candidate.Motif(motif_string, pos) for motif_string, pos in zip(motif_strings, positions)]
+        motifs = [nm.motif.Motif(motif_string, pos) for motif_string, pos in zip(motif_strings, positions)]
         parent_motifs = remove_child_motifs(motifs)
         df_clean = df.filter(col("motif").is_in(parent_motifs))
         motif_df_clean.append(df_clean)
@@ -52,28 +52,28 @@ def remove_sub_motifs(motif_df):
 
 def merge_motifs_in_df(motif_df, pileup, assembly, mean_shift_threshold = -0.2):
     new_df = []
-    for (contig, mod_type), df in motif_df.groupby("contig", "mod_type"):
+    for (contig, mod_type), df in motif_df.group_by("contig", "mod_type"):
         # Get list of motifs
         motif_seq = df["motif"].to_list()
         motif_pos = df["mod_position"].to_list()
-        motifs = [nm.candidate.Motif(seq, pos) for seq, pos in zip(motif_seq, motif_pos)]
+        motifs = [nm.motif.Motif(seq, pos) for seq, pos in zip(motif_seq, motif_pos)]
 
         # Merge motifs
-        merged_motifs = nm.candidate.merge_motifs(motifs)
+        merged_motifs = nm.motif.merge_motifs(motifs)
         all_merged_motifs = []
         all_premerge_motifs = []
         # Check mean shift of premerge motifs to merged motif is high enough
         for cluster, motifs in merged_motifs.items():
             merged_motif = motifs[0]
             premerge_motifs = motifs[1]
-            merge_mean = nm.evaluate.motif_model_contig(
+            merge_mean = nm.find_motifs.motif_model_contig(
                 pileup.filter((col("contig") == contig) & (col("mod_type") == mod_type)), 
                 assembly.assembly[contig].sequence,
                 merged_motif
             ).mean()
             pre_merge_means = []
             for pre_merge_motif in premerge_motifs:
-                pre_merge_means.append(nm.evaluate.motif_model_contig(
+                pre_merge_means.append(nm.find_motifs.motif_model_contig(
                     pileup.filter((col("contig") == contig) & (col("mod_type") == mod_type)), 
                     assembly.assembly[contig].sequence,
                     pre_merge_motif
@@ -98,7 +98,7 @@ def merge_motifs_in_df(motif_df, pileup, assembly, mean_shift_threshold = -0.2):
         new_df.append(single_df)
         merged_df = []
         for motif in all_merged_motifs:
-            merged_model = nm.evaluate.motif_model_contig(
+            merged_model = nm.find_motifs.motif_model_contig(
                 pileup.filter((col("contig") == contig) & (col("mod_type") == mod_type)), 
                 assembly.assembly[contig].sequence,
                 motif
@@ -130,11 +130,11 @@ def join_motif_complements(motif_df):
         "contig", "mod_type", "motif", "mod_position", "n_mod", "n_nomod"
     ])
     motif_df = motif_df.with_columns([
-        pl.col("motif").map_elements(lambda x: nm.candidate.regex_to_iupac(x)).alias("motif")
+        pl.col("motif").map_elements(lambda x: nm.motif.regex_to_iupac(x)).alias("motif")
     ]).with_columns([
         pl.col("motif").map_elements(lambda x: nm.utils.motif_type(x)).alias("motif_type")
     ]).with_columns([
-        pl.col("motif").map_elements(lambda x: nm.candidate.reverse_compliment(x)).alias("motif_complement")
+        pl.col("motif").map_elements(lambda x: nm.motif.reverse_compliment(x)).alias("motif_complement")
     ])
     
     

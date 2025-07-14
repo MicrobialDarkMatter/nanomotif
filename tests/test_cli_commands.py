@@ -25,54 +25,6 @@ def test_find_motifs():
     assert result.returncode == 0, "CLI tool did not exit successfully"
 
 
-def test_score_motifs():
-    """
-    """
-    outdir = "tests/cli_test_score_motifs"
-    
-    cmd = [
-        "nanomotif", "score_motifs",
-        "nanomotif/datasets/geobacillus-plasmids.assembly.fasta",
-        "nanomotif/datasets/geobacillus-plasmids.pileup.bed",
-        "nanomotif/datasets/geobacillus-plasmids.motifs.tsv",
-        "-t", "1",
-        "--out", outdir
-    ]
-    
-    result = subprocess.run(cmd)
-    assert result.returncode == 0, "CLI tool did not exit successfully"
-    
-    # Check that the CLI tool executed successfully
-    shutil.rmtree(outdir)
-
-
-    #TODO: remove outputdir
-
-def test_bin_consensus():
-    """
-    """
-    outdir = "tests/cli_test_bin_consensus"
-    
-    cmd = [
-        "nanomotif", "bin_consensus",
-        "nanomotif/datasets/geobacillus-plasmids.assembly.fasta",
-        "nanomotif/datasets/geobacillus-plasmids.pileup.bed",
-        "nanomotif/datasets/geobacillus-plasmids.motifs.tsv",
-        "nanomotif/datasets/geobacillus-plasmids.motifs-scored.tsv",
-        "-c", "nanomotif/datasets/geobacillus-contig-bin.tsv",
-        "-t", "1",
-        "--out", outdir
-    ]
-    
-    result = subprocess.run(cmd)
-    
-    # Check that the CLI tool executed successfully
-    shutil.rmtree(outdir)
-    assert result.returncode == 0, "CLI tool did not exit successfully"
-
-
-    #TODO: remove outputdir
-    #
 
 def test_motif_discovery():
     """

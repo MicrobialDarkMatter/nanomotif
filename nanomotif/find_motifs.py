@@ -30,8 +30,8 @@ def set_polars_env():
 
 
 
-def process_binned_sample_parallel(
-        assembly, pileup, bin_contig,
+def process_contig_sample_parallel(
+        assembly, pileup,
         threads = 2,
         search_frame_size = 40,
         methylation_threshold_low = 0.3,
@@ -64,21 +64,19 @@ def process_binned_sample_parallel(
     # Infer padding size from candidate_size
     padding = search_frame_size // 2
     
-    pileup = pileup.join(bin_contig, on="contig", how = "inner")
 
     log.debug("Partitining pileups to dict")
-    pileup_dict = pileup.partition_by(["bin", "mod_type"], as_dict=True)
+    pileup_dict = pileup.partition_by(["contig", "mod_type"], as_dict=True)
 
     def task_generator(pileup_dict):
-        for (bin_name, modtype) in pileup_dict:
-            subpileup = pileup_dict[(bin_name, modtype)]
-            bin_contig_dict = {
-                bin_name: subpileup.get_column("contig").unique().to_list()
-            }
-            yield (bin_contig_dict, modtype, subpileup, counter, lock, assembly, 
-                       minimum_kl_divergence, search_frame_size // 2,
-                       log_dir, verbose, seed,
-                       methylation_threshold_low, methylation_threshold_high)
+        for (contig_name, modtype) in pileup_dict:
+            subpileup = pileup_dict[(contig_name, modtype)]
+            yield (
+                contig_name, modtype, subpileup, counter, lock, assembly, 
+                minimum_kl_divergence, search_frame_size // 2,
+                log_dir, verbose, seed,
+                methylation_threshold_low, methylation_threshold_high
+            )
 
     # Create a progress manager
     manager = multiprocessing.Manager()
@@ -90,7 +88,7 @@ def process_binned_sample_parallel(
 
     # Create a process for the progress bar
     log.debug("Counting number of tasks")
-    total_tasks = len(pileup.select("bin", "mod_type").unique())
+    total_tasks = len(pileup.select("contig", "mod_type").unique())
 
     log.debug("Starting progress bar")
     progress_bar_process = multiprocessing.Process(target=update_progress_bar, args=(counter, total_tasks, True))
@@ -149,12 +147,11 @@ def worker_function(
     - padding (int): The padding to use for the motif.
     """
     (
-        bin_contig, modtype, subpileup, counter, lock, assembly, 
+        contig_name, modtype, subpileup, counter, lock, assembly, 
         min_kl_divergence, padding, 
         log_dir, verbose, seed, 
         low_meth_threshold, high_meth_threshold
     ) = args
-    bin_name = list(bin_contig.keys())[0]
     set_seed(seed=seed)
     warnings.filterwarnings("ignore")
     process_id = os.getpid()
@@ -165,40 +162,38 @@ def worker_function(
 
 
     result = process_subpileup(
-        bin_contig, modtype, subpileup, assembly, 
+        contig_name, modtype, subpileup, assembly, 
         min_kl_divergence, padding, 
         low_meth_threshold, high_meth_threshold
     )
     with lock:
         counter.value += 1
-        log.debug(f"Task for ({bin_name}, {modtype}) complete; progress: {counter.value}")
+        log.debug(f"Task for ({contig_name}, {modtype}) complete; progress: {counter.value}")
     return result
 
 
 
 def process_subpileup(
-        bin_contig: dict, modtype, bin_pileup, assembly, 
+        contig_name, modtype, contig_pileup, assembly, 
         min_kl_divergence, padding, 
         low_meth_threshold, high_meth_threshold
     ):
     """
     Process a single subpileup for one bin and one modtype
     """
-    bin_name = list(bin_contig.keys())[0]
-    log.info(f"Processing {bin_name} {modtype}")
-    log.debug(f"Contigs in bin: {list(bin_contig[bin_name])}")
-    assert bin_pileup is not None, "Subpileup is None"
-    assert len(bin_pileup) > 0, "Subpileup is empty"
+    log.info(f"Processing {contig_name} {modtype}")
+    assert contig_pileup is not None, "Subpileup is None"
+    assert len(contig_pileup) > 0, "Subpileup is empty"
     assert assembly is not None, "Assembly is None"
     assert min_kl_divergence >= 0, "min_kl_divergence must be greater than 0"
-    assert bin_pileup.get_column("mod_type").unique().to_list() == [modtype], "subpileup modtype does not match modtype"
+    assert contig_pileup.get_column("mod_type").unique().to_list() == [modtype], "subpileup modtype does not match modtype"
 
-    log.debug(f"Subpileup for {bin_name} {modtype}: {bin_pileup}")
-    bin_sequences = {contig: assembly[contig] for contig in bin_contig[bin_name]}
+    log.debug(f"Subpileup for {contig_name} {modtype}: {contig_pileup}")
+    contig_sequences = {contig: assembly[contig] for contig in [contig_name]}
 
     motif_graph, best_candidates = find_best_candidates(
-        bin_pileup, 
-        bin_sequences, 
+        contig_pileup, 
+        contig_sequences, 
         modtype,
         low_meth_threshold=low_meth_threshold,
         high_meth_threshold=high_meth_threshold,
@@ -215,7 +210,7 @@ def process_subpileup(
         return None
     else:
         identified_motifs = identified_motifs.with_columns(
-            pl.lit(bin_name).alias("bin"),
+            pl.lit(contig_name).alias("contig"),
             pl.lit(modtype).alias("mod_type")
         ).with_columns([
             pl.col("model").map_elements(lambda x: x._alpha).alias("alpha"),
@@ -232,8 +227,8 @@ def process_subpileup(
 # Motif candidate state space 
 
 def find_best_candidates(        
-        bin_pileup: pl.DataFrame, 
-        bin_sequences: dict[str, DNAsequence],
+        contig_pileup: pl.DataFrame, 
+        contig_sequences: dict[str, DNAsequence],
         mod_type: str,
         low_meth_threshold: float,
         high_meth_threshold: float,
@@ -247,19 +242,19 @@ def find_best_candidates(
     """
     Find the best motif candidates in a sequence.
     """
-    subpileup_confident = bin_pileup.filter(pl.col("fraction_mod") >= high_meth_threshold)
+    subpileup_confident = contig_pileup.filter(pl.col("fraction_mod") >= high_meth_threshold)
     methylation_sequences = None
     background_sequences = None
-    for contig in bin_pileup.get_column("contig").unique():
+    for contig in contig_pileup.get_column("contig").unique():
         subpileup_confident_contig = subpileup_confident.filter(pl.col("contig") == contig)
-        contig_sequence = bin_sequences[contig]
+        contig_sequence = contig_sequences[contig]
         contig_length = len(contig_sequence)
         n_samples = int(max(contig_length/400, 100))
         # Extract the sequences for confidently methylated positions
         index_plus = subpileup_confident_contig.filter(pl.col("strand") == "+").get_column("position").to_list()
         index_minus = subpileup_confident_contig.filter(pl.col("strand") == "-").get_column("position").to_list()
         
-        # Sample sequences in bin to get background for KL-divergence
+        # Sample sequences in contig to get background for KL-divergence
         log.debug(f"Sampling {n_samples} sequences from {contig}")
         contig_sequences_sample = contig_sequence.sample_n_subsequences(
             padding * 2 + 1, n_samples
@@ -284,7 +279,7 @@ def find_best_candidates(
         else:
             methylation_sequences = methylation_sequences + methylation_sequences_contig
     methylation_sequences = methylation_sequences.convert_to_DNAarray()
-    bin_pssm = background_sequences.pssm()
+    contig_pssm = background_sequences.pssm()
 
     total_sequences = methylation_sequences.shape[0]
     root_motif = Motif("." * padding + MOD_TYPE_TO_CANONICAL[mod_type] + "." * padding, padding)
@@ -302,9 +297,9 @@ def find_best_candidates(
         # Find the initial guess within the tree
         searcher = MotifSearcher(
             root_motif, 
-            bin_sequences, 
-            bin_pssm,
-            bin_pileup, 
+            contig_sequences, 
+            contig_pssm,
+            contig_pileup, 
             methylation_sequences_clone, 
             padding,
             high_meth_threshold,
@@ -357,9 +352,9 @@ class MotifSearcher:
     def __init__(
         self,
         root_motif: Motif,
-        bin_sequence: DNAsequence,
-        bin_pssm: DNAarray,
-        bin_pileup: pl.DataFrame,
+        contig_sequence: DNAsequence,
+        contig_pssm: DNAarray,
+        contig_pileup: pl.DataFrame,
         methylation_sequences: DNAarray,
         padding: int,
         high_meth_threshold: float,
@@ -375,9 +370,9 @@ class MotifSearcher:
 
         Parameters:
             root_motif (Motif): The initial motif to start the search from.
-            bin_sequence: The bin sequence object with necessary methods.
-            bin_pssm: The position-specific scoring matrix for the bin background.
-            bin_pileup: The pileup data associated with the bin.
+            contig_sequence: The bin sequence object with necessary methods.
+            contig_pssm: The position-specific scoring matrix for the bin background.
+            contig_pileup: The pileup data associated with the bin.
             methylation_sequences: The methylation sequences to be analyzed.
             padding (int): The padding size for sequence sampling.
             read_level_methylation (bool): Flag to use read-level methylation.
@@ -388,15 +383,15 @@ class MotifSearcher:
             max_motif_length (int): Maximum allowed motif length.
         """
         # Input validation
-        if bin_pileup.is_empty():
-            raise ValueError("bin_pileup cannot be empty.")
+        if contig_pileup.is_empty():
+            raise ValueError("contig_pileup cannot be empty.")
         if padding < 0:
             raise ValueError("padding must be non-negative.")
 
         self.root_motif = root_motif
-        self.bin_sequence = bin_sequence
-        self.bin_pssm = bin_pssm
-        self.bin_pileup = bin_pileup
+        self.contig_sequence = contig_sequence
+        self.contig_pssm = contig_pssm
+        self.contig_pileup = contig_pileup
         self.methylation_sequences = methylation_sequences
         self.padding = padding
         self.motif_graph = motif_graph or MotifTree()
@@ -451,7 +446,7 @@ class MotifSearcher:
         self,
         motif: Motif,
         meth_pssm: np.ndarray,
-        bin_pssm: np.ndarray
+        contig_pssm: np.ndarray
     ) -> Generator[Motif, None, None]:
         """
         Generate child motifs based on maximum KL divergence.
@@ -459,12 +454,12 @@ class MotifSearcher:
         Parameters:
             motif (Motif): The current motif.
             meth_pssm (np.ndarray): Position-specific scoring matrix for methylation.
-            bin_pssm (np.ndarray): Position-specific scoring matrix for the bin.
+            contig_pssm (np.ndarray): Position-specific scoring matrix for the bin.
 
         Yields:
             Motif: The next motif in the search.
         """
-        kl_divergence = entropy(meth_pssm, bin_pssm)
+        kl_divergence = entropy(meth_pssm, contig_pssm)
         split_motif = motif.split()
 
         # Positions to evaluate (positions with '.')
@@ -482,7 +477,7 @@ class MotifSearcher:
         pos = int(np.argmax(kl_divergence_masked))
 
         # Methylation frequency must be above bin frequency
-        index_meth_freq_higher = meth_pssm[:, pos] > bin_pssm[:, pos]
+        index_meth_freq_higher = meth_pssm[:, pos] > contig_pssm[:, pos]
 
         # Methylation frequency must be above a threshold
         index_meth_freq_above_thresh = meth_pssm[:, pos] > self.freq_threshold
@@ -518,9 +513,9 @@ class MotifSearcher:
         # Initialize variables
         best_guess = self.root_motif
         root_model = BetaBernoulliModel(0, 0)
-        for contig in self.bin_pileup.get_column("contig").unique():
-            pileup_contig = self.bin_pileup.filter(pl.col("contig") == contig)
-            contig_sequence = self.bin_sequence[contig]
+        for contig in self.contig_pileup.get_column("contig").unique():
+            pileup_contig = self.contig_pileup.filter(pl.col("contig") == contig)
+            contig_sequence = self.contig_sequence[contig]
             contig_model = motif_model_contig(
                 pileup_contig,
                 contig_sequence.sequence,
@@ -578,7 +573,7 @@ class MotifSearcher:
             neighbors = list(self._motif_child_nodes_kl_dist_max(
                 current_motif,
                 active_methylation_sequences.pssm(),
-                self.bin_pssm
+                self.contig_pssm
             ))
 
             # Add neighbors to graph
@@ -590,9 +585,9 @@ class MotifSearcher:
                     self.motif_graph.add_edge(current_motif, next_motif)
                 else:
                     next_model = BetaBernoulliModel(alpha = 0, beta = 0)
-                    for contig in self.bin_pileup.get_column("contig").unique().to_list():
-                        pileup_contig = self.bin_pileup.filter(pl.col("contig") == contig)
-                        contig_sequence = self.bin_sequence[contig]
+                    for contig in self.contig_pileup.get_column("contig").unique().to_list():
+                        pileup_contig = self.contig_pileup.filter(pl.col("contig") == contig)
+                        contig_sequence = self.contig_sequence[contig]
                         # Create model for the next motif
                         next_model_contig = motif_model_contig(
                             pileup_contig,
@@ -809,9 +804,9 @@ def methylated_reads_counts(
 
 def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshold=0.3, high_meth_threshold=0.7, mean_shift_threshold = -0.2):
     new_df = []
-    for (bin_name, mod_type), df in motif_df.group_by("bin", "mod_type"):
-        contigs = contig_bin.filter(col("bin") == bin_name).get_column("contig").unique().to_list()
-        log.debug(f"Merging motifs of bin: {bin_name}, modtype: {mod_type}")
+    for (contig_name, mod_type), df in motif_df.group_by("bin", "mod_type"):
+        contigs = contig_bin.filter(col("bin") == contig_name).get_column("contig").unique().to_list()
+        log.debug(f"Merging motifs of bin: {contig_name}, modtype: {mod_type}")
         
         # Create dictionary of bin contigs to sequence
         bin_sequences = {contig: assembly[contig].sequence for contig in contigs}
@@ -858,12 +853,12 @@ def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshol
                 log.debug(f"Mean shift of merged motif {merged_motif} is {mean_shift}, merging motifs")
                 all_merged_motifs.append(merged_motif)
                 all_premerge_motifs.extend(premerge_motifs)
-        log.info(f"Motif merge for bin {bin_name} modtype {mod_type} complete")
+        log.info(f"Motif merge for bin {contig_name} modtype {mod_type} complete")
         # Create a new dataframe with the non merged motifs
         if  len(all_premerge_motifs) == 0:
             # No motifs were merged
             new_df.append(df)
-            log.info(f"No motifs were merged for bin {bin_name} modtype {mod_type}")
+            log.info(f"No motifs were merged for bin {contig_name} modtype {mod_type}")
             continue
         log.info(f"New merged motifs: {all_merged_motifs}")
         single_df = df.filter(col("motif").is_in(all_premerge_motifs).not_())
@@ -880,7 +875,7 @@ def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshol
             merged_df.append(pl.DataFrame({
                 "sequence": motif.string,
                 "score": -1.,
-                "bin": bin_name,
+                "bin": contig_name,
                 "mod_type": mod_type,
                 "model": merged_model,
                 "motif": motif.string,

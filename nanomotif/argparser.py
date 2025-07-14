@@ -9,151 +9,176 @@ def create_parser():
     parser.add_argument("--version", action="version", version="%(prog)s {}".format(__version__))
     subparsers = parser.add_subparsers(help="-- Command descriptions --", dest="command")
 
+    def add_general_arguments(parser):
+        """
+        Function to add general arguments to a parser.
+        """
+        group = parser.add_argument_group("General Arguments")
+        group.add_argument(
+            "-t", "--threads", type=int, default=1, 
+            help="Number of threads to use. Default is 1"
+        )
+
+        group.add_argument(
+            "-v", "--verbose", action="store_true", 
+            help="Increase output verbosity. (set logger to debug level)"
+        )
+
+        group.add_argument(
+            "--seed", type=int, default=1, 
+            help="Seed for random number generator. Default: %(default)s"
+        )
+
+        group.add_argument(
+            "-h", "--help", action="help", 
+            help="show this help message and exit"
+        )
+
     def add_contig_bin_arguments(parser):
         """
         Function to add arguments for contig bin association.
         """
-        group = parser.add_mutually_exclusive_group(required=True)
-        group.add_argument("-c", "--contig_bin", type=str, 
-            help="TSV file specifying which bin contigs belong.")
-        group.add_argument("-f", "--files", nargs='+', 
-            help="List of bin FASTA files with contig names as headers.")
-        group.add_argument("-d", "--directory", 
-            help="Directory containing bin FASTA files with contig names as headers.")
-        parser.add_argument("--extension", type=str, default=".fasta",
-            help="File extension of the bin FASTA files. Default is '.fasta'.")
+        group_major = parser.add_argument_group("Contig Bin Arguments")
+        group = group_major.add_mutually_exclusive_group(required=True)
+
+
+        group.add_argument(
+            "-c", "--contig_bin", type=str, 
+            help="TSV file specifying which bin contigs belong."
+        )
+
+        group.add_argument(
+            "-f", "--files", nargs='+', 
+            help="List of bin FASTA files with contig names as headers."
+        )
+
+        group.add_argument(
+            "-d", "--directory", 
+            help="Directory containing bin FASTA files with contig names as headers."
+        )
+
+        group_major.add_argument(
+            "--extension", type=str, default=".fasta",
+            help="File extension of the bin FASTA files. Default is '.fasta'."
+        )
+
+
+    
+    def add_methylation_threshold_arguments(parser):
+        """
+        Function to add arguments for methylation threshold.
+        """
+        parser.add_argument(
+            "--methylation_threshold_low", type=float, default=0.30, 
+            help="A position is considered non-methylated if fraction of methylation is below this threshold. Default: %(default)s"
+        )
+
+        parser.add_argument(
+            "--methylation_threshold_high", type=float, default=0.70, 
+            help="A position is considered methylated if fraction of methylated reads is above this threshold. Default: %(default)s"
+        )
+
+    def add_motif_search_arguments(parser):
+        parser.add_argument(
+            "--search_frame_size", type=int, default=40, 
+            help="length of the sequnces sampled around confident methylation sites. Default: %(default)s"
+        )
+        
+        parser.add_argument(
+            "--minimum_kl_divergence", type=float, default=0.05, 
+            help="Minimum KL-divergence for a position to considered for expansion in  motif search. Higher value means less exhaustive, but faster search. Default: %(default)s"
+        )
+        
+        parser.add_argument(
+            "--min_motif_score", type=float, default=0.2, 
+            help="Minimum score for a motif to be kept after identification. Default: %(default)s"
+        )   
 
     ###########################################################################
     # Find Motifs
     parser_find_motifs = subparsers.add_parser(
         'find_motifs', 
-        help="Finds motifs directly on contig level in provided assembly"
+        help="Finds motifs directly on contig level in provided assembly",
+        add_help=False
     )
-    parser_find_motifs.add_argument("assembly", type=str, 
-        help="path to the assembly file.")
-    parser_find_motifs.add_argument("pileup", type=str, 
-        help="path to the modkit pileup file.")   
+
+    parser_find_motifs_options = parser_find_motifs.add_argument_group("Options") 
+
+    parser_find_motifs.add_argument(
+        "assembly", type=str, 
+        help="path to the assembly file."
+    )
+
+    parser_find_motifs.add_argument(
+        "pileup", type=str, 
+        help="path to the modkit pileup file."
+    )   
     
-    parser_find_motifs.add_argument("--out", type=str, 
-        help="path to the output folder", default="nanomotif")
-    parser_find_motifs.add_argument("-t", "--threads", type=int, default=1, 
-        help="number of threads to use. Default is 1")
-    parser_find_motifs.add_argument("-v", "--verbose", action="store_true", 
-        help="increase output verbosity. (set logger to debug level)")
-    parser_find_motifs.add_argument("--seed", type=int, default=1, 
-        help="seed for random number generator. Default: %(default)s")
-    parser_find_motifs.add_argument("--threshold_methylation_general", type=float, default=0.70, 
-        help="minimum fraction of reads that must be methylated at a position for the position to be methylated. These position are used for counting number of methylated position of a motif. Default: %(default)s")
-    parser_find_motifs.add_argument("--search_frame_size", type=int, default=40, 
-        help="length of the sequences sampled around confident methylation sites. Default: %(default)s")
-    parser_find_motifs.add_argument("--threshold_methylation_confident", type=float, default=0.80, 
-        help="minimum fraction of reads that must be methylated at a position for the position to be considered confiently methylated. These position are used to search for candidate motifs. Default: %(default)s")
-    parser_find_motifs.add_argument("--threshold_valid_coverage", type=int, default=5, 
-        help="minimum valid base coverage for a position to be considered. Default: %(default)s")
-    parser_find_motifs.add_argument("--minimum_kl_divergence", type=float, default=0.05, 
-        help="minimum KL-divergence for a position to considered for expansion in  motif search. Higher value means less exhaustive, but faster search. Default: %(default)s")
-    parser_find_motifs.add_argument("--min_motifs_contig", type=int, default=20, 
-        help="minimum number of times a motif has to have been oberserved in a contig. Default: %(default)s")
-    parser_find_motifs.add_argument("--read_level_methylation", action="store_true", 
-        help="If specified, methylation is calculated on read level instead of contig level. This is slower but produces more stable motifs.")
-    parser_find_motifs.add_argument("--min_motif_score", type=float, default=0.2, 
-        help="minimum score for a motif to be kept after identification considered valid. Default: %(default)s")
-
-
-    ###########################################################################
-    # Score motifs
-    parser_score_motifs = subparsers.add_parser(
-        'score_motifs', 
-        help="Find motifs indirectly in contigs by scoring with motifs found in other contigs"
+    parser_find_motifs_options.add_argument(
+        "--out", type=str, 
+        help="path to the output folder", default="nanomotif"
     )
-    parser_score_motifs.add_argument("assembly", type=str, 
-        help="path to the assembly file.")
-    parser_score_motifs.add_argument("pileup", type=str, 
-        help="path to the modkit pileup file.")      
-    parser_score_motifs.add_argument("motifs", type=str, 
-        help="path to the motifs file.")
     
-    parser_score_motifs.add_argument("--out", type=str, 
-        help="path to the output folder", default="nanomotif")
-    parser_score_motifs.add_argument("-t", "--threads", type=int, default=1, 
-        help="number of threads to use. Default is 1")
-    parser_score_motifs.add_argument("-v", "--verbose", action="store_true", 
-        help="increase output verbosity. (set logger to debug level)")
-    parser_score_motifs.add_argument("--seed", type=int, default=1, 
-        help="seed for random number generator. Default: %(default)s")
-    parser_score_motifs.add_argument("--threshold_methylation_general", type=float, default=0.70, 
-        help="minimum fraction of reads that must be methylated at a position for the position to be methylated. These position are used for counting number of methylated position of a motif. Default: %(default)s")
-    parser_score_motifs.add_argument("--save-motif-positions", action="store_true", 
-        help="save motif positions in the output folder")
-    parser_score_motifs.add_argument("--threshold_valid_coverage", type=int, default=5, 
-        help="minimum valid base coverage for a position to be considered. Default: %(default)s")
-    ###########################################################################
-    # Bin consensus
-    parser_bin_consensus = subparsers.add_parser(
-        'bin_consensus', 
-        help="Indentifies highly methylated motifs in bins"
-    )
-    parser_bin_consensus.add_argument("assembly", type=str, 
-        help="path to the assembly file.")
-    parser_bin_consensus.add_argument("pileup", type=str, 
-        help="path to the modkit pileup file.")   
-    parser_bin_consensus.add_argument("motifs", type=str, 
-        help="path to the motifs file.")
-    parser_bin_consensus.add_argument("motifs_scored", metavar="motifs-scored", type=str, 
-        help="path to the motif-scored file.")
-    add_contig_bin_arguments(parser_bin_consensus)
+    add_methylation_threshold_arguments(parser_find_motifs_options)
 
-    parser_bin_consensus.add_argument("--threshold_valid_coverage", type=int, default=5, 
-        help="minimum valid base coverage for a position to be considered. Default: %(default)s")
-    parser_bin_consensus.add_argument("--min_motifs_bin", type=int, default=50, 
-        help="minimum number of times a motif has to have been oberserved in a bin. Default: %(default)s")    
-    parser_bin_consensus.add_argument("--out", type=str, 
-        help="path to the output folder", default="nanomotif")
-    parser_bin_consensus.add_argument("-t", "--threads", type=int, default=1, 
-        help="number of threads to use. Default is 1")
-    parser_bin_consensus.add_argument("-v", "--verbose", action="store_true", 
-        help="increase output verbosity. (set logger to debug level)")
-    parser_bin_consensus.add_argument("--seed", type=int, default=1, 
-        help="seed for random number generator. Default: %(default)s")
-    parser_bin_consensus.add_argument("--threshold_methylation_general", type=float, default=0.70, 
-        help="minimum fraction of reads that must be methylated at a position for the position to be methylated. These position are used for counting number of methylated position of a motif. Default: %(default)s")
+    add_motif_search_arguments(parser_find_motifs_options)
+
+    parser_find_motifs_options.add_argument(
+        "--threshold_valid_coverage", type=int, default=5, 
+        help="minimum valid base coverage for a position to be considered. Default: %(default)s"
+    )
+    
+    parser_find_motifs_options.add_argument(
+        "--min_motifs_contig", type=int, default=20, 
+        help="minimum number of times a motif has to have been oberserved in a contig. Default: %(default)s"
+    )
+    
+    parser_find_motifs_options.add_argument(
+        "--read_level_methylation", action="store_true", 
+        help="If specified, methylation is calculated on read level instead of contig level. This is slower but produces more stable motifs."
+    )
+    
+    add_general_arguments(parser_find_motifs)
 
     ###########################################################################
     # Find motifs on bin level
     parser_find_motifs_bin = subparsers.add_parser(
         'motif_discovery',
-        help="Finds motifs directly on bin level in provided assembly"
+        help="Finds motifs directly on bin level in provided assembly",
+        add_help=False
     )
+
+
     parser_find_motifs_bin.add_argument("assembly", type=str, 
         help="path to the assembly file.")
+    
     parser_find_motifs_bin.add_argument("pileup", type=str, 
         help="path to the modkit pileup file.") 
-    add_contig_bin_arguments(parser_find_motifs_bin)
     
-    parser_find_motifs_bin.add_argument("--out", type=str, 
-        help="path to the output folder", default="nanomotif")
-    parser_find_motifs_bin.add_argument("-t", "--threads", type=int, default=1, 
-        help="number of threads to use. Default is 1")
-    parser_find_motifs_bin.add_argument("-v", "--verbose", action="store_true", 
-        help="increase output verbosity. (set logger to debug level)")
-    parser_find_motifs_bin.add_argument("--seed", type=int, default=1, 
-        help="seed for random number generator. Default: %(default)s")
-    parser_find_motifs_bin.add_argument("--threshold_methylation_general", type=float, default=0.70, 
-        help="minimum fraction of reads that must be methylated at a position for the position to be methylated. These position are used for counting number of methylated position of a motif. Default: %(default)s")
-    parser_find_motifs_bin.add_argument("--search_frame_size", type=int, default=40, 
-        help="length of the sequnces sampled around confident methylation sites. Default: %(default)s")
-    parser_find_motifs_bin.add_argument("--threshold_methylation_confident", type=float, default=0.80, 
-        help="minimum fraction of reads that must be methylated at a position for the position to be considered confiently methylated. These position are used to search for candidate motifs. Default: %(default)s")
-    parser_find_motifs_bin.add_argument("--threshold_valid_coverage", type=int, default=5, 
-        help="minimum valid base coverage for a position to be considered. Default: %(default)s")
-    parser_find_motifs_bin.add_argument("--minimum_kl_divergence", type=float, default=0.05, 
-        help="minimum KL-divergence for a position to considered for expansion in  motif search. Higher value means less exhaustive, but faster search. Default: %(default)s")
-    parser_find_motifs_bin.add_argument("--min_motifs_contig", type=int, default=20, 
-        help="minimum number of times a motif has to have been oberserved in a contig. Default: %(default)s")
-    parser_find_motifs_bin.add_argument("--read_level_methylation", action="store_true", 
-        help="If specified, methylation is calculated on read level instead of contig level. This is slower but produces more stable motifs.")
-    parser_find_motifs_bin.add_argument("--min_motif_score", type=float, default=0.2, 
-        help="minimum score for a motif to be kept after identification considered valid. Default: %(default)s")
+    add_contig_bin_arguments(parser_find_motifs_bin)
+
+    parser_find_motifs_bin_options = parser_find_motifs_bin.add_argument_group("Options")
+    parser_find_motifs_bin_options.add_argument(
+        "--out", type=str, 
+        help="path to the output folder", default="nanomotif"
+    )
+    add_methylation_threshold_arguments(parser_find_motifs_bin_options)
+
+    add_motif_search_arguments(parser_find_motifs_bin_options)
+    
+
+    parser_find_motifs_bin_options.add_argument(
+        "--threshold_valid_coverage", type=int, default=5, 
+        help="Minimum valid base coverage (Nvalid_cov) for a position to be considered. Default: %(default)s"
+    )
+
+    parser_find_motifs_bin_options.add_argument(
+        "--min_motifs_bin", type=int, default=20, 
+        help="Minimum number of motif observations in a bin. Default: %(default)s"
+    )
+
+    add_general_arguments(parser_find_motifs_bin)
+
 
     ###########################################################################
     # Bin contamination and inclusion   
@@ -289,3 +314,16 @@ def create_parser():
     
     return parser
     
+
+class CustomHelpFormatter(argparse.HelpFormatter):
+    def add_arguments(self, actions):
+        # Group by container to maintain ordering
+        action_groups = {}
+        for action in actions:
+            container = getattr(action, 'container', None)
+            if container not in action_groups:
+                action_groups[container] = []
+            action_groups[container].append(action)
+
+        for container, group_actions in action_groups.items():
+            super().add_arguments(group_actions)
