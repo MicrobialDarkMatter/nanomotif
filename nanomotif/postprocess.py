@@ -66,14 +66,14 @@ def merge_motifs_in_df(motif_df, pileup, assembly, mean_shift_threshold = -0.2):
         for cluster, motifs in merged_motifs.items():
             merged_motif = motifs[0]
             premerge_motifs = motifs[1]
-            merge_mean = nm.evaluate.motif_model_contig(
+            merge_mean = nm.find_motifs.motif_model_contig(
                 pileup.filter((col("contig") == contig) & (col("mod_type") == mod_type)), 
                 assembly.assembly[contig].sequence,
                 merged_motif
             ).mean()
             pre_merge_means = []
             for pre_merge_motif in premerge_motifs:
-                pre_merge_means.append(nm.evaluate.motif_model_contig(
+                pre_merge_means.append(nm.find_motifs.motif_model_contig(
                     pileup.filter((col("contig") == contig) & (col("mod_type") == mod_type)), 
                     assembly.assembly[contig].sequence,
                     pre_merge_motif
@@ -98,7 +98,7 @@ def merge_motifs_in_df(motif_df, pileup, assembly, mean_shift_threshold = -0.2):
         new_df.append(single_df)
         merged_df = []
         for motif in all_merged_motifs:
-            merged_model = nm.evaluate.motif_model_contig(
+            merged_model = nm.find_motifs.motif_model_contig(
                 pileup.filter((col("contig") == contig) & (col("mod_type") == mod_type)), 
                 assembly.assembly[contig].sequence,
                 motif
