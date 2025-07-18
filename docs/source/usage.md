@@ -44,7 +44,7 @@ Options:
   --methylation_threshold_high METHYLATION_THRESHOLD_HIGH
                         A position is considered methylated if fraction of methylated reads is above this threshold. Default: 0.7
   --search_frame_size SEARCH_FRAME_SIZE
-                        length of the sequnces sampled around confident methylation sites. Default: 40
+                        length of the sequences sampled around confident methylation sites. Default: 40
   --minimum_kl_divergence MINIMUM_KL_DIVERGENCE
                         Minimum KL-divergence for a position to considered for expansion in motif search. Higher value means less exhaustive, but faster
                         search. Default: 0.05
