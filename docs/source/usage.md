@@ -10,52 +10,57 @@ The motif discovery process identifies motifs at both the contig and bin levels.
 ```shell
 ASSEMBLY="path/to/assembly.fasta"
 PILEUP="path/to/pileup.tsv"
-CONTIG_BIN="path/to/contig_bin.tsv"
+BINS="path/to/bins"
 OUT="path/to/output"
-nanomotif motif_discovery $ASSEMBLY $PILEUP $CONTIG_BIN --out $OUT
+nanomotif motif_discovery $ASSEMBLY $PILEUP -d $BINS --out $OUT
 ```
 
 ```
-usage: nanomotif motif_discovery [-h] [--out OUT] [-t THREADS] [-v] [--seed SEED] [--threshold_methylation_general THRESHOLD_METHYLATION_GENERAL]
-                                 [--search_frame_size SEARCH_FRAME_SIZE] [--threshold_methylation_confident THRESHOLD_METHYLATION_CONFIDENT]
-                                 [--threshold_valid_coverage THRESHOLD_VALID_COVERAGE] [--minimum_kl_divergence MINIMUM_KL_DIVERGENCE] [--min_motifs_contig MIN_MOTIFS_CONTIG]
-                                 [--read_level_methylation] [--min_motif_score MIN_MOTIF_SCORE] [--min_motifs_bin MIN_MOTIFS_BIN] [--save-motif-positions]
-                                 assembly pileup bins
+usage: nanomotif motif_discovery (-c CONTIG_BIN | -f FILES [FILES ...] | -d DIRECTORY) [--extension EXTENSION] [--out OUT]
+                                 [--methylation_threshold_low METHYLATION_THRESHOLD_LOW] [--methylation_threshold_high METHYLATION_THRESHOLD_HIGH]
+                                 [--search_frame_size SEARCH_FRAME_SIZE] [--minimum_kl_divergence MINIMUM_KL_DIVERGENCE] [--min_motif_score MIN_MOTIF_SCORE]
+                                 [--threshold_valid_coverage THRESHOLD_VALID_COVERAGE] [--min_motifs_bin MIN_MOTIFS_BIN] [-t THREADS] [-v] [--seed SEED]
+                                 [-h]
+                                 assembly pileup
 
 positional arguments:
   assembly              path to the assembly file.
   pileup                path to the modkit pileup file.
-  bins                  tsv file specifying which bin contigs belong.
 
-optional arguments:
-  -h, --help            show this help message and exit
+Contig Bin Arguments:
+  -c CONTIG_BIN, --contig_bin CONTIG_BIN
+                        TSV file specifying which bin contigs belong.
+  -f FILES [FILES ...], --files FILES [FILES ...]
+                        List of bin FASTA files with contig names as headers.
+  -d DIRECTORY, --directory DIRECTORY
+                        Directory containing bin FASTA files with contig names as headers.
+  --extension EXTENSION
+                        File extension of the bin FASTA files. Default is '.fasta'.
+
+Options:
   --out OUT             path to the output folder
-  -t THREADS, --threads THREADS
-                        number of threads to use. Default is 1
-  -v, --verbose         increase output verbosity. (set logger to debug level)
-  --seed SEED           seed for random number generator. Default: 1
-  --threshold_methylation_general THRESHOLD_METHYLATION_GENERAL
-                        minimum fraction of reads that must be methylated at a position for the position to be methylated. These position are used for counting number of
-                        methylated position of a motif. Default: 0.7
+  --methylation_threshold_low METHYLATION_THRESHOLD_LOW
+                        A position is considered non-methylated if fraction of methylation is below this threshold. Default: 0.3
+  --methylation_threshold_high METHYLATION_THRESHOLD_HIGH
+                        A position is considered methylated if fraction of methylated reads is above this threshold. Default: 0.7
   --search_frame_size SEARCH_FRAME_SIZE
-                        length of the sequnces sampled around confident methylatyion sites. Default: 40
-  --threshold_methylation_confident THRESHOLD_METHYLATION_CONFIDENT
-                        minimum fraction of reads that must be methylated at a position for the position to be considered confiently methylated. These position are used to
-                        search for candidate motifs. Default: 0.8
-  --threshold_valid_coverage THRESHOLD_VALID_COVERAGE
-                        minimum valid base coverage for a position to be considered. Default: 5
+                        length of the sequences sampled around confident methylation sites. Default: 40
   --minimum_kl_divergence MINIMUM_KL_DIVERGENCE
-                        minimum KL-divergence for a position to considered for expansion in motif search. Higher value means less exhaustive, but faster search. Default: 0.05
-  --min_motifs_contig MIN_MOTIFS_CONTIG
-                        minimum number of times a motif has to have been oberserved in a contig. Default: 20
-  --read_level_methylation
-                        If specified, methylation is calculated on read level instead of contig level. This is slower but produces more stable motifs.
+                        Minimum KL-divergence for a position to considered for expansion in motif search. Higher value means less exhaustive, but faster
+                        search. Default: 0.05
   --min_motif_score MIN_MOTIF_SCORE
-                        minimum score for a motif to be kept after identification considered valid. Default: 0.2
+                        Minimum score for a motif to be kept after identification. Default: 0.2
+  --threshold_valid_coverage THRESHOLD_VALID_COVERAGE
+                        Minimum valid base coverage (Nvalid_cov) for a position to be considered. Default: 5
   --min_motifs_bin MIN_MOTIFS_BIN
-                        minimum number of times a motif has to have been oberserved in a bin. Default: 50
-  --save-motif-positions
-                        save motif positions in the output folder
+                        Minimum number of motif observations in a bin. Default: 20
+
+General Arguments:
+  -t THREADS, --threads THREADS
+                        Number of threads to use. Default is 1
+  -v, --verbose         Increase output verbosity. (set logger to debug level)
+  --seed SEED           Seed for random number generator. Default: 1
+  -h, --help            show this help message and exit
 ```
 
 
