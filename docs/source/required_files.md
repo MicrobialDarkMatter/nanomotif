@@ -72,6 +72,7 @@ This informaiton can be passed in one of three ways:
 
 
 **Createing a Contig-Bin File**
+
 This file links each contig to its corresponding bin. It is a tab-separated file with two columns and no header:
 - Column 1: Contig ID  
 - Column 2: Bin ID
