@@ -71,7 +71,7 @@ This informaiton can be passed in one of three ways:
 3. **List of bin FASTAs**: A list of bin FASTA files, where each file corresponds to a bin
 
 
-### Createing a Contig-Bin File
+**Createing a Contig-Bin File**
 This file links each contig to its corresponding bin. It is a tab-separated file with two columns and no header:
 - Column 1: Contig ID  
 - Column 2: Bin ID
