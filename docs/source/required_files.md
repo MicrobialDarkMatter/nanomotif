@@ -63,6 +63,15 @@ Considerations:
 
 ## Contig-Bin Relationship
 
+For analyses that require binning, you need contig-bin relationship. This maps each contig to its corresponding bin, which is essential for binning-based motif discovery.
+
+This informaiton can be passed in one of three ways:
+1. **Contig-Bin File**: A file that explicitly maps contigs to bins
+2. **Bin FASTA Files**: A directory of bin FASTA files, where each file corresponds to a bin
+3. **List of bin FASTAs**: A list of bin FASTA files, where each file corresponds to a bin
+
+
+### Createing a Contig-Bin File
 This file links each contig to its corresponding bin. It is a tab-separated file with two columns and no header:
 - Column 1: Contig ID  
 - Column 2: Bin ID
