@@ -36,7 +36,7 @@ nanomotif_table = pd.read_csv(nanomotif_table_path, sep = "\t", header = 0)
 nanomotif_table['assign_mod_type'] = nanomotif_table['mod_type'].apply(recode_mod_type)
 
 #Set motif acceptance threshold as >=0.5 mean_methylation and remove ambiguous motifs in nanomotif_table
-mean_methylation = nanomotif_table['n_mod'] / (nanomotif_table['n_mod'] + nanomotif_table['n_nomod'])
+mean_methylation = nanomotif_table['n_mod_bin'] / (nanomotif_table['n_mod_bin'] + nanomotif_table['n_nomod_bin'])
 nanomotif_table_mm50 = nanomotif_table[mean_methylation >= snakemake.params['MINIMUM_METHYLATION']]
 
 
@@ -268,7 +268,7 @@ MTase_table_assigned = MTase_table_assigned[['bin name', 'gene_id', 'contig', 'm
 MTase_table_assigned.columns = ['bin', 'gene_id', 'contig', 'mod_type_pred', 'sub_type_pred', 'RM_system', 'DF_system_ID', 'motif_type_pred', 'REbase_ID', 'motif_pred', 'linked', 'detected_motif']
 MTase_table_assigned_cl = MTase_table_assigned.dropna(subset=['bin'])
 
-nanomotif_table_mm50 = nanomotif_table_mm50[['bin', 'mod_type', 'motif', 'mod_position', 'n_mod', 'n_nomod', 'motif_type', 'motif_complement', 'mod_position_complement', 'n_mod_complement', 'n_nomod_complement', 'linked', 'candidate_genes']]
+nanomotif_table_mm50 = nanomotif_table_mm50[['bin', 'mod_type', 'motif', 'mod_position', 'n_mod_bin', 'n_nomod_bin', 'motif_type', 'motif_complement', 'mod_position_complement', 'n_mod_complement', 'n_nomod_complement', 'linked', 'candidate_genes']]
 #%%
 MTase_table_assigned_cl.to_csv(snakemake.output['MTase_assignment_table'] , sep='\t', index=False)
 nanomotif_table_mm50.to_csv(snakemake.output['nanomotif_assignment_table'] , sep='\t', index=False)
