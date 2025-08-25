@@ -635,7 +635,7 @@ def check_install(args, pl):
 # Binnary - contamination and inclusion
 from nanomotif.binnary import data_processing, detect_contamination, include_contigs
 from nanomotif.binnary.logging import set_logger_config
-from epimetheus.epimetheus import methylation_pattern
+from epymetheus.epymetheus import methylation_pattern
 
 
 def binnary(args, pl):
@@ -673,7 +673,7 @@ def binnary(args, pl):
     if os.path.isfile(os.path.join(args.out,contig_methylation_file)) and not args.force:
         log.info("motifs-scored-read-methylation.tsv exists. Using existing file! Use --force to override this.")
     elif not os.path.isfile(os.path.join(args.out, contig_methylation_file)) or args.force:
-        log.info(f"Running epimetheus to create {contig_methylation_file}")
+        log.info(f"Running epymetheus to create {contig_methylation_file}")
         # Create motifs-scored-read-methylation
         return_code = methylation_pattern(
             pileup = args.pileup,
@@ -688,7 +688,7 @@ def binnary(args, pl):
         )
 
         if return_code != 0:
-            log.error("Error running epimetheus")
+            log.error("Error running epymetheus")
 
 
     log.info("Loading assembly file...")
