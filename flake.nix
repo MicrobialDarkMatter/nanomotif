@@ -6,13 +6,21 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      ...
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = import nixpkgs {
           inherit system;
         };
-      in {
+      in
+      {
         devShells.default = pkgs.mkShell {
           buildInputs = [
             pkgs.cargo
@@ -23,30 +31,33 @@
 
             # For building
             pkgs.openssl
-            pkgs.gcc
             pkgs.clang
             pkgs.pkg-config
+            pkgs.libGL
+            pkgs.stdenv.cc.cc.lib
+            pkgs.glib
 
             # For python package
             pkgs.python311Full
           ];
+          shellHook = ''
+            export LD_LIBRARY_PATH="${pkgs.libGL}/lib/:${pkgs.stdenv.cc.cc.lib}/lib/:${pkgs.glib.out}/lib/:$LD_LIBRARY_PATH"
+          '';
         };
-        shellHook = ''
-          export LD_LIBRARY_PATH="${pkgs.gcc}/lib:$LD_LIBRARY_PATH"
-        '';
         packages.default = pkgs.buildRustPackage {
           src = ./.;
           cargoLock = {
             lockFile = ./Cargo.lock;
           };
           buildInputs = [
-              pkgs.openssl
-              pkgs.pkg-config
+            pkgs.openssl
+            pkgs.pkg-config
           ];
           nativeBuildInputs = [
-              pkgs.openssl_3_3
-              pkgs.pkg-config
+            pkgs.openssl_3_3
+            pkgs.pkg-config
           ];
         };
-    });
+      }
+    );
 }
