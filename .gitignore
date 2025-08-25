@@ -1,4 +1,6 @@
 data
+.direnv
+nanomotif-venv
 tests/cli/
 nanomotif/flamegraph*
 austin
