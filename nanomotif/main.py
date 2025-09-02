@@ -323,7 +323,13 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
         df = df.sort(["bin", "mod_type", "motif"])
         df.write_csv(args.out + "/" + name + ".tsv", separator="\t")
     os.makedirs(args.out + "/precleanup-motifs/", exist_ok=True)
-    motifs.drop("model").write_csv(args.out + "/precleanup-motifs/motifs-raw-unformatted.tsv", separator="\t")
+    motifs.with_columns([
+        pl.col("model").map_elements(lambda x: x._alpha).alias("alpha"),
+        pl.col("model").map_elements(lambda x: x._beta).alias("beta")
+    ]).with_columns([
+        (pl.col("beta") - nm.model.DEFAULT_PRIOR_BETA).alias("n_nomod"),
+        (pl.col("alpha") - nm.model.DEFAULT_PRIOR_ALPHA).alias("n_mod")
+    ]).drop("model").write_csv(args.out + "/precleanup-motifs/motifs-raw-unformatted.tsv", separator="\t")
     save_motif_df(motifs, "precleanup-motifs/motifs-raw")
 
     log.info("Postprocessing motifs")
