@@ -55,7 +55,8 @@ def load_pileup(path: str, min_coverage: int, min_fraction: float = 0):
             path, 
             separator = "\t", 
             has_header = False,
-            schema = PILEUP_SCHEMA
+            schema = PILEUP_SCHEMA,
+            null_values=["NA", "null"]
         )
 
         .filter(pl.col("column_10") > min_coverage)
@@ -80,7 +81,7 @@ def extract_contig_mods_with_sufficient_information(pileup: Pileup, assembly: As
     if pileup.is_empty():
         #TODO: 
         print("Pileup empty after filtering contigs in assembly. Check pileup and assembly mismatch!")
-        sys.exit(1)
+        return([], [])
 
     contigmods_with_more_than_min_mods = pileup.group_by("contig_mod").count().filter(
             pl.col("count") > min_mods_pr_contig
@@ -116,7 +117,8 @@ def load_low_coverage_positions(path_pileup: str, contig_mods_to_load: list[str]
             separator = "\t", 
             has_header = False,
             # Schema overrides to match the expected columns
-            schema = PILEUP_SCHEMA
+            schema = PILEUP_SCHEMA,
+            null_values=["NA", "null"]
         )
         .filter(pl.col("column_10") <= min_coverage)
         .filter(pl.col("column_10") / (pl.col("column_10") + pl.col("column_17")) > 0.3)
