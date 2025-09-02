@@ -4,8 +4,8 @@ Models
 import numpy as np
 from scipy.stats import beta
 
-DEFAULT_PRIOR_BETA = 1
-DEFAULT_PRIOR_ALPHA = 0
+DEFAULT_PRIOR_BETA = 10
+DEFAULT_PRIOR_ALPHA = 10
 
 class BetaBernoulliModel():
     def __init__(self, alpha = DEFAULT_PRIOR_ALPHA, beta = DEFAULT_PRIOR_BETA):
