@@ -361,15 +361,15 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
     motifs_file_name = motifs_file_name +   "-merge"
     save_motif_df(motifs, motifs_file_name)
 
-    log.info(" - Removing sub motifs")
-    motifs = motifs.rename({"bin":"contig"})
-    motifs = nm.postprocess.remove_sub_motifs(motifs)
-    if len(motifs) == 0:
-        log.info("No motifs found")
-        return
-    motifs_file_name = motifs_file_name +   "-sub"
-    motifs = motifs.rename({"contig":"bin"})
-    save_motif_df(motifs, motifs_file_name)
+    # log.info(" - Removing sub motifs")
+    # motifs = motifs.rename({"bin":"contig"})
+    # motifs = nm.postprocess.remove_sub_motifs(motifs)
+    # if len(motifs) == 0:
+    #     log.info("No motifs found")
+    #     return
+    # motifs_file_name = motifs_file_name +   "-sub"
+    # motifs = motifs.rename({"contig":"bin"})
+    # save_motif_df(motifs, motifs_file_name)
 
     log.info(" - Joining motif complements")
     motifs = motifs.rename({"bin":"contig"})
