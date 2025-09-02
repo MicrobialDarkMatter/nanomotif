@@ -447,6 +447,30 @@ class MotifSearcher:
             score = 0
         return score
 
+    def _scoring_function_predictive_evaluation(self, next_model, current_model) -> float:
+        """
+        Calculate the score for a motif based on its predictive model.
+
+        Parameters:
+            next_model: The model of the next motif.
+            current_model: The model of the current motif.
+
+        Returns:
+            float: The calculated score.
+        """
+        n_positive_extra = current_model._alpha - next_model._alpha
+        n_negative_extra = current_model._beta - next_model._beta
+        n_extra = n_positive_extra + n_negative_extra
+        n_next = next_model._alpha + next_model._beta
+        log_likelihood_next = (next_model._alpha * np.log(next_model.mean()) +
+                                next_model._beta * np.log(1 - next_model.mean()))
+        log_likelihood_extra = (n_positive_extra * np.log(next_model.mean()) +
+                                   n_negative_extra * np.log(1 - next_model.mean()))
+        log_likelihood_next_per_obs = log_likelihood_next / n_next if n_next > 0 else 0
+        log_likelihood_extra_per_obs = log_likelihood_extra / n_extra if n_extra > 0 else 0
+
+        return (next_model.mean() * (log_likelihood_next_per_obs - log_likelihood_extra_per_obs)) / current_model.mean()
+
     def _motif_child_nodes_kl_dist_max(
         self,
         motif: Motif,
