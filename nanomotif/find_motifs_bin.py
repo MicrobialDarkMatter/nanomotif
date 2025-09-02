@@ -39,7 +39,8 @@ def process_binned_sample_parallel(
         minimum_kl_divergence = 0.05,
         verbose = False,
         log_dir = None,
-        seed = None
+        seed = None,
+        score_threshold = 2
     ):
     """
     Process a sample
@@ -78,7 +79,8 @@ def process_binned_sample_parallel(
             yield (bin_contig_dict, modtype, subpileup, counter, lock, assembly, 
                        minimum_kl_divergence, search_frame_size // 2,
                        log_dir, verbose, seed,
-                       methylation_threshold_low, methylation_threshold_high)
+                       methylation_threshold_low, methylation_threshold_high,
+                       score_threshold)
 
     # Create a progress manager
     manager = multiprocessing.Manager()
@@ -152,7 +154,8 @@ def worker_function(
         bin_contig, modtype, subpileup, counter, lock, assembly, 
         min_kl_divergence, padding, 
         log_dir, verbose, seed, 
-        low_meth_threshold, high_meth_threshold
+        low_meth_threshold, high_meth_threshold,
+        score_threshold
     ) = args
     bin_name = list(bin_contig.keys())[0]
     set_seed(seed=seed)
@@ -167,7 +170,8 @@ def worker_function(
     result = process_subpileup(
         bin_contig, modtype, subpileup, assembly, 
         min_kl_divergence, padding, 
-        low_meth_threshold, high_meth_threshold
+        low_meth_threshold, high_meth_threshold,
+        score_threshold
     )
     with lock:
         counter.value += 1
@@ -179,7 +183,8 @@ def worker_function(
 def process_subpileup(
         bin_contig: dict, modtype, bin_pileup, assembly, 
         min_kl_divergence, padding, 
-        low_meth_threshold, high_meth_threshold
+        low_meth_threshold, high_meth_threshold,
+        score_threshold
     ):
     """
     Process a single subpileup for one bin and one modtype
@@ -205,7 +210,8 @@ def process_subpileup(
         padding=padding,
         min_kl=min_kl_divergence,
         max_dead_ends=25,
-        max_rounds_since_new_best = 15
+        max_rounds_since_new_best=15,
+        score_threshold=score_threshold
     )
     identified_motifs = nxgraph_to_dataframe(motif_graph) \
         .filter(col("sequence").is_in(best_candidates))
@@ -553,7 +559,7 @@ class MotifSearcher:
                 high_meth_threshold=self.high_meth_threshold
             )
             root_model.update(contig_model._alpha, contig_model._beta)
-        best_score = self._scoring_function(root_model, root_model)
+        best_score = self._scoring_function_predictive_evaluation(root_model, root_model)
         rounds_since_new_best = 0
         visited_nodes: set[Motif] = set()
         
@@ -636,7 +642,7 @@ class MotifSearcher:
                     )
                     self.motif_graph.add_edge(current_motif, next_motif)
 
-                    score = self._scoring_function(next_model, current_model)
+                    score = self._scoring_function_predictive_evaluation(next_model, current_model)
                     self.motif_graph.nodes[next_motif]["score"] = score
 
                 # Add neighbor to priority queue if not visited

@@ -241,7 +241,9 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
             log.error(f"File {args.pileup} does not exist")
             return None
         pileup = nm.load_pileup(args.pileup, min_coverage = args.threshold_valid_coverage, min_fraction = 0)
-
+    if pileup.pileup.is_empty():
+        log.error("Pileup is empty")
+        return None
 
     
     pileup = pileup.pileup.with_columns([
@@ -273,6 +275,7 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
             methylation_threshold_high = args.methylation_threshold_high,
             methylation_threshold_low = args.methylation_threshold_low,
             minimum_kl_divergence = args.minimum_kl_divergence,
+            score_threshold = args.min_motif_score,
             verbose = args.verbose,
             log_dir = args.out + "/logs",
             seed = args.seed

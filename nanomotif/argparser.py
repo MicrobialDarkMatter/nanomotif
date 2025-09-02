@@ -90,7 +90,7 @@ def create_parser():
         )
         
         parser.add_argument(
-            "--min_motif_score", type=float, default=0.2, 
+            "--min_motif_score", type=float, default=2, 
             help="Minimum score for a motif to be kept after identification. Default: %(default)s"
         )   
 
