@@ -324,8 +324,8 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
         df.write_csv(args.out + "/" + name + ".tsv", separator="\t")
     os.makedirs(args.out + "/precleanup-motifs/", exist_ok=True)
     motifs.with_columns([
-        pl.col("model").map_elements(lambda x: x._alpha).alias("alpha"),
-        pl.col("model").map_elements(lambda x: x._beta).alias("beta")
+        pl.col("model").map_elements(lambda x: x._alpha, return_dtype=pl.Float64).alias("alpha"),
+        pl.col("model").map_elements(lambda x: x._beta, return_dtype=pl.Float64).alias("beta")
     ]).with_columns([
         (pl.col("beta") - nm.model.DEFAULT_PRIOR_BETA).alias("n_nomod"),
         (pl.col("alpha") - nm.model.DEFAULT_PRIOR_ALPHA).alias("n_mod")
