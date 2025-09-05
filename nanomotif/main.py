@@ -299,9 +299,12 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
         ])
         if "model" in df.columns:
             df_out = df_out.with_columns([
-                pl.Series("n_mod", n_mod),
-                pl.Series("n_nomod", n_nomod)
-            ])
+                pl.col("model").map_elements(lambda x: x._alpha, return_dtype=pl.Float64).alias("alpha"),
+                pl.col("model").map_elements(lambda x: x._beta, return_dtype=pl.Float64).alias("beta")
+            ]).with_columns([
+                (pl.col("beta") - nm.model.DEFAULT_PRIOR_BETA).alias("n_nomod"),
+                (pl.col("alpha") - nm.model.DEFAULT_PRIOR_ALPHA).alias("n_mod")
+            ]).drop("model")
         try:
             df_out = df_out.select([
                 "bin", "motif", "mod_position", "mod_type", "n_mod", "n_nomod", "motif_type",
@@ -310,12 +313,6 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
         except:
             df_out = df_out.select([
                 "bin", "motif", "mod_position", "mod_type", "n_mod", "n_nomod", "motif_type",
-            ])
-        # Subtract prior alpha and beta from n_mod and n_nomod
-        if "model" in df.columns:
-            df_out = df_out.with_columns([
-                pl.col("n_mod") - nm.model.DEFAULT_PRIOR_BETA,
-                pl.col("n_nomod") - nm.model.DEFAULT_PRIOR_ALPHA
             ])
         return df_out
     def save_motif_df(df, name):
