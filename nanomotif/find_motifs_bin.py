@@ -341,7 +341,7 @@ def find_best_candidates(
 
         if motif_graph.nodes[naive_guess]["score"] < score_threshold:
             dead_ends += 1
-            log.debug(f"Candidate has low score ({motif_graph.nodes[naive_guess]["score"]}), {naive_guess}. {dead_ends} of {max_dead_ends} before termination. Represented in {seq_before-seq_remaining} seqs. model: {motif_graph.nodes[naive_guess]['model']}. ({100*seq_remaining_percent:.1f} % of sequences remaining)")
+            log.debug(f"Candidate has low score ({motif_graph.nodes[naive_guess]['score']}), {naive_guess}. {dead_ends} of {max_dead_ends} before termination. Represented in {seq_before-seq_remaining} seqs. model: {motif_graph.nodes[naive_guess]['model']}. ({100*seq_remaining_percent:.1f} % of sequences remaining)")
             continue
 
         log.info(f"Keeping {naive_guess}, represented in {seq_before-seq_remaining} seqs. model: {motif_graph.nodes[naive_guess]['model']}. ({100*seq_remaining_percent:.1f} % of sequences remaining)")
