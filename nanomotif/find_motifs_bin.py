@@ -4,8 +4,10 @@ import os
 from polars import col
 import logging as log
 import itertools
+from itertools import count
 from itertools import takewhile
 from scipy.stats import entropy
+import re
 import multiprocessing
 from multiprocessing import get_context
 import progressbar
@@ -339,7 +341,7 @@ def find_best_candidates(
 
         if motif_graph.nodes[naive_guess]["score"] < score_threshold:
             dead_ends += 1
-            log.debug(f"Candidate has low score, {naive_guess}. {dead_ends} of {max_dead_ends} before temination")
+            log.debug(f"Candidate has low score ({motif_graph.nodes[naive_guess]["score"]}), {naive_guess}. {dead_ends} of {max_dead_ends} before termination. Represented in {seq_before-seq_remaining} seqs. model: {motif_graph.nodes[naive_guess]['model']}. ({100*seq_remaining_percent:.1f} % of sequences remaining)")
             continue
 
         log.info(f"Keeping {naive_guess}, represented in {seq_before-seq_remaining} seqs. model: {motif_graph.nodes[naive_guess]['model']}. ({100*seq_remaining_percent:.1f} % of sequences remaining)")
@@ -464,18 +466,13 @@ class MotifSearcher:
         Returns:
             float: The calculated score.
         """
-        n_positive_extra = current_model._alpha - next_model._alpha
-        n_negative_extra = current_model._beta - next_model._beta
-        n_extra = n_positive_extra + n_negative_extra
-        n_next = next_model._alpha + next_model._beta
-        log_likelihood_next = (next_model._alpha * np.log(next_model.mean()) +
-                                next_model._beta * np.log(1 - next_model.mean()))
-        log_likelihood_extra = (n_positive_extra * np.log(next_model.mean()) +
-                                   n_negative_extra * np.log(1 - next_model.mean()))
-        log_likelihood_next_per_obs = log_likelihood_next / n_next if n_next > 0 else 0
-        log_likelihood_extra_per_obs = log_likelihood_extra / n_extra if n_extra > 0 else 0
+        extra_positive, extra_negative = current_model._alpha - next_model._alpha, current_model._beta - next_model._beta
 
-        return (next_model.mean() * (log_likelihood_next_per_obs - log_likelihood_extra_per_obs)) / current_model.mean()
+        log_likelihood_next_per_obs = next_model.log_likelihood_per_obs()
+        log_likelihood_extra_per_obs = next_model.posterior_predictive_per_obs(extra_positive, extra_negative)
+        mean_ratio = next_model.mean() / current_model.mean() if current_model.mean() > 0 else next_model.mean()
+
+        return mean_ratio * (log_likelihood_next_per_obs - log_likelihood_extra_per_obs)
 
     def _motif_child_nodes_kl_dist_max(
         self,
@@ -526,18 +523,24 @@ class MotifSearcher:
             return
 
         # All combinations of the bases
-        max_combination_length = min(len(bases_filtered), 4)
-        for i in range(1, max_combination_length + 1):
-            for base_tuple in itertools.combinations(bases_filtered, i):
-                if len(base_tuple) > 1:
-                    base_str = "[" + "".join(base_tuple) + "]"
-                else:
-                    base_str = base_tuple[0]
-                new_motif_sequence = split_motif.copy()
-                new_motif_sequence[pos] = base_str
-                new_motif_str = "".join(new_motif_sequence)
-                yield Motif(new_motif_str, motif.mod_position)
+        #max_combination_length = min(len(bases_filtered), 4)
+        #for i in range(1, max_combination_length + 1):
+        #    for base_tuple in itertools.combinations(bases_filtered, i):
+        #        if len(base_tuple) > 1:
+        #            base_str = "[" + "".join(base_tuple) + "]"
+        #        else:
+        #            base_str = base_tuple[0]
+        #        new_motif_sequence = split_motif.copy()
+        #        new_motif_sequence[pos] = base_str
+        #        new_motif_str = "".join(new_motif_sequence)
+        #        yield Motif(new_motif_str, motif.mod_position)
+        for base in bases_filtered:
+            new_motif_sequence = split_motif.copy()
+            new_motif_sequence[pos] = base
+            new_motif_str = "".join(new_motif_sequence)
+            yield Motif(new_motif_str, motif.mod_position)
 
+    
     def run(self) -> tuple[MotifTree, Motif]:
         """
         Execute the motif search algorithm.
@@ -547,56 +550,69 @@ class MotifSearcher:
         """
         # Initialize variables
         best_guess = self.root_motif
-        root_model = BetaBernoulliModel(0, 0)
-        for contig in self.bin_pileup.get_column("contig").unique():
-            pileup_contig = self.bin_pileup.filter(pl.col("contig") == contig)
-            contig_sequence = self.bin_sequence[contig]
-            contig_model = motif_model_contig(
-                pileup_contig,
-                contig_sequence.sequence,
-                self.root_motif,
-                low_meth_threshold=self.low_meth_threshold,
-                high_meth_threshold=self.high_meth_threshold
-            )
-            root_model.update(contig_model._alpha, contig_model._beta)
+        root_model = motif_model_bin(
+            pileup=self.bin_pileup,
+            contigs=self.bin_sequence,
+            motif=self.root_motif,
+            model=BetaBernoulliModel(),
+            low_meth_threshold=self.low_meth_threshold,
+            high_meth_threshold=self.high_meth_threshold,
+        )
+
         best_score = self._scoring_function_predictive_evaluation(root_model, root_model)
         rounds_since_new_best = 0
         visited_nodes: set[Motif] = set()
-        
-        # Initialize the search tree
+
+        root_depth = 0
         self.motif_graph.add_node(
             self.root_motif,
             model=root_model,
             motif=self.root_motif,
             visited=False,
-            score=best_score
+            score=best_score,
+            priority=0,
+            depth=root_depth
         )
 
-        # Initialize priority queue
-        priority_queue: list[tuple[float, Motif]] = []
-        hq.heappush(priority_queue, (0, self.root_motif))
+        # Initialize priority queue 
+        priority_queue: list[tuple] = []
+        hq.heappush(
+            priority_queue,
+            (root_depth, 0,  self.root_motif)
+        )
 
         # Search loop
         while priority_queue:
             # Get the current best candidate
-            _, current_motif = hq.heappop(priority_queue)
+            _, _, current_motif = hq.heappop(priority_queue)
             if current_motif in visited_nodes:
                 continue
+
+            current_attrs = self.motif_graph.nodes[current_motif]
+            current_model = current_attrs["model"] 
+            current_depth = current_attrs.get("depth", 0)
+
+            # Enforce motif length safely (current_model is defined)
             if len(current_motif.strip()) > self.max_motif_length:
                 log.debug(
-                    f"{current_motif.string}, Skipping due to length > {self.max_motif_length}"
+                    f"{current_motif.string} expansion skipped due to length | Model: {current_model} | "
+                    f"Score: {current_attrs['score']:.2f} | "
+                    f"Queue size: {len(priority_queue)} | "
+                    f"Came from {', '.join(str(node) for node in list(self.motif_graph.predecessors(current_motif)))}"
                 )
                 continue
 
-            current_model = self.motif_graph.nodes[current_motif]["model"]
             visited_nodes.add(current_motif)
             log.debug(
-                f"{current_motif.string} | Model: {current_model} | "
-                f"Score: {self.motif_graph.nodes[current_motif]['score']:.2f} | "
-                f"Queue size: {len(priority_queue)}"
+                f"{current_motif.string} expanded | Model: {current_model} | "
+                f"Score: {current_attrs['score']:.2f} | "
+                f"Queue size: {len(priority_queue)} | "
+                f"Came from {', '.join(str(node) for node in list(self.motif_graph.predecessors(current_motif)))}"
             )
             self.motif_graph.nodes[current_motif]["visited"] = True
             rounds_since_new_best += 1
+
+            # Filter sequences for this motif
             active_methylation_sequences = self.methylation_sequences.copy().filter_sequence_matches(
                 current_motif.one_hot(), keep_matches=True
             )
@@ -613,43 +629,47 @@ class MotifSearcher:
 
             # Add neighbors to graph
             for next_motif in neighbors:
-                if next_motif in self.motif_graph.nodes:
-                    # Add only edge if motif already visited
-                    next_model = self.motif_graph.nodes[next_motif]["model"]
-                    score = self.motif_graph.nodes[next_motif]["score"]
-                    self.motif_graph.add_edge(current_motif, next_motif)
-                else:
-                    next_model = BetaBernoulliModel(alpha = 0, beta = 0)
-                    for contig in self.bin_pileup.get_column("contig").unique().to_list():
-                        pileup_contig = self.bin_pileup.filter(pl.col("contig") == contig)
-                        contig_sequence = self.bin_sequence[contig]
-                        # Create model for the next motif
-                        next_model_contig = motif_model_contig(
-                            pileup_contig,
-                            contig_sequence.sequence,
-                            next_motif,
-                            low_meth_threshold=self.low_meth_threshold,
-                            high_meth_threshold=self.high_meth_threshold
-                        )
-                        next_model.update(next_model_contig._alpha, next_model_contig._beta)
+                next_depth = current_depth + 1
 
-                    # Add neighbor to graph
+                # Build model for the next motif
+                next_model = motif_model_bin(
+                    pileup=self.bin_pileup,
+                    contigs=self.bin_sequence,
+                    motif=next_motif,
+                    model=BetaBernoulliModel(),
+                    low_meth_threshold=self.low_meth_threshold,
+                    high_meth_threshold=self.high_meth_threshold,
+                )
+
+                # Score relative to current
+                score = self._scoring_function_predictive_evaluation(next_model, current_model)
+                priority = self._priority_function(next_model, root_model)
+
+                if next_motif in self.motif_graph.nodes:
+                    # Update existing node if new score is better
+                    if self.motif_graph.nodes[next_motif]["score"] < score:
+                        self.motif_graph.nodes[next_motif]["score"] = score
+                else:
                     self.motif_graph.add_node(
                         next_motif,
                         model=next_model,
                         motif=next_motif,
-                        visited=False
+                        visited=False,
+                        score=score,
+                        priority=priority,
+                        depth=next_depth
                     )
-                    self.motif_graph.add_edge(current_motif, next_motif)
-
-                    score = self._scoring_function_predictive_evaluation(next_model, current_model)
-                    self.motif_graph.nodes[next_motif]["score"] = score
+                self.motif_graph.add_edge(current_motif, next_motif)
 
                 # Add neighbor to priority queue if not visited
                 if next_motif not in visited_nodes:
-                    priority = self._priority_function(next_model, current_model)
-                    hq.heappush(priority_queue, (priority, next_motif))
+                    attrs = self.motif_graph.nodes[next_motif]
+                    hq.heappush(
+                        priority_queue,
+                        (attrs["depth"], -attrs["priority"], next_motif)
+                    )
 
+                # Track best
                 if score > best_score:
                     best_score = score
                     best_guess = next_motif
@@ -660,6 +680,7 @@ class MotifSearcher:
                 break
 
         return self.motif_graph, best_guess
+
 
 
 
@@ -743,27 +764,28 @@ def methylated_motif_occourances(
 
 def motif_model_bin(
         pileup,
-        contigs: dict[str, str],
+        contigs: dict[str, DNAsequence],
         motif: str,
+        model,
         low_meth_threshold,
         high_meth_threshold,
 ):
-    bin_model = BetaBernoulliModel(0, 0)
     for contig, contig_sequence in contigs.items():
         pileup_contig = pileup.filter(pl.col("contig") == contig)
         model = motif_model_contig(
             pileup_contig,
-            contig_sequence,
+            contig_sequence.sequence,
+            model,
             motif,
             low_meth_threshold=low_meth_threshold,
             high_meth_threshold=high_meth_threshold
         )
-        bin_model.update(model._alpha, model._beta)
-    return bin_model
+    return model
 
 def motif_model_contig(
         pileup, 
         contig: str, 
+        prior: BetaBernoulliModel,
         motif, 
         low_meth_threshold=0.3,
         high_meth_threshold=0.7,
@@ -794,7 +816,7 @@ def motif_model_contig(
     index_meth_fwd, index_nonmeth_fwd = methylated_motif_occourances(motif_stripped, contig, meth_positions_fwd, non_meth_positions_fwd)
     index_meth_rev, index_nonmeth_rev = methylated_motif_occourances(motif_stripped.reverse_compliment(), contig, meth_positions_rev, non_meth_positions_rev)
 
-    model = BetaBernoulliModel()
+    model = prior
     model.update(len(index_meth_fwd) + len(index_meth_rev), len(index_nonmeth_fwd) + len(index_nonmeth_rev))
     
     if save_motif_positions:
@@ -837,14 +859,14 @@ def methylated_reads_counts(
 
 
 
-def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshold=0.3, high_meth_threshold=0.7, mean_shift_threshold = -0.2):
+def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshold=0.3, high_meth_threshold=0.7, merge_threshold = -0.2):
     new_df = []
     for (bin_name, mod_type), df in motif_df.group_by("bin", "mod_type"):
         contigs = contig_bin.filter(col("bin") == bin_name).get_column("contig").unique().to_list()
         log.debug(f"Merging motifs of bin: {bin_name}, modtype: {mod_type}")
         
         # Create dictionary of bin contigs to sequence
-        bin_sequences = {contig: assembly[contig].sequence for contig in contigs}
+        bin_sequences = {contig: assembly[contig] for contig in contigs}
 
 
         # Get list of motifs
@@ -857,37 +879,38 @@ def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshol
         all_merged_motifs = []
         all_premerge_motifs = []
         # Check mean shift of premerge motifs to merged motif is high enough
-        for cluster, motifs in merged_motifs.items():
+        for _, motifs in merged_motifs.items():
             merged_motif = motifs[0]
             premerge_motifs = motifs[1]
-            merge_mean = motif_model_bin(
+
+            merge_model = motif_model_bin(
                 pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)), 
                 bin_sequences,
                 merged_motif,
+                BetaBernoulliModel(),
                 low_meth_threshold=low_meth_threshold,
                 high_meth_threshold=high_meth_threshold
-            ).mean()
-            pre_merge_means = []
+            )
+
+            pre_merge_model = BetaBernoulliModel()
             for pre_merge_motif in premerge_motifs:
-                pre_merge_means.append(
-                    motif_model_bin(
-                        pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)),
-                        bin_sequences,
-                        pre_merge_motif,
-                        low_meth_threshold=low_meth_threshold,
-                        high_meth_threshold=high_meth_threshold
-                    ).mean()
+                pre_merge_model = motif_model_bin(
+                    pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)),
+                    bin_sequences,
+                    pre_merge_motif,
+                    pre_merge_model,
+                    low_meth_threshold=low_meth_threshold,
+                    high_meth_threshold=high_meth_threshold
                 )
-            
-            pre_merge_mean = sum(np.array(pre_merge_means)) / len(pre_merge_means)
-            mean_shift = merge_mean - pre_merge_mean
-            if mean_shift < mean_shift_threshold:
-                log.debug(f"Mean shift of merged motif {merged_motif} is {mean_shift}, keeping original motifs")
-            
+            mean_diff = merge_model.mean() - pre_merge_model.mean()
+            if mean_diff > merge_threshold:
+                log.debug(f"Merging motifs {premerge_motifs} to {merged_motif}, mean diff: {mean_diff}")
             else:
-                log.debug(f"Mean shift of merged motif {merged_motif} is {mean_shift}, merging motifs")
-                all_merged_motifs.append(merged_motif)
-                all_premerge_motifs.extend(premerge_motifs)
+                log.debug(f"Not merging motifs {premerge_motifs} to {merged_motif}, mean diff: {mean_diff}")
+                continue
+
+            all_merged_motifs.append(merged_motif)
+            all_premerge_motifs.extend(premerge_motifs)
         log.info(f"Motif merge for bin {bin_name} modtype {mod_type} complete")
         # Create a new dataframe with the non merged motifs
         if  len(all_premerge_motifs) == 0:
@@ -904,6 +927,7 @@ def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshol
                 pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)), 
                 bin_sequences,
                 motif,
+                BetaBernoulliModel(),
                 low_meth_threshold=low_meth_threshold,
                 high_meth_threshold=high_meth_threshold
             )
