@@ -241,7 +241,9 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
             log.error(f"File {args.pileup} does not exist")
             return None
         pileup = nm.load_pileup(args.pileup, min_coverage = args.threshold_valid_coverage, min_fraction = 0)
-
+    if pileup.pileup.is_empty():
+        log.error("Pileup is empty")
+        return None
 
     
     pileup = pileup.pileup.with_columns([
@@ -273,6 +275,7 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
             methylation_threshold_high = args.methylation_threshold_high,
             methylation_threshold_low = args.methylation_threshold_low,
             minimum_kl_divergence = args.minimum_kl_divergence,
+            score_threshold = args.min_motif_score,
             verbose = args.verbose,
             log_dir = args.out + "/logs",
             seed = args.seed
@@ -296,9 +299,12 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
         ])
         if "model" in df.columns:
             df_out = df_out.with_columns([
-                pl.Series("n_mod", n_mod),
-                pl.Series("n_nomod", n_nomod)
-            ])
+                pl.col("model").map_elements(lambda x: x._alpha, return_dtype=pl.Float64).alias("alpha"),
+                pl.col("model").map_elements(lambda x: x._beta, return_dtype=pl.Float64).alias("beta")
+            ]).with_columns([
+                (pl.col("beta") - nm.model.DEFAULT_PRIOR_BETA).alias("n_nomod"),
+                (pl.col("alpha") - nm.model.DEFAULT_PRIOR_ALPHA).alias("n_mod")
+            ]).drop("model")
         try:
             df_out = df_out.select([
                 "bin", "motif", "mod_position", "mod_type", "n_mod", "n_nomod", "motif_type",
@@ -308,19 +314,19 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
             df_out = df_out.select([
                 "bin", "motif", "mod_position", "mod_type", "n_mod", "n_nomod", "motif_type",
             ])
-        # Subtract prior alpha and beta from n_mod and n_nomod
-        if "model" in df.columns:
-            df_out = df_out.with_columns([
-                pl.col("n_mod") - nm.model.DEFAULT_PRIOR_BETA,
-                pl.col("n_nomod") - nm.model.DEFAULT_PRIOR_ALPHA
-            ])
         return df_out
     def save_motif_df(df, name):
         df = format_motif_df(df)
         df = df.sort(["bin", "mod_type", "motif"])
         df.write_csv(args.out + "/" + name + ".tsv", separator="\t")
     os.makedirs(args.out + "/precleanup-motifs/", exist_ok=True)
-    motifs.drop("model").write_csv(args.out + "/precleanup-motifs/motifs-raw-unformatted.tsv", separator="\t")
+    motifs.with_columns([
+        pl.col("model").map_elements(lambda x: x._alpha, return_dtype=pl.Float64).alias("alpha"),
+        pl.col("model").map_elements(lambda x: x._beta, return_dtype=pl.Float64).alias("beta")
+    ]).with_columns([
+        (pl.col("beta") - nm.model.DEFAULT_PRIOR_BETA).alias("n_nomod"),
+        (pl.col("alpha") - nm.model.DEFAULT_PRIOR_ALPHA).alias("n_mod")
+    ]).drop("model").write_csv(args.out + "/precleanup-motifs/motifs-raw-unformatted.tsv", separator="\t")
     save_motif_df(motifs, "precleanup-motifs/motifs-raw")
 
     log.info("Postprocessing motifs")
@@ -352,15 +358,15 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
     motifs_file_name = motifs_file_name +   "-merge"
     save_motif_df(motifs, motifs_file_name)
 
-    log.info(" - Removing sub motifs")
-    motifs = motifs.rename({"bin":"contig"})
-    motifs = nm.postprocess.remove_sub_motifs(motifs)
-    if len(motifs) == 0:
-        log.info("No motifs found")
-        return
-    motifs_file_name = motifs_file_name +   "-sub"
-    motifs = motifs.rename({"contig":"bin"})
-    save_motif_df(motifs, motifs_file_name)
+    # log.info(" - Removing sub motifs")
+    # motifs = motifs.rename({"bin":"contig"})
+    # motifs = nm.postprocess.remove_sub_motifs(motifs)
+    # if len(motifs) == 0:
+    #     log.info("No motifs found")
+    #     return
+    # motifs_file_name = motifs_file_name +   "-sub"
+    # motifs = motifs.rename({"contig":"bin"})
+    # save_motif_df(motifs, motifs_file_name)
 
     log.info(" - Joining motif complements")
     motifs = motifs.rename({"bin":"contig"})

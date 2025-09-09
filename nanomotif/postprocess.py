@@ -119,8 +119,8 @@ def merge_motifs_in_df(motif_df, pileup, assembly, mean_shift_threshold = -0.2):
 def join_motif_complements(motif_df):
     if "model" in motif_df.columns:
         if "model" in motif_df.columns:
-            n_mod = [x._alpha for x in motif_df["model"]]
-            n_nomod = [x._beta for x in motif_df["model"]]
+            n_mod = [x._alpha - nm.model.DEFAULT_PRIOR_ALPHA for x in motif_df["model"]]
+            n_nomod = [x._beta - nm.model.DEFAULT_PRIOR_BETA for x in motif_df["model"]]
 
             motif_df = motif_df.with_columns([
                 pl.Series("n_mod", n_mod),

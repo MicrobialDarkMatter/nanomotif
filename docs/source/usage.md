@@ -4,7 +4,17 @@
 
 ## Motif discovery
 
-The motif discovery process identifies motifs at both the contig and bin levels. It consists of three underlying commands: `find_motifs`, `score_motifs`, and `bin_consensus`. To simplify usage, a wrapper command, `motif_discovery`, runs all three steps in sequence. We recommend using `motif_discovery` unless you have a specific reason to run the individual commands separately. See [here](https://nanomotif.readthedocs.io/en/latest/output.html#motifs-tsv) for detailed output description.
+The motif discovery process identifies motifs at bin levels. The command require the relation between bins and contigs to be specified. This can be done in three ways:
+1) A TSV file specifying which bin contigs belong to (`-c` or `--contig_bin`).
+2) A list of bin FASTA files with contig names as headers (`-f` or `--files`).
+3) A directory containing bin FASTA files with contig names as headers (`-d` or `--directory`). The file extension of the bin FASTA files can be specified using the `--extension` flag.
+The motif discovery process requires an assembly file and a modkit pileup file as input. The output will be written to the specified output folder, which will contain a `bin-motifs.tsv` file summarizing the identified motifs per bin. See [here](https://nanomotif.readthedocs.io/en/latest/output.html#motifs-tsv) for detailed output description.
+
+The primary parameter to tune is the `--min_motif_score`, which determines the minimum score for a motif to be kept after identification. A lower value will result in more motifs being identified, but may also include more false positives. The default value is set to 1, which is a good starting point for most datasets. 
+1) Minimum score of 0.5: Very sensitive, will identify many motifs, but also many false positives. In addition to small palindromic and non-palindromic motifs, most very degenerate or long bipartite motifs may be identified. In addition to motifs for systematic errors around other methylation types (e.g., C5mCGG for 6mA, giving rise to 6mA motif variant containing CCGG, e.g., 6mACCGG), motifs for systematic errors around non-methylated positions may be included, particularily 5mC motifs in high GC% organismns.
+2) Minimum score of 1: Balanced sensitivity and specificity, suitable for most datasets. Will identify all small palindromic and non-palindromic motifs. Some very degenerate or long bipartite motifs may be missed. Motifs for systematic errors around other methylation type may be included (C5mCWGG for 6mA, giving rise to 6mA motif variant containing CCWGG, e.g. 6mANCCTGG).
+3) Minimum score of 1.5: Very specific, will identify fewer motifs, but with high confidence. May miss some true motifs, particularly very degenerate or long bipartite motifs. Motifs for systematic errors around other methylation types or in high GC% organismns are unlikely to be included.
+
 
 **QUICK START**
 ```shell
@@ -16,18 +26,17 @@ nanomotif motif_discovery $ASSEMBLY $PILEUP -d $BINS --out $OUT
 ```
 
 ```
-usage: nanomotif motif_discovery (-c CONTIG_BIN | -f FILES [FILES ...] | -d DIRECTORY) [--extension EXTENSION] [--out OUT]
-                                 [--methylation_threshold_low METHYLATION_THRESHOLD_LOW] [--methylation_threshold_high METHYLATION_THRESHOLD_HIGH]
-                                 [--search_frame_size SEARCH_FRAME_SIZE] [--minimum_kl_divergence MINIMUM_KL_DIVERGENCE] [--min_motif_score MIN_MOTIF_SCORE]
-                                 [--threshold_valid_coverage THRESHOLD_VALID_COVERAGE] [--min_motifs_bin MIN_MOTIFS_BIN] [-t THREADS] [-v] [--seed SEED]
-                                 [-h]
+usage: nanomotif motif_discovery (-c CONTIG_BIN | -f FILES [FILES ...] | -d DIRECTORY) [--extension EXTENSION] [--out OUT] [--methylation_threshold_low METHYLATION_THRESHOLD_LOW]
+                                 [--methylation_threshold_high METHYLATION_THRESHOLD_HIGH] [--search_frame_size SEARCH_FRAME_SIZE] [--minimum_kl_divergence MINIMUM_KL_DIVERGENCE]
+                                 [--min_motif_score MIN_MOTIF_SCORE] [--threshold_valid_coverage THRESHOLD_VALID_COVERAGE] [--min_motifs_bin MIN_MOTIFS_BIN] [-t THREADS] [-v]
+                                 [--seed SEED] [-h]
                                  assembly pileup
 
 positional arguments:
   assembly              path to the assembly file.
   pileup                path to the modkit pileup file.
 
-Contig Bin Arguments:
+contig bin arguments, use one of::
   -c CONTIG_BIN, --contig_bin CONTIG_BIN
                         TSV file specifying which bin contigs belong.
   -f FILES [FILES ...], --files FILES [FILES ...]
@@ -35,7 +44,7 @@ Contig Bin Arguments:
   -d DIRECTORY, --directory DIRECTORY
                         Directory containing bin FASTA files with contig names as headers.
   --extension EXTENSION
-                        File extension of the bin FASTA files. Default is '.fasta'.
+                        File extension of the bin FASTA files if using -d (DIRECTORY) argument. Default is '.fasta'.
 
 Options:
   --out OUT             path to the output folder
@@ -44,18 +53,17 @@ Options:
   --methylation_threshold_high METHYLATION_THRESHOLD_HIGH
                         A position is considered methylated if fraction of methylated reads is above this threshold. Default: 0.7
   --search_frame_size SEARCH_FRAME_SIZE
-                        length of the sequences sampled around confident methylation sites. Default: 40
+                        length of the sequnces sampled around confident methylation sites. Default: 40
   --minimum_kl_divergence MINIMUM_KL_DIVERGENCE
-                        Minimum KL-divergence for a position to considered for expansion in motif search. Higher value means less exhaustive, but faster
-                        search. Default: 0.05
+                        Minimum KL-divergence for a position to considered for expansion in motif search. Higher value means less exhaustive, but faster search. Default: 0.05
   --min_motif_score MIN_MOTIF_SCORE
-                        Minimum score for a motif to be kept after identification. Default: 0.2
+                        Minimum score for a motif to be kept after identification. Default: 1
   --threshold_valid_coverage THRESHOLD_VALID_COVERAGE
                         Minimum valid base coverage (Nvalid_cov) for a position to be considered. Default: 5
   --min_motifs_bin MIN_MOTIFS_BIN
                         Minimum number of motif observations in a bin. Default: 20
 
-General Arguments:
+general arguments:
   -t THREADS, --threads THREADS
                         Number of threads to use. Default is 1
   -v, --verbose         Increase output verbosity. (set logger to debug level)

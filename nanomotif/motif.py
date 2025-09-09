@@ -331,8 +331,7 @@ class MotifDistanceGraph(nx.Graph):
         return list(nx.connected_components(self))
     
     def get_fully_connected_clusters(self):
-        clusters = self.get_connected_clusters()
-        return [cluster for cluster in clusters if check_all_nodes_connected(self.subgraph(cluster).copy())]
+        return list(nx.find_cliques(self))
 
 
 def merge_motifs(motifs, connectivity_dist=2, min_length=4):

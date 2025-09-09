@@ -8,6 +8,7 @@ results
 reports
 run_defaults.sh
 test_output*
+test_*
 job_*
 
 !bin/.gitkeep

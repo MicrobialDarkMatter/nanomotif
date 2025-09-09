@@ -213,8 +213,8 @@ def process_subpileup(
             pl.lit(contig_name).alias("contig"),
             pl.lit(modtype).alias("mod_type")
         ).with_columns([
-            pl.col("model").map_elements(lambda x: x._alpha).alias("alpha"),
-            pl.col("model").map_elements(lambda x: x._beta).alias("beta")
+            pl.col("model").map_elements(lambda x: x._alpha, return_dtype=pl.Float64).alias("alpha"),
+            pl.col("model").map_elements(lambda x: x._beta, return_dtype=pl.Float64).alias("beta")
         ]).drop("model")
         return identified_motifs
 
