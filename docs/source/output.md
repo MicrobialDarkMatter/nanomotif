@@ -21,13 +21,13 @@ The motif discovery step identifies DNA methylation motifs within bins. It outpu
 | **mod_type**                  | The type of base modification associated with the motif. Uses single-letter codes (e.g., `a` for 6mA, `m` for 5mC, `21839` for 4mC).                                                   |
 | **motif**                     | The detected DNA motif sequence. Uses [IUPAC degenerate nucleotide codes](https://www.bioinformatics.org/sms/iupac.html) to represent positions where multiple nucleotides are possible. |
 | **mod_position**              | The zero-based index of the modified base within the motif. For example, if `mod_position` is 0, the modification occurs on the first nucleotide of the motif.                             |
-| **n_mod**        | The count of motif occurrences considered "generally methylated" (fraction of mapped bases methylated, ≥0.7 by default).                                                               |
-| **n_nomod**    | The count of motif occurrences considered "generally unmethylated" (fraction of mapped bases methylated, <0.2 by default).                                                              |
+| **n_mod**        | The count of motif occurrences considered "methylated" (fraction of mapped bases methylated, ≥0.7 by default).                                                               |
+| **n_nomod**    | The count of motif occurrences considered "unmethylated" (fraction of mapped bases methylated, <0.2 by default).                                                              |
 | **motif_type**                | Classification of the motif as palindromic, non-palindromic, or bipartite. Palindromic motifs read the same forward and backward, while bipartite motifs have a gap separating two distinct parts. |
 | **motif_complement**          | The reverse complement of the motif. Only reported if the reverse complement is identified.                                                                                                 |
 | **mod_position_complement**   | The zero-based position of the modified base in the motif complement.                                                                                                                    |
-| **n_mod_complement**          | The number of generally methylated occurrences of the complement motif.                                                                                                         |
-| **n_nomod_complement**        | The number of generally unmethylated occurrences of the complement motif.                                                                                                       |
+| **n_mod_complement**          | The number of methylated occurrences of the complement motif.                                                                                                         |
+| **n_nomod_complement**        | The number of unmethylated occurrences of the complement motif.                                                                                                       |
 
 ---
 
