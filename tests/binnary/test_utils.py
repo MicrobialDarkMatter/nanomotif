@@ -1,7 +1,7 @@
 import polars as pl
 import pandas as pd
 import nanomotif.binnary.utils as ut
-from pymethylation_utils.utils import run_epimetheus
+from epymetheus.epymetheus import methylation_pattern
 from .conftest import MockArgs
 import os
 from pathlib import Path
@@ -31,13 +31,16 @@ def test_split_bin_contig():
 def test_methylation_utils():
     args = MockArgs()
 
-    run_epimetheus(
+    methylation_pattern(
         pileup = "nanomotif/datasets/geobacillus-plasmids.pileup.bed",
         assembly = "nanomotif/datasets/geobacillus-plasmids.assembly.fasta",
         motifs = ["GATC_m_3", "GATC_a_1"],
         threads = 1,
         min_valid_read_coverage = args.min_valid_read_coverage,
-        output = os.path.join(args.out, "motifs-scored-read-methylation.tsv")
+        output = os.path.join(args.out, "motifs-scored-read-methylation.tsv"),
+        batch_size=1000,
+        min_valid_cov_to_diff_fraction=0.8,
+        allow_assembly_pileup_mismatch=False
     )
 
     file = Path(os.path.join(args.out, "motifs-scored-read-methylation.tsv"))
