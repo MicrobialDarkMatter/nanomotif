@@ -7,7 +7,7 @@ Nanomotif by default include the **motif discovery**, **bin contamination**, and
 Using Conda for managing your Python environments, you can create a new environment and install Nanomotif as follows:
 
 ```shell
-conda create -n nanomotif  python=3.9
+conda create -n nanomotif  python=3.12
 conda activate nanomotif
 conda install -c bioconda nanomotif
 ```

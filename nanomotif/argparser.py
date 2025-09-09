@@ -13,7 +13,7 @@ def create_parser():
         """
         Function to add general arguments to a parser.
         """
-        group = parser.add_argument_group("General Arguments")
+        group = parser.add_argument_group("general arguments")
         group.add_argument(
             "-t", "--threads", type=int, default=1, 
             help="Number of threads to use. Default is 1"
@@ -38,7 +38,7 @@ def create_parser():
         """
         Function to add arguments for contig bin association.
         """
-        group_major = parser.add_argument_group("Contig Bin Arguments")
+        group_major = parser.add_argument_group("contig bin arguments, use one of:")
         group = group_major.add_mutually_exclusive_group(required=True)
 
 
@@ -59,7 +59,7 @@ def create_parser():
 
         group_major.add_argument(
             "--extension", type=str, default=".fasta",
-            help="File extension of the bin FASTA files. Default is '.fasta'."
+            help="File extension of the bin FASTA files if using -d (DIRECTORY) argument. Default is '.fasta'."
         )
 
 
