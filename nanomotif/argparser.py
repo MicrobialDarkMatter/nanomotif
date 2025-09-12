@@ -7,7 +7,8 @@ def create_parser():
     formatter = lambda prog: argparse.HelpFormatter(prog, max_help_position=28)
     parser = argparse.ArgumentParser(description="Motif identification and utilisation commands", formatter_class=formatter)
     parser.add_argument("--version", action="version", version="%(prog)s {}".format(__version__))
-    subparsers = parser.add_subparsers(help="-- Command descriptions --", dest="command")
+    subparsers = parser.add_subparsers(help="-- Command descriptions --", dest="command", title = "commands",
+                                       metavar='{motif_discovery, detect_contamination, include_contigs, MTase-linker, check_installation}')
 
     def add_general_arguments(parser):
         """
