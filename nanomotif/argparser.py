@@ -99,9 +99,14 @@ def create_parser():
     # Find Motifs
     parser_find_motifs = subparsers.add_parser(
         'find_motifs', 
-        help="Finds motifs directly on contig level in provided assembly",
+        help=argparse.SUPPRESS,
         add_help=False
     )
+    # Hide find_motifs help from nanomotif commands
+    for action in subparsers._choices_actions:
+        if action.dest == "find_motifs":
+            subparsers._choices_actions.remove(action)
+            break
 
     parser_find_motifs_options = parser_find_motifs.add_argument_group("Options") 
 
