@@ -485,6 +485,81 @@ def find_best_candidates(
             log.debug("No naive guess found, stopping search")
             break
 
+        # Prune the motif for low scoring positions
+        pruning = True
+        pruning_round = 1
+        indices_to_prune = set()
+        temp_motif = naive_guess
+        pruned_to_single_base = False
+        while pruning:
+            log.debug(f"Pruning round {pruning_round} for motif {temp_motif}")
+            parent_motif_scores = get_parent_scores(
+                temp_motif,
+                bin_pileup,
+                bin_sequences,
+                low_meth_threshold,
+                high_meth_threshold 
+            )
+            parent_scores = [d["score"] for d in parent_motif_scores.values()]
+            mean_parent_score = np.mean(parent_scores)
+            log.debug(f"Mean parent score: {mean_parent_score}")
+            parent_pretty_print = ", ".join([f"{parent} (pos {data['motif_position']}, score {data['score']:.2f}, model {data['parent_model']})" for parent, data in parent_motif_scores.items()])
+            log.debug(f"Parents: {parent_pretty_print}")
+            # Find positions to prune
+            for parent, data in parent_motif_scores.items():
+                if data["score"] < 0.1:
+                    log.debug(f"    Pruning position {data["motif_position"]} from {temp_motif}, score: {data["score"]}")
+                    log.debug(f"    Poor parent motif: {parent}, model: {data["parent_model"]}")
+                    indices_to_prune.add(data["motif_position"])
+            log.debug(f"Pruning round {pruning_round} complete, pruned {len(indices_to_prune)} positions.")
+
+            if len(indices_to_prune) == 0:
+                log.debug("No more positions to prune")
+                pruning = False
+                break
+
+            motif_split = temp_motif.split()
+            for i in indices_to_prune:
+                motif_split[i] = "."
+            pruned_motif_str = "".join(motif_split)
+            pruned_motif = Motif(pruned_motif_str, temp_motif.mod_position)
+            log.debug(f"Pruned motif to {pruned_motif}")
+            if len(pruned_motif_str.replace(".", "")) == 1:
+                pruned_to_single_base = True
+                pruning = False
+                break
+            if pruned_motif == temp_motif:
+                pruning = False
+                break
+            pruning_round += 1
+            temp_motif = pruned_motif
+        
+        if pruned_to_single_base:
+            log.debug("Motif reduced to single base, removing original motif from methylation sequences")
+            log.debug("Updating score based on parents")
+            mean_parent_score = np.mean([d["score"] for d in parent_motif_scores.values()])
+            motif_graph.nodes[naive_guess]["score"] = mean_parent_score
+        elif temp_motif != naive_guess:
+            log.debug(f"Pruned motif from {naive_guess} to {temp_motif}")
+            
+            child_model = [d["child_model"] for _, d in parent_motif_scores.items()][0]
+            # Add the pruned motif to the graph
+            motif_graph.add_node(
+                temp_motif,
+                model=child_model,
+                motif=temp_motif,
+                visited=True,
+                score=mean_parent_score,
+                priority=0,
+                depth=0
+            )
+            naive_guess = temp_motif
+        else:
+            log.debug(f"No pruning performed for {temp_motif}")
+            log.debug("Updating score based on parents")
+            mean_parent_score = np.mean([d["score"] for d in parent_motif_scores.values()])
+            motif_graph.nodes[naive_guess]["score"] = mean_parent_score
+
         # Remove new candidate from methylation sequences
         seq_before = methylation_sequences.shape[0]
         methylation_sequences_clone = methylation_sequences_clone.filter_sequence_matches(naive_guess.one_hot(), keep_matches = False)
@@ -623,13 +698,7 @@ class MotifSearcher:
         Returns:
             float: The calculated score.
         """
-        extra_positive, extra_negative = current_model._alpha - next_model._alpha, current_model._beta - next_model._beta
-
-        log_likelihood_next_per_obs = next_model.log_likelihood_per_obs()
-        log_likelihood_extra_per_obs = next_model.posterior_predictive_per_obs(extra_positive, extra_negative)
-        mean_ratio = next_model.mean() / current_model.mean() if current_model.mean() > 0 else next_model.mean()
-
-        return mean_ratio * (log_likelihood_next_per_obs - log_likelihood_extra_per_obs)
+        return predictive_evaluation_score(next_model, current_model)
 
     def _motif_child_nodes_kl_dist_max(
         self,
@@ -1014,7 +1083,78 @@ def methylated_reads_counts(
     n_nonmod = counts.get_column("n_nonmod")[0]
     return n_mod, n_nonmod
 
+def predictive_evaluation_score(next_model, current_model) -> float:
+    """
+    Calculate the score for a motif based on its predictive model.
 
+    Parameters:
+        next_model: The model of the next motif.
+        current_model: The model of the current motif.
+
+    Returns:
+        float: The calculated score.
+    """
+    extra_positive, extra_negative = current_model._alpha - next_model._alpha, current_model._beta - next_model._beta
+
+    log_likelihood_next_per_obs = next_model.log_likelihood_per_obs()
+    log_likelihood_extra_per_obs = next_model.posterior_predictive_per_obs(extra_positive, extra_negative)
+    mean_diff = next_model.mean()  - current_model.mean()
+
+    return mean_diff * (log_likelihood_next_per_obs - log_likelihood_extra_per_obs)
+
+def get_parent_scores(
+        motif: Motif,
+        pileup: pl.DataFrame,
+        contigs: dict[str, DNAsequence],
+        low_meth_threshold: float,
+        high_meth_threshold: float,
+    ):
+    """
+    Get the scores for all parent motifs of a motif.
+    Parameters:
+    - motif (Motif): The motif to be processed.
+    - pileup (Pileup): The pileup to be processed.
+    - contigs (dict): Dictionary of contig sequences.
+    - low_meth_threshold (float): The threshold for low methylation.
+    - high_meth_threshold (float): The threshold for high methylation.
+    Returns:
+    - dict: A dictionary of parent motifs and their scores.
+    """
+    motif_model = motif_model_bin(
+        pileup=pileup,
+        contigs=contigs,
+        motif=motif,
+        model=BetaBernoulliModel(),
+        low_meth_threshold=low_meth_threshold,
+        high_meth_threshold=high_meth_threshold,
+    )
+    motif_split = motif.split()
+
+    parent_motifs = {}
+    for i, base in enumerate(motif_split):
+        if i == motif.mod_position:
+            continue
+        if (base != ".") and (base != "N"):
+            new_motif = motif_split.copy()
+            new_motif[i] = "."
+            parent_motif = Motif("".join(new_motif), motif.mod_position)
+            parent_model = motif_model_bin(
+                pileup=pileup,
+                contigs=contigs,
+                motif=parent_motif,
+                model=BetaBernoulliModel(),
+                low_meth_threshold=low_meth_threshold,
+                high_meth_threshold=high_meth_threshold,
+            )
+            score = predictive_evaluation_score(motif_model, parent_model)
+            parent_motifs[parent_motif] = dict(
+                motif_position=i,
+                parent_model=parent_model,
+                child_model=motif_model,
+                score=score
+            )
+    return parent_motifs
+    
 
 def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshold=0.3, high_meth_threshold=0.7, merge_threshold = -0.2):
     new_df = []
