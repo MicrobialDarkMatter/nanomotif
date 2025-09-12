@@ -73,8 +73,6 @@ class Motif(str):
         self_stripped = self.new_stripped_motif()
         other_stripped = other_motif.new_stripped_motif()
 
-        if self_stripped.length() < other_stripped.length():
-            return False
         if self_stripped.string == other_stripped.string:
             return False
         size_difference = self_stripped.length() - other_stripped.length()
@@ -86,6 +84,8 @@ class Motif(str):
         for i in range (size_difference+1):
             match = True
             for j, base in enumerate(other_split):
+                if j + i >= len(self_split):
+                    continue
                 if not set(self_split[j+i]).issubset(set(base)) and base != ".": 
                     # Using set to make sure nucleotide order doesn't matter
                     match = False
