@@ -3,9 +3,10 @@ Models
 """
 import numpy as np
 from scipy.stats import beta
+from scipy.special import psi
 
-DEFAULT_PRIOR_BETA = 10
-DEFAULT_PRIOR_ALPHA = 10
+DEFAULT_PRIOR_BETA = 5
+DEFAULT_PRIOR_ALPHA = 5
 
 class BetaBernoulliModel():
     def __init__(self, alpha = DEFAULT_PRIOR_ALPHA, beta = DEFAULT_PRIOR_BETA):
@@ -59,16 +60,20 @@ class BetaBernoulliModel():
         return self.log_likelihood_ratio(other) / n_obs
     
     def posterior_predictive(self, n_positives, n_negatives):
-        p = self.mean()
-        log_likelihood = n_positives * np.log(p + 1e-12) + n_negatives * np.log(1 - p + 1e-12)
-        return log_likelihood
+        n_new = n_positives + n_negatives
+        if n_new == 0:
+            return 0.0
+        E_log_p = psi(self._alpha) - psi(self._alpha + self._beta)
+        E_log_1mp = psi(self._beta) - psi(self._alpha + self._beta)
+        ll_pred = n_positives * E_log_p + n_negatives * E_log_1mp
+        return ll_pred
 
     def posterior_predictive_per_obs(self, n_positives, n_negatives):
         n_new = n_positives + n_negatives
         if n_new == 0:
             return 0.0
-        log_likelihood = self.posterior_predictive(n_positives, n_negatives)
-        return log_likelihood / n_new
+        posterior_preditive = self.posterior_predictive(n_positives, n_negatives)
+        return posterior_preditive / n_new
     
     def posterior_predictive_check(self, n_positives, n_negatives, num_simulations=1000):
         n_new = n_positives + n_negatives
