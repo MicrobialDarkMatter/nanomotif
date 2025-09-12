@@ -355,6 +355,7 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
     if len(motifs) == 0:
         log.info("No motifs found")
         return
+    motifs = motifs.unique()
     motifs_file_name = motifs_file_name +   "-merge"
     save_motif_df(motifs, motifs_file_name)
 
