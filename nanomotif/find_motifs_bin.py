@@ -509,7 +509,7 @@ class MotifSearcher:
         pos = int(np.argmax(kl_divergence_masked))
 
         # Methylation frequency must be above bin frequency
-        index_meth_freq_higher = meth_pssm[:, pos] > bin_pssm[:, pos] * 0.5
+        index_meth_freq_higher = meth_pssm[:, pos] > bin_pssm[:, pos] * 0.8
 
         # Methylation frequency must be above a threshold
         index_meth_freq_above_thresh = meth_pssm[:, pos] > self.freq_threshold
