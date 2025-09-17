@@ -45,7 +45,7 @@ class TestMotif:
         motif = Motif("AT[CG]G", 0)
         assert motif.reverse_compliment() == Motif("C[CG]AT", 3)
         motif = Motif("ATC.G.", 0)
-        assert motif.reverse_compliment() == Motif(".C.GAT", 3)
+        assert motif.reverse_compliment() == Motif(".C.GAT", 5)
         motif = Motif("ATAC.G.", 2)
         assert motif.reverse_compliment() == Motif(".C.GTAT", 4)
     
@@ -189,12 +189,11 @@ class TestMotif:
         motif2 = Motif(".TAAG", 2)
         merged = motif1.merge(motif2)
         assert merged == Motif("A[AT]G", 0)
-        assert merged.mod_position == 0
 
         motif1 = Motif("AGG", 0)
         motif2 = Motif("VAAG", 1)
         merged = motif1.merge(motif2)
-        assert merged == Motif("A[AG]G", 1)
+        assert merged == Motif("A[AG]G", 0)
         assert merged.mod_position == 0
 
         motif1 = Motif("GATC...R", 1)
