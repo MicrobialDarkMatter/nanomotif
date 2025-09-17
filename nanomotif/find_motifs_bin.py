@@ -501,6 +501,9 @@ class MotifSearcher:
         Returns:
             float: The calculated priority.
         """
+        # score = self._scoring_function(next_model, root_model)
+        # return -score
+        odds_ratio = (next_model._alpha * root_model._beta) / (next_model._beta * root_model._alpha)
         try:
             d_alpha = 1 - (next_model._alpha / root_model._alpha)
         except ZeroDivisionError:
@@ -510,7 +513,7 @@ class MotifSearcher:
         except ZeroDivisionError:
             d_beta = 1
         priority = d_alpha * d_beta
-        return priority
+        return odds_ratio
 
     def _scoring_function(self, next_model, current_model) -> float:
         """
