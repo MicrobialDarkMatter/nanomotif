@@ -13,6 +13,19 @@ class Motif(str):
     def __init__(self, _, mod_position):
         self.mod_position = mod_position
         self.string = self.__str__()
+    
+    def __eq__(self, other):
+        if isinstance(other, Motif):
+            return self.string == other.string and self.mod_position == other.mod_position
+        return False
+
+    def __repr__(self):
+        # What shows in lists or when inspecting in the console
+        return f"Motif({super().__str__()!r}, pos={self.mod_position})"
+
+    def __hash__(self):
+        return hash((self.string, self.mod_position))
+
     def from_iupac(self):
         """
         Create a motif from an IUPAC string.
