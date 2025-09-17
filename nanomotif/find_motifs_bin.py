@@ -369,7 +369,7 @@ def process_subpileup(
         padding=padding,
         min_kl=min_kl_divergence,
         max_dead_ends=25,
-        max_rounds_since_new_best=15,
+        max_rounds_since_new_best=25,
         score_threshold=score_threshold
     )
     identified_motifs = nxgraph_to_dataframe(motif_graph) \
@@ -405,7 +405,7 @@ def find_best_candidates(
         padding: int,
         min_kl: float = 0.2, 
         max_dead_ends: int = 25, 
-        max_rounds_since_new_best: int = 15,
+        max_rounds_since_new_best: int = 30,
         score_threshold: float = 0.2,
         remaining_sequences_threshold: float = 0.01
     ) -> tuple[MotifTree, list[Motif]]:
@@ -507,7 +507,7 @@ def find_best_candidates(
             log.debug(f"Parents: {parent_pretty_print}")
             # Find positions to prune
             for parent, data in parent_motif_scores.items():
-                if data["score"] < 0.1:
+                if data["score"] < 0.5:
                     log.debug(f"    Pruning position {data["motif_position"]} from {temp_motif}, score: {data["score"]}")
                     log.debug(f"    Poor parent motif: {parent}, model: {data["parent_model"]}")
                     indices_to_prune.add(data["motif_position"])
@@ -607,8 +607,8 @@ class MotifSearcher:
         motif_graph: Optional[MotifTree] = None,
         min_kl: float = 0.1,
         freq_threshold: float = 0.25,
-        max_rounds_since_new_best: int = 10,
-        max_motif_length: int = 18
+        max_rounds_since_new_best: int = 30,
+        max_motif_length: int = 25
     ):
         """
         Initialize the MotifSearcher class.
@@ -749,22 +749,24 @@ class MotifSearcher:
             return
 
         # All combinations of the bases
-        #max_combination_length = min(len(bases_filtered), 4)
-        #for i in range(1, max_combination_length + 1):
-        #    for base_tuple in itertools.combinations(bases_filtered, i):
-        #        if len(base_tuple) > 1:
-        #            base_str = "[" + "".join(base_tuple) + "]"
-        #        else:
-        #            base_str = base_tuple[0]
-        #        new_motif_sequence = split_motif.copy()
-        #        new_motif_sequence[pos] = base_str
-        #        new_motif_str = "".join(new_motif_sequence)
-        #        yield Motif(new_motif_str, motif.mod_position)
-        for base in bases_filtered:
-            new_motif_sequence = split_motif.copy()
-            new_motif_sequence[pos] = base
-            new_motif_str = "".join(new_motif_sequence)
-            yield Motif(new_motif_str, motif.mod_position)
+        max_combination_length = min(len(bases_filtered), 4)
+        for i in range(1, max_combination_length + 1):
+           for base_tuple in itertools.combinations(bases_filtered, i):
+               if len(base_tuple) > 2:
+                    continue
+               if len(base_tuple) > 1:
+                   base_str = "[" + "".join(base_tuple) + "]"
+               else:
+                   base_str = base_tuple[0]
+               new_motif_sequence = split_motif.copy()
+               new_motif_sequence[pos] = base_str
+               new_motif_str = "".join(new_motif_sequence)
+               yield Motif(new_motif_str, motif.mod_position)
+        # for base in bases_filtered:
+        #     new_motif_sequence = split_motif.copy()
+        #     new_motif_sequence[pos] = base
+        #     new_motif_str = "".join(new_motif_sequence)
+        #     yield Motif(new_motif_str, motif.mod_position)
 
     
     def run(self) -> tuple[MotifTree, Motif]:
@@ -1095,12 +1097,15 @@ def predictive_evaluation_score(next_model, current_model) -> float:
         float: The calculated score.
     """
     extra_positive, extra_negative = current_model._alpha - next_model._alpha, current_model._beta - next_model._beta
+    model_extra = BetaBernoulliModel()
+    model_extra.update(extra_positive, extra_negative)
 
-    log_likelihood_next_per_obs = next_model.log_likelihood_per_obs()
-    log_likelihood_extra_per_obs = next_model.posterior_predictive_per_obs(extra_positive, extra_negative)
-    mean_diff = next_model.mean()  - current_model.mean()
+    ppcp_next = next_model.posterior_predictive_per_obs(next_model._alpha, next_model._beta)
+    ppcp_extra = next_model.posterior_predictive_per_obs(extra_positive, extra_negative)
+    mean_ratio = next_model.mean()  / current_model.mean()
 
-    return mean_diff * (log_likelihood_next_per_obs - log_likelihood_extra_per_obs)
+    return mean_ratio * (ppcp_next - ppcp_extra)
+
 
 def get_parent_scores(
         motif: Motif,
