@@ -354,10 +354,10 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
     save_motif_df(motifs, motifs_file_name)
 
 
-
     save_motif_df(motifs, "bin-motifs")
 
     log.info("Done finding motifs")
+    log.info(f"Identified {len(motifs)} motifs in {len(motifs['bin'].unique())} bins")
     return format_motif_df(motifs)
 
 
