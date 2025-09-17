@@ -6,14 +6,12 @@ nanomotif/flamegraph*
 austin
 results
 reports
-run_defaults.sh
-test_output*
-development_output*
-debug_output*
-run_development.sh
-test_*
-job_*
+development_output
+development_sbatch_jobs
+.vscode
 launch_*
+.envrc
+flake*
 
 !bin/.gitkeep
 bin/
