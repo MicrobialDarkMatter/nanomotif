@@ -8,11 +8,12 @@ results
 reports
 run_defaults.sh
 test_output*
-# test_*
-development_*
+development_output*
+debug_output*
+run_development.sh
+test_*
 job_*
-.vscode
-nanomotif_debug_dir
+launch_*
 
 !bin/.gitkeep
 bin/
