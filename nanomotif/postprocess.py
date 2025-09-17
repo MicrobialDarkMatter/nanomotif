@@ -43,7 +43,9 @@ def get_motif_parental_relationship(motifs):
     for i, motif1 in enumerate(motifs):
         for j, motif2 in enumerate(motifs):
             if i != j and motif1.sub_string_of(motif2):
-                relationships.append((motif1, motif2))
+                # Avoid adding duplicates
+                if (motif2, motif1) not in relationships:
+                    relationships.append((motif2, motif1))
     return relationships
 
 
@@ -53,18 +55,20 @@ def remove_sub_motifs(motif_df):
     assert "model" in motif_df.columns
     assert len(motif_df) > 0
     for (contig, mod_type), df in motif_df.group_by("contig", "mod_type"):
+        log.debug(f"Processing evaluating sub-motifs for: {contig}, mod_type {mod_type}")
         motif_strings = df.get_column("motif").to_list()
         positions = df.get_column("mod_position").to_list()
         motifs = [nm.motif.Motif(motif_string, pos) for motif_string, pos in zip(motif_strings, positions)]
         parent_motifs = get_motif_parental_relationship(motifs)
-
-        for child, parent in parent_motifs:
-            if child not in df["motif"].to_list() or child.mod_position not in df["mod_position"].to_list():
+        log.debug(f"Found {len(parent_motifs)} sub-motifs motifs from {len(motifs)} total motifs")
+        for parent, child in parent_motifs:
+            if child.string not in df["motif"].to_list() or child.mod_position not in df["mod_position"].to_list():
+                log.warning(f"Child motif {child} not found in dataframe")
                 continue
             model_child = df.filter(col("motif").eq(child.string) & col("mod_position").eq(child.mod_position))["model"][0]
             model_parent = df.filter(col("motif").eq(parent.string) & col("mod_position").eq(parent.mod_position))["model"][0]
             descend_score = nm.find_motifs_bin.predictive_evaluation_score(model_child, model_parent)
-            if descend_score > 1:
+            if descend_score > 0.5:
                 log.info(f"Keeping sub motif {child} as it has a high predictive score of {descend_score} against parent motif {parent}")
                 motif_to_discard = parent
             else:
