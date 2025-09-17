@@ -8,8 +8,12 @@ results
 reports
 run_defaults.sh
 test_output*
+development_output*
+debug_output*
+run_development.sh
 test_*
 job_*
+launch_*
 
 !bin/.gitkeep
 bin/
