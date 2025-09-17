@@ -45,7 +45,7 @@ def subseq_indices(subseq, seq):
     """
     Find occourance indeces of a subseq in a seq
     """
-    compiled_subseq = re.compile(subseq)
+    compiled_subseq = re.compile(f"(?=({subseq}))")
     index = [match.start() for match in re.finditer(compiled_subseq, seq)]
     return np.array(index)
 
