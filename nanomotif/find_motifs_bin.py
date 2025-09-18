@@ -368,8 +368,8 @@ def process_subpileup(
         high_meth_threshold=high_meth_threshold,
         padding=padding,
         min_kl=min_kl_divergence,
-        max_dead_ends=25,
-        max_rounds_since_new_best=25,
+        max_dead_ends=20,
+        max_rounds_since_new_best=10,
         score_threshold=score_threshold
     )
     identified_motifs = nxgraph_to_dataframe(motif_graph) \
@@ -449,9 +449,9 @@ def find_best_candidates(
         else:
             methylation_sequences = methylation_sequences + methylation_sequences_contig
     methylation_sequences = methylation_sequences.convert_to_DNAarray()
+    total_seqs = methylation_sequences.shape[0]
     bin_pssm = background_sequences.pssm()
 
-    total_sequences = methylation_sequences.shape[0]
     root_motif = Motif("." * padding + MOD_TYPE_TO_CANONICAL[mod_type] + "." * padding, padding)
     methylation_sequences_clone = methylation_sequences.copy()
     best_candidates = []
@@ -561,7 +561,7 @@ def find_best_candidates(
             motif_graph.nodes[naive_guess]["score"] = mean_parent_score
 
         # Remove new candidate from methylation sequences
-        seq_before = methylation_sequences.shape[0]
+        seq_before = methylation_sequences_clone.shape[0]
         methylation_sequences_clone = methylation_sequences_clone.filter_sequence_matches(naive_guess.one_hot(), keep_matches = False)
         if methylation_sequences_clone is None:
             log.debug("No more sequences left")
@@ -569,7 +569,7 @@ def find_best_candidates(
 
         # Check if we should continue the search
         seq_remaining = methylation_sequences_clone.shape[0]
-        seq_remaining_percent = seq_remaining/total_sequences
+        seq_remaining_percent = seq_remaining/total_seqs
 
         if motif_graph.nodes[naive_guess]["score"] < score_threshold:
             dead_ends += 1
@@ -580,7 +580,7 @@ def find_best_candidates(
 
         best_candidates.append(naive_guess)
         
-        if (seq_remaining/total_sequences) < remaining_sequences_threshold:
+        if (seq_remaining/total_seqs) < remaining_sequences_threshold:
             log.debug("Stopping search, too few sequences remaining")
             break
         log.debug("Continuing search")
@@ -1164,7 +1164,7 @@ def get_parent_scores(
     return parent_motifs
     
 
-def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshold=0.3, high_meth_threshold=0.7, merge_threshold = -0.2):
+def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshold=0.3, high_meth_threshold=0.7, merge_threshold = 0.5):
     new_df = []
     for (bin_name, mod_type), df in motif_df.group_by("bin", "mod_type"):
         contigs = contig_bin.filter(col("bin") == bin_name).get_column("contig").unique().to_list()
@@ -1183,11 +1183,13 @@ def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshol
         merged_motifs = nm.motif.merge_motifs(motifs)
         all_merged_motifs = []
         all_premerge_motifs = []
-        # Check mean shift of premerge motifs to merged motif is high enough
-        for _, motifs in merged_motifs.items():
-            merged_motif = motifs[0]
-            premerge_motifs = motifs[1]
 
+        for _, (merged_motif, premerge_motifs, premerge_motif_variants, new_motif_variants) in merged_motifs.items():
+            if len(new_motif_variants) == 0:
+                log.debug(f"Merging motifs {premerge_motifs} to {merged_motif}, as no new motif variants were generated")
+                all_merged_motifs.append(merged_motif)
+                all_premerge_motifs.extend(premerge_motifs)
+                continue
             merge_model = motif_model_bin(
                 pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)), 
                 bin_sequences,
@@ -1197,25 +1199,26 @@ def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshol
                 high_meth_threshold=high_meth_threshold
             )
 
-            pre_merge_model = BetaBernoulliModel()
-            for pre_merge_motif in premerge_motifs:
-                pre_merge_model = motif_model_bin(
+            premerge_motif_variants_model = BetaBernoulliModel()
+            for premerge_motif_variant in premerge_motif_variants:
+                premerge_motif_variants_model = motif_model_bin(
                     pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)),
                     bin_sequences,
-                    pre_merge_motif,
-                    pre_merge_model,
+                    premerge_motif_variant,
+                    premerge_motif_variants_model,
                     low_meth_threshold=low_meth_threshold,
                     high_meth_threshold=high_meth_threshold
                 )
-            mean_diff = merge_model.mean() - pre_merge_model.mean()
-            if mean_diff > merge_threshold:
-                log.debug(f"Merging motifs {premerge_motifs} to {merged_motif}, mean diff: {mean_diff}")
+            merge_score = predictive_evaluation_score(premerge_motif_variants_model, merge_model)
+            if merge_score > merge_threshold:
+                log.debug(f"Merging motifs {premerge_motifs} to {merged_motif}, merge score: {merge_score}")
+                all_merged_motifs.append(merged_motif)
+                all_premerge_motifs.extend(premerge_motifs)
             else:
-                log.debug(f"Not merging motifs {premerge_motifs} to {merged_motif}, mean diff: {mean_diff}")
+                log.debug(f"Not merging motifs {premerge_motifs} to {merged_motif}, merge score: {merge_score}")
                 continue
 
-            all_merged_motifs.append(merged_motif)
-            all_premerge_motifs.extend(premerge_motifs)
+            
         log.info(f"Motif merge for bin {bin_name} modtype {mod_type} complete")
         # Create a new dataframe with the non merged motifs
         if  len(all_premerge_motifs) == 0:
