@@ -194,8 +194,8 @@ def impute_contig_methylation_within_bin(contig_methylation):
         .group_by(["bin", "motif_mod"]) \
         .agg(
             (
-                (pl.col("median") * pl.col("N_motif_obs")).sum() / pl.col("N_motif_obs").sum()
-            ).alias("mean_bin_median")
+                (pl.col("methylation_value") * pl.col("n_motif_obs")).sum() / pl.col("n_motif_obs").sum()
+            ).alias("mean_bin_methylation")
         )
 
     contig_bin_cross = contig_methylation\
@@ -207,9 +207,9 @@ def impute_contig_methylation_within_bin(contig_methylation):
         .join(contig_methylation, on = ["bin", "contig", "motif_mod"], how = "left")\
         .sort(["bin", "contig", "motif_mod"])\
         .with_columns(
-            pl.when(pl.col("median").is_null()).then(pl.col("mean_bin_median")).otherwise(pl.col("median")).alias("median")
+            pl.when(pl.col("methylation_value").is_null()).then(pl.col("mean_bin_methylation")).otherwise(pl.col("methylation_value")).alias("methylation_value")
         )\
-        .drop("N_motif_obs")
+        .drop("n_motif_obs")
         
     return contig_methylation_imputed
 
@@ -235,18 +235,18 @@ def impute_unbinned_contigs(contig_methylation):
     
     cross_motif_mod_contig = cross_motif_mod_contig\
         .with_columns(
-            pl.Series("pseudo_median", random_values)
+            pl.Series("pseudo_methylation", random_values)
         )
     
     imputed_unbinned_contig_methylation = cross_motif_mod_contig\
         .join(unbinned_contig_methylation, on=["contig", "motif_mod", "bin"], how="left")\
         .with_columns(
-            pl.when(pl.col("median").is_null())
-                .then(pl.col("pseudo_median"))
-                .otherwise(pl.col("median"))
-                .alias("median")
+            pl.when(pl.col("methylation_value").is_null())
+                .then(pl.col("pseudo_methylation"))
+                .otherwise(pl.col("methylation_value"))
+                .alias("methylation_value")
         )\
-        .drop("pseudo_median")\
+        .drop("pseudo_methylation")\
         .sort(["contig", "motif_mod"])
 
     return imputed_unbinned_contig_methylation
@@ -254,11 +254,11 @@ def impute_unbinned_contigs(contig_methylation):
 
 def create_matrix(contig_methylation):
     matrix_df = contig_methylation\
-        .select(["contig", "motif_mod", "median"])\
+        .select(["contig", "motif_mod", "methylation_value"])\
         .pivot(
-            values = "median",
+            values = "methylation_value",
             index = "contig",
-            columns="motif_mod",
+            on="motif_mod",
             aggregate_function = None,
             sort_columns = True
         )\

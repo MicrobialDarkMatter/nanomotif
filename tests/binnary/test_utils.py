@@ -1,7 +1,7 @@
 import polars as pl
 import pandas as pd
 import nanomotif.binnary.utils as ut
-from epymetheus.epymetheus import methylation_pattern
+from epymetheus.epymetheus import methylation_pattern, MethylationOutput
 from .conftest import MockArgs
 import os
 from pathlib import Path
@@ -30,17 +30,24 @@ def test_split_bin_contig():
 
 def test_methylation_utils():
     args = MockArgs()
+    cwd = os.getcwd()
+    print(cwd)
+    print(args.out)
+    
+    # Ensure output directory exists
+    os.makedirs(args.out, exist_ok=True)
 
     methylation_pattern(
-        pileup = "nanomotif/datasets/geobacillus-plasmids.pileup.bed",
-        assembly = "nanomotif/datasets/geobacillus-plasmids.assembly.fasta",
+        pileup = "./nanomotif/datasets/geobacillus-plasmids.pileup.bed",
+        assembly = "./nanomotif/datasets/geobacillus-plasmids.assembly.fasta",
         motifs = ["GATC_m_3", "GATC_a_1"],
         threads = 1,
         min_valid_read_coverage = args.min_valid_read_coverage,
         output = os.path.join(args.out, "motifs-scored-read-methylation.tsv"),
         batch_size=1000,
         min_valid_cov_to_diff_fraction=0.8,
-        allow_assembly_pileup_mismatch=False
+        allow_assembly_pileup_mismatch=False,
+        output_type = MethylationOutput.Median
     )
 
     file = Path(os.path.join(args.out, "motifs-scored-read-methylation.tsv"))
@@ -48,7 +55,7 @@ def test_methylation_utils():
 
     res = pl.read_csv(file, separator = "\t")
     print(res.columns)
-    assert res.columns == ['contig', 'motif', 'mod_type', 'mod_position', 'median', 'mean_read_cov', 'N_motif_obs', 'motif_occurences_total']
-    assert res.shape == (4, 8), "Shape does not match"
+    assert res.columns == ['contig', 'motif', 'mod_type', 'mod_position', 'methylation_value', 'mean_read_cov', 'n_motif_obs']
+    assert res.shape == (4, 7), "Shape does not match"
 
     

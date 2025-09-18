@@ -95,11 +95,11 @@ def include_contigs(contig_methylation, contig_lengths, mean_probability):
                     "rf": rf_labels,
                 })\
                 .join(contig_bin, on="contig")\
-                .melt(
-                    id_vars = ["contig", "bin"],
-                    value_vars=["lda", "knn", "rf"],
-                    value_name="assigned_bin",
-                    variable_name="method"
+                .unpivot(
+                    on = ["lda", "knn", "rf"],
+                    index = ["contig", "bin"],
+                    value_name = "assigned_bin",
+                    variable_name = "method"
                 )
     
     columns = ["contig", "bin", "assigned_bin", "method", "prob", "mean_prob", "confidence"]

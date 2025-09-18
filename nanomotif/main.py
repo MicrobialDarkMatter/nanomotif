@@ -503,7 +503,7 @@ def check_install(args, pl):
 # Binnary - contamination and inclusion
 from nanomotif.binnary import data_processing, detect_contamination, include_contigs
 from nanomotif.binnary.logging import set_logger_config
-from epymetheus.epymetheus import methylation_pattern
+from epymetheus.epymetheus import methylation_pattern, MethylationOutput
 
 
 def binnary(args, pl):
@@ -534,12 +534,18 @@ def binnary(args, pl):
         )\
         .get_column("motif_mod").unique()
 
-    contig_methylation_file = "motifs-scored-read-methylation.tsv"
+    if args.methylation_output_type == "median":
+        output_type = MethylationOutput.Median
+    else:
+        output_type = MethylationOutput.WeightedMean
+
+    contig_methylation_file = f"motifs-scored-read-methylation_{args.methylation_output_type}.tsv"
     if not args.force:
         log.info(f"Check if {contig_methylation_file} exists")
 
     if os.path.isfile(os.path.join(args.out,contig_methylation_file)) and not args.force:
         log.info("motifs-scored-read-methylation.tsv exists. Using existing file! Use --force to override this.")
+
     elif not os.path.isfile(os.path.join(args.out, contig_methylation_file)) or args.force:
         log.info(f"Running epymetheus to create {contig_methylation_file}")
         # Create motifs-scored-read-methylation
@@ -553,6 +559,7 @@ def binnary(args, pl):
             min_valid_cov_to_diff_fraction=0.8,
             output = os.path.join(args.out,contig_methylation_file),
             allow_assembly_pileup_mismatch=False,
+            output_type = output_type
         )
 
         if return_code != 0:
@@ -566,12 +573,12 @@ def binnary(args, pl):
     # Load motifs-scored-read-methylation.tsv
     contig_methylation = pl.read_csv(
         os.path.join(args.out, contig_methylation_file), separator="\t", has_header = True, schema = {
-            'contig': pl.String(), 'motif': pl.String(), 'mod_type': pl.String(), 'mod_position': pl.Int8(), 'median': pl.Float64(),  'mean_read_cov': pl.Float64(), 'N_motif_obs': pl.Int32(), 'motif_occurences_total': pl.Int32(),
+            'contig': pl.String(), 'motif': pl.String(), 'mod_type': pl.String(), 'mod_position': pl.Int8(), 'methylation_value': pl.Float64(),  'mean_read_cov': pl.Float64(), 'n_motif_obs': pl.Int32(),
         }
     )
 
     contig_methylation = contig_methylation\
-        .filter((pl.col("N_motif_obs").cast(pl.Float64) * pl.col("mean_read_cov")) >= args.methylation_threshold)
+        .filter((pl.col("n_motif_obs").cast(pl.Float64) * pl.col("mean_read_cov")) >= args.methylation_threshold)
 
     # Setting up the contamination analysis
     if (args.command == "detect_contamination" and not args.contamination_file) or (args.command == "include_contigs" and args.run_detect_contamination):

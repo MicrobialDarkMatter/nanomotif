@@ -73,9 +73,9 @@ def detect_contamination(contig_methylation, contig_lengths, num_consensus = 4, 
                     "gmm": gmm_labels
                 })\
                 .join(contig_bin, on="contig")\
-                .melt(
-                    id_vars = ["contig", "bin"],
-                    value_vars=["spectral", "agg", "hdbscan", "gmm"],
+                .unpivot(
+                    index = ["contig", "bin"],
+                    on=["spectral", "agg", "hdbscan", "gmm"],
                     value_name="cluster",
                     variable_name="method"
                 )
