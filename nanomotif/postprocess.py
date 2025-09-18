@@ -38,17 +38,48 @@ def remove_child_motifs(motifs):
             parent_motifs.append(motif)
     return parent_motifs
 
+def get_motif_parental_relationship(motifs):
+    relationships = []
+    for i, motif1 in enumerate(motifs):
+        for j, motif2 in enumerate(motifs):
+            if i != j and motif1.sub_string_of(motif2):
+                # Avoid adding duplicates
+                if (motif2, motif1) not in relationships:
+                    relationships.append((motif2, motif1))
+    return relationships
+
+
 def remove_sub_motifs(motif_df):
-    motif_df_clean = []
-    for contig, df in motif_df.group_by("contig"):
+    assert "motif" in motif_df.columns
+    assert "mod_position" in motif_df.columns
+    assert "model" in motif_df.columns
+    assert len(motif_df) > 0
+    for (contig, mod_type), df in motif_df.group_by("contig", "mod_type"):
+        log.debug(f"Processing evaluating sub-motifs for: {contig}, mod_type {mod_type}")
         motif_strings = df.get_column("motif").to_list()
         positions = df.get_column("mod_position").to_list()
         motifs = [nm.motif.Motif(motif_string, pos) for motif_string, pos in zip(motif_strings, positions)]
-        parent_motifs = remove_child_motifs(motifs)
-        df_clean = df.filter(col("motif").is_in(parent_motifs))
-        motif_df_clean.append(df_clean)
-    motif_df_clean = pl.concat(motif_df_clean)
-    return motif_df_clean
+        parent_motifs = get_motif_parental_relationship(motifs)
+        log.debug(f"Found {len(parent_motifs)} sub-motifs motifs from {len(motifs)} total motifs")
+        for parent, child in parent_motifs:
+            if child.string not in df["motif"].to_list() or child.mod_position not in df["mod_position"].to_list():
+                log.warning(f"Child motif {child} not found in dataframe")
+                continue
+            model_child = df.filter(col("motif").eq(child.string) & col("mod_position").eq(child.mod_position))["model"][0]
+            model_parent = df.filter(col("motif").eq(parent.string) & col("mod_position").eq(parent.mod_position))["model"][0]
+            descend_score = nm.find_motifs_bin.predictive_evaluation_score(model_child, model_parent)
+            if descend_score > 0.5:
+                log.info(f"Keeping sub motif {child} as it has a high predictive score of {descend_score} against parent motif {parent}")
+                motif_to_discard = parent
+            else:
+                log.info(f"Removing sub motif {child} as it has a low predictive score of {descend_score} against parent motif {parent}")
+                motif_to_discard = child
+            motif_df = motif_df.remove(
+                col("motif").eq(motif_to_discard.string) & 
+                col("mod_position").eq(motif_to_discard.mod_position) &
+                col("mod_type").eq(mod_type)
+            )
+    return motif_df
 
 def merge_motifs_in_df(motif_df, pileup, assembly, mean_shift_threshold = -0.2):
     new_df = []
@@ -118,14 +149,13 @@ def merge_motifs_in_df(motif_df, pileup, assembly, mean_shift_threshold = -0.2):
 
 def join_motif_complements(motif_df):
     if "model" in motif_df.columns:
-        if "model" in motif_df.columns:
-            n_mod = [x._alpha - nm.model.DEFAULT_PRIOR_ALPHA for x in motif_df["model"]]
-            n_nomod = [x._beta - nm.model.DEFAULT_PRIOR_BETA for x in motif_df["model"]]
-
-            motif_df = motif_df.with_columns([
-                pl.Series("n_mod", n_mod),
-                pl.Series("n_nomod", n_nomod)
-            ]).drop(["model"])
+        motif_df = motif_df.with_columns([
+            pl.col("model").map_elements(lambda x: x._alpha, return_dtype=pl.Float64).alias("alpha"),
+            pl.col("model").map_elements(lambda x: x._beta, return_dtype=pl.Float64).alias("beta")
+        ]).with_columns([
+            (pl.col("beta") - nm.model.DEFAULT_PRIOR_BETA).alias("n_nomod"),
+            (pl.col("alpha") - nm.model.DEFAULT_PRIOR_ALPHA).alias("n_mod")
+        ]).drop("model")
     motif_df = motif_df.select([
         "contig", "mod_type", "motif", "mod_position", "n_mod", "n_nomod"
     ])

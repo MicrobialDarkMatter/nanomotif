@@ -5,7 +5,7 @@ from pathlib import Path
 
 import polars as pl
 from nanomotif.fasta import generate_contig_bin, FastaReader
-
+from nanomotif.utils import subseq_indices
 
 class DummyArgs:
     def __init__(self, contig_bin=None, files=None, directory=None, extension=None, out=None):
@@ -90,3 +90,20 @@ def test_generate_contig_bin_from_directory(tmp_path):
     assert set(df.columns) == {"contig", "bin"}
     assert "one" in df["bin"].to_list()
     assert "two" in df["bin"].to_list()
+
+
+def test_subseq_indices():
+    seq = "AATTAAATTAAGTAAAT"
+
+    # Test patterns
+    patterns = {
+        "AATT": [0, 5],
+        "AA.T": [0, 4, 5, 9, 13],
+    }
+
+    for pattern, expected in patterns.items():
+        result = subseq_indices(pattern, seq)
+        print(f"Pattern: {pattern}")
+        print(f"Expected indices: {expected}")
+        print(f"Function output: {result.tolist()}")
+        assert result.tolist() == expected, f"Mismatch for pattern {pattern}"

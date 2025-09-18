@@ -284,6 +284,8 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
     if motifs is None or len(motifs) == 0:
         log.info("No motifs were identified")
         return
+    else:
+        log.debug(f"Identified {len(motifs)} motifs in {len(motifs['bin'].unique())} bins")
 
     log.info("Writing motifs")
     def format_motif_df(df):
@@ -329,18 +331,8 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
     ]).drop("model").write_csv(args.out + "/precleanup-motifs/motifs-raw-unformatted.tsv", separator="\t")
     save_motif_df(motifs, "precleanup-motifs/motifs-raw")
 
-    log.info("Postprocessing motifs")
+    log.info("Refining motifs")
     motifs_file_name = "precleanup-motifs/motifs"
-
-    log.info(" - Writing motifs")
-    motifs = motifs.filter(pl.col("score") > args.min_motif_score)
-    if len(motifs) == 0:
-        log.info("No motifs found")
-        return
-    
-    motifs_file_name = motifs_file_name + "-score"
-    save_motif_df(motifs, motifs_file_name)
-
 
     log.info(" - Removing noisy motifs")
     motifs = nm.postprocess.remove_noisy_motifs(motifs)
@@ -355,18 +347,19 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
     if len(motifs) == 0:
         log.info("No motifs found")
         return
+    motifs = motifs.unique()
     motifs_file_name = motifs_file_name +   "-merge"
     save_motif_df(motifs, motifs_file_name)
 
-    # log.info(" - Removing sub motifs")
-    # motifs = motifs.rename({"bin":"contig"})
-    # motifs = nm.postprocess.remove_sub_motifs(motifs)
-    # if len(motifs) == 0:
-    #     log.info("No motifs found")
-    #     return
-    # motifs_file_name = motifs_file_name +   "-sub"
-    # motifs = motifs.rename({"contig":"bin"})
-    # save_motif_df(motifs, motifs_file_name)
+    log.info(" - Removing sub motifs")
+    motifs = motifs.rename({"bin":"contig"})
+    motifs = nm.postprocess.remove_sub_motifs(motifs)
+    if len(motifs) == 0:
+        log.info("No motifs found")
+        return
+    motifs_file_name = motifs_file_name +   "-sub"
+    motifs = motifs.rename({"contig":"bin"})
+    save_motif_df(motifs, motifs_file_name)
 
     log.info(" - Joining motif complements")
     motifs = motifs.rename({"bin":"contig"})
@@ -387,10 +380,10 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
     save_motif_df(motifs, motifs_file_name)
 
 
-
     save_motif_df(motifs, "bin-motifs")
 
     log.info("Done finding motifs")
+    log.info(f"Identified {len(motifs)} motifs in {len(motifs['bin'].unique())} bins")
     return format_motif_df(motifs)
 
 

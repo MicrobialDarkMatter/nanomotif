@@ -154,3 +154,48 @@ class TestMotifSearcher:
         expected_score = 0.6 * 1 * 0.2
 
         assert score == pytest.approx(expected_score)
+
+
+def test_get_motif_parental_relationships():
+    motif1 = Motif("ACGT", 0)
+    motif2 = Motif("ACG", 0)
+    motif3 = Motif("CGT", 1)
+    motif4 = Motif("ACGTG", 0)
+    motif5 = Motif("TGCA", 1)
+    
+    motifs = [motif1, motif2, motif3, motif4, motif5]
+    expected_relationships = set([
+        (motif2, motif1),
+        (motif2, motif4),
+        (motif3, motif1),
+        (motif3, motif4),
+        (motif1, motif4)
+    ])
+    relationships = set(nm.postprocess.get_motif_parental_relationship(motifs))
+    assert relationships == expected_relationships
+
+    
+    motif6 = Motif("GGCA[AT]", 2)
+    motif7 = Motif("GGCAAT", 2)
+    motif8 = Motif("GGCAAT", 4)
+    motif9 = Motif("AATTT", 0)
+    motif10 = Motif("AATTT", 1)
+    motif11 = Motif("AATTTT", 0)
+    motifs = [motif6, motif7, motif8, motif9, motif10, motif11]
+    expected_relationships = set([
+        (motif6, motif7),
+        (motif6, motif8),
+        (motif9, motif11),
+        (motif10, motif11)
+    ])
+    relationships = set(nm.postprocess.get_motif_parental_relationship(motifs))
+    assert relationships == expected_relationships
+
+    motif12 = Motif("TTAAGGAG", 6)
+    motif13 = Motif("TTAA", 3)
+    motifs = [motif12, motif13]
+    expected_relationships = set([
+        (motif13, motif12)
+    ])
+    relationships = set(nm.postprocess.get_motif_parental_relationship(motifs))
+    assert relationships == expected_relationships
