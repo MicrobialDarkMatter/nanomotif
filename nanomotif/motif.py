@@ -1,6 +1,8 @@
 import numpy as np
 import re
 import itertools
+from functools import reduce
+from itertools import product
 import networkx as nx
 import logging as log
 from scipy.stats import entropy
@@ -254,6 +256,47 @@ class Motif(str):
         merged_motif = Motif(merged_motif_string, merged_mod_position)
         merged_motif = merged_motif.new_stripped_motif(".")
         return merged_motif
+    
+    def merge_no_strip(self, other):
+        assert isinstance(other, Motif)
+        self_seq = self.split()
+        other_seq = other.split()
+        length_self = len(self_seq)
+        length_other = len(other_seq)
+
+        offset = self.mod_position - other.mod_position
+        if offset > 0:
+            self_seq = self_seq[offset:]
+        elif offset < 0:
+            other_seq = other_seq[-offset:]
+
+        final_length = min(len(self_seq), len(other_seq))
+        self_seq = self_seq[:final_length]
+        other_seq = other_seq[:final_length]
+        
+        # Merge the motifs base by base, keeping the modification position aligned
+        merged_motif_string = ''.join([self.merge_bases(base, base_other) for base, base_other in zip(self_seq, other_seq)])
+        merged_mod_position = min(self.mod_position, other.mod_position)
+
+        # Pad to ensure keeps all positions in both of the original motifs
+        if self.mod_position < other.mod_position:
+            padding = other.mod_position - self.mod_position
+            merged_motif_string = "." * padding + merged_motif_string
+            merged_mod_position = self.mod_position
+        elif other.mod_position < self.mod_position:
+            padding = self.mod_position - other.mod_position
+            merged_motif_string = "." * padding + merged_motif_string
+            merged_mod_position = other.mod_position
+        if length_self - self.mod_position > length_other - other.mod_position:
+            padding = (length_self - self.mod_position) - (length_other - other.mod_position)
+            merged_motif_string = merged_motif_string + "." * padding
+        elif length_other - other.mod_position > length_self - self.mod_position:
+            padding = (length_other - other.mod_position) - (length_self - self.mod_position)
+            merged_motif_string = merged_motif_string + "." * padding
+
+        # Create and return a new Motif object with the merged motif string and modification position
+        merged_motif = Motif(merged_motif_string, merged_mod_position)
+        return merged_motif
         
     def merge_bases(self, base1, base2):
         canonical_bases = {'A', 'C', 'G', 'T'}
@@ -280,6 +323,64 @@ class Motif(str):
         """
         exploded_strings = explode_sequence(self.string)
         return [Motif(motif, self.mod_position) for motif in exploded_strings]
+
+
+def align_motifs(motifs):
+    """
+    Align motifs by their modification positions.
+    Returns list of aligned motifs.
+    """
+
+    if not motifs:
+        return []
+
+    # Align left side
+    min_mod_pos = min(motif.mod_position for motif in motifs)
+    max_mod_pos = max(motif.mod_position for motif in motifs)
+    aligned_motifs = []
+
+    for motif in motifs:
+        prefix_dots = max_mod_pos - motif.mod_position
+        new_motif_string = '.' * prefix_dots + motif.string
+        new_mod_position = max_mod_pos
+        aligned_motifs.append(Motif(new_motif_string, new_mod_position))
+    # Align right side
+    max_length = max(motif.length() for motif in aligned_motifs)
+    for i, motif in enumerate(aligned_motifs):
+        suffix_dots = max_length - motif.length()
+        new_motif_string = motif.string + '.' * suffix_dots
+        aligned_motifs[i] = Motif(new_motif_string, motif.mod_position) 
+    return aligned_motifs
+
+def explode_with_mask(motif, mask):
+    """
+    Explode motif but only at positions given by mask (list of indices).
+    Returns set of exploded strings, preserving '.' at unmasked positions.
+    """
+    segments = motif.split()
+
+    # Build a list of possible bases for each masked position
+    bases_options = []
+    for i in mask:
+        seg = segments[i]
+        if seg == ".":
+            bases_options.append(["A", "C", "G", "T"])
+        elif seg.startswith("["):
+            bases_options.append(list(seg[1:-1]))
+        else:
+            bases_options.append([seg])
+
+    variants = set()
+    for combo in product(*bases_options):
+        new_seq = segments.copy()
+        for idx, pos in enumerate(mask):
+            new_seq[pos] = combo[idx]
+        variants.add("".join(new_seq))
+
+    # Convert to Motif objects
+    variants = {Motif(v, motif.mod_position) for v in variants}  
+    return variants
+
 
 
 def explode_sequence(seq):
@@ -346,6 +447,43 @@ class MotifDistanceGraph(nx.Graph):
     def get_fully_connected_clusters(self):
         return list(nx.find_cliques(self))
 
+def merge_and_find_new_variants(motifs):
+    """
+    Merge motifs and return:
+      - merged motif
+      - pre-merge exploded variants (masked)
+      - new variants that appear after merge
+    """
+    if not motifs:
+        return None, set(), set()
+    motifs = align_motifs(motifs)
+
+    # Determine mask (positions that are not '.' in ANY motif)
+    all_segments = [m.split() for m in motifs]
+    n = len(all_segments[0])
+    mask = [
+        i for i in range(n)
+        if any(seg[i] != "." for seg in all_segments)
+    ]
+
+    # Explode pre-merge variants
+    pre_variants = set()
+    for m in motifs:
+        pre_variants |= explode_with_mask(m, mask)
+
+    # Merge motifs
+    merged = reduce(lambda a, b: a.merge_no_strip(b), motifs)
+
+    # Explode post-merge variants using same mask
+    post_variants = explode_with_mask(merged, mask)
+
+    new_variants = post_variants - pre_variants
+
+    new_variants = {v.new_stripped_motif() for v in new_variants}
+    pre_variants = {v.new_stripped_motif() for v in pre_variants}
+    merged = merged.new_stripped_motif()
+    return merged, pre_variants, new_variants
+
 
 def merge_motifs(motifs, connectivity_dist=2, min_length=4):
     """
@@ -374,19 +512,17 @@ def merge_motifs(motifs, connectivity_dist=2, min_length=4):
         if len(cluster) == 1:
             continue
         log.debug(f'Cluster {i}: {cluster}')
-        cluster_motifs = []
-        merged_motif = None
-        for node in cluster:
-            cluster_motifs.append(node)
-            # Merge motifs
-            if merged_motif is None:
-                merged_motif = node
-            else:
-                merged_motif = merged_motif.merge(node)
+        cluster_motifs = list(cluster)
+        merged_motif, pre_variants, new_variants = merge_and_find_new_variants(cluster_motifs)
+        if merged_motif is None:
+            continue
+        if merged_motif.trimmed_length() < min_length:
+            continue
+
 
 
         log.debug(f'Merged motif: {merged_motif}')
-        motif_merged[i] = [merged_motif, cluster_motifs]
+        motif_merged[i] = [merged_motif, cluster_motifs, pre_variants, new_variants]
     return motif_merged
 
 
