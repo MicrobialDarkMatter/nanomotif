@@ -368,8 +368,8 @@ def process_subpileup(
         high_meth_threshold=high_meth_threshold,
         padding=padding,
         min_kl=min_kl_divergence,
-        max_dead_ends=20,
-        max_rounds_since_new_best=10,
+        max_dead_ends=10,
+        max_rounds_since_new_best=30,
         score_threshold=score_threshold
     )
     identified_motifs = nxgraph_to_dataframe(motif_graph) \
@@ -752,24 +752,24 @@ class MotifSearcher:
             return
 
         # All combinations of the bases
-        max_combination_length = min(len(bases_filtered), 4)
-        for i in range(1, max_combination_length + 1):
-           for base_tuple in itertools.combinations(bases_filtered, i):
-               if len(base_tuple) > 2:
-                    continue
-               if len(base_tuple) > 1:
-                   base_str = "[" + "".join(base_tuple) + "]"
-               else:
-                   base_str = base_tuple[0]
-               new_motif_sequence = split_motif.copy()
-               new_motif_sequence[pos] = base_str
-               new_motif_str = "".join(new_motif_sequence)
-               yield Motif(new_motif_str, motif.mod_position)
-        # for base in bases_filtered:
-        #     new_motif_sequence = split_motif.copy()
-        #     new_motif_sequence[pos] = base
-        #     new_motif_str = "".join(new_motif_sequence)
-        #     yield Motif(new_motif_str, motif.mod_position)
+        # max_combination_length = min(len(bases_filtered), 4)
+        # for i in range(1, max_combination_length + 1):
+        #    for base_tuple in itertools.combinations(bases_filtered, i):
+        #        if len(base_tuple) > 2:
+        #             continue
+        #        if len(base_tuple) > 1:
+        #            base_str = "[" + "".join(base_tuple) + "]"
+        #        else:
+        #            base_str = base_tuple[0]
+        #        new_motif_sequence = split_motif.copy()
+        #        new_motif_sequence[pos] = base_str
+        #        new_motif_str = "".join(new_motif_sequence)
+        #        yield Motif(new_motif_str, motif.mod_position)
+        for base in bases_filtered:
+            new_motif_sequence = split_motif.copy()
+            new_motif_sequence[pos] = base
+            new_motif_str = "".join(new_motif_sequence)
+            yield Motif(new_motif_str, motif.mod_position)
 
     
     def run(self) -> tuple[MotifTree, Motif]:
