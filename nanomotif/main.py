@@ -228,58 +228,32 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
     log.info("Starting nanomotif motif finder")
     # Bin contig relationsship
     bin_contig = nm.fasta.generate_contig_bin(args)
+    if bin_contig is None or len(bin_contig) == 0:
+        log.error("No bin contig mapping found")
+        return
 
     # Assembly
     if assembly is None:
         log.info("Loading assembly")
         assembly = nm.fasta.load_fasta(args.assembly)
 
-    # Pileup 
-    if pileup is None:
-        log.info("Loading pileup")
-        if not os.path.exists(args.pileup):
-            log.error(f"File {args.pileup} does not exist")
-            return None
-        pileup = nm.load_pileup(args.pileup, min_coverage = args.threshold_valid_coverage, min_fraction = 0)
-    if pileup.pileup.is_empty():
-        log.error("Pileup is empty")
-        return None
-
-    
-    pileup = pileup.pileup.with_columns([
-        (pl.col("contig") + "_" + pl.col("mod_type")).alias("contig_mod")
-    ])
-    contig_mods_to_keep, contig_mods_to_remove = nm.dataload.extract_contig_mods_with_sufficient_information(pileup.filter(pl.col("fraction_mod") > args.methylation_threshold_high), assembly, min_mods_pr_contig, min_mod_frequency)
-    if len(contig_mods_to_keep) == 0:
-        log.info("No contigs with sufficient information")
-        return None
-
-    log.debug(f"Filtering pileup to keep contigs with more than {min_mods_pr_contig} mods and mod frequency of 1 pr. {min_mod_frequency}")
-    pileup = pileup.filter(pl.col("contig_mod").is_in(contig_mods_to_keep))
-
-    # Writing temperary files
-    os.makedirs(args.out + "/temp/", exist_ok=True)
-    pileup.write_csv(args.out + "/temp/filtered_pileup.tsv", separator="\t")
-    with open(args.out + '/temp/contig_mod_combinations_not_processed.tsv', 'w') as f:
-        for line in contig_mods_to_remove:
-            f.write(f"{line}\n")
-    with open(args.out + '/temp/contig_mod_combinations_processed.tsv', 'w') as f:
-        for line in contig_mods_to_keep:
-            f.write(f"{line}\n")
-
     log.info("Identifying motifs")
-    motifs = nm.find_motifs_bin.process_binned_sample_parallel(
-            assembly, pileup, bin_contig,
-            threads = args.threads,
-            search_frame_size = args.search_frame_size,
-            methylation_threshold_high = args.methylation_threshold_high,
-            methylation_threshold_low = args.methylation_threshold_low,
-            minimum_kl_divergence = args.minimum_kl_divergence,
-            score_threshold = args.min_motif_score,
-            verbose = args.verbose,
-            log_dir = args.out + "/logs",
-            seed = args.seed
-        )
+    config = nm.find_motifs_bin.ProcessorConfig(
+        assembly = assembly,
+        pileup_path = args.pileup,
+        bin_contig = bin_contig,
+        threads = args.threads,
+        search_frame_size = args.search_frame_size,
+        methylation_threshold_low = args.methylation_threshold_low,
+        methylation_threshold_high = args.methylation_threshold_high,
+        minimum_kl_divergence = args.minimum_kl_divergence,
+        score_threshold = args.min_motif_score,
+        verbose = args.verbose,
+        log_dir = args.out + "/logs",
+        seed = args.seed
+    )
+    motif_discovery_parralel = nm.find_motifs_bin.BinMotifProcessorBuilder(config).build()
+    motifs = motif_discovery_parralel.run()
     motifs = pl.DataFrame(motifs)
     if motifs is None or len(motifs) == 0:
         log.info("No motifs were identified")
