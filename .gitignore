@@ -9,7 +9,10 @@ reports
 run_defaults.sh
 test_output*
 # test_*
+development_*
 job_*
+.vscode
+nanomotif_debug_dir
 
 !bin/.gitkeep
 bin/
