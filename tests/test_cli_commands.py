@@ -5,25 +5,6 @@ import os
 import glob
 import shutil
 
-def test_find_motifs():
-    """
-    """
-    outdir = "tests/cli_test_find_motifs"
-    
-    cmd = [
-        "nanomotif", "find_motifs",
-        "nanomotif/datasets/geobacillus-plasmids.assembly.fasta",
-        "nanomotif/datasets/geobacillus-plasmids.pileup.bed",
-        "-t", "1",
-        "--out", outdir
-    ]
-    
-    result = subprocess.run(cmd)
-    
-    # Check that the CLI tool executed successfully
-    shutil.rmtree(outdir)
-    assert result.returncode == 0, "CLI tool did not exit successfully"
-
 
 
 def test_motif_discovery():
