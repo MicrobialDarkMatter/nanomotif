@@ -293,10 +293,9 @@ def main():
         args.verbose = False
         args.seed = 1
     
-    elif args.command == "motif_discovery":
+    if args.command == "motif_discovery":
         shared_setup(args, args.out)
         find_motifs_bin(args, pl)
-    
 
     elif args.command in ["detect_contamination", "include_contigs"]:
         shared_setup(args, args.out)
