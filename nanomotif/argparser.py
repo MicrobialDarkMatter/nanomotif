@@ -95,56 +95,6 @@ def create_parser():
             help="Minimum score for a motif to be kept after identification. Default: %(default)s"
         )   
 
-    ###########################################################################
-    # Find Motifs
-    parser_find_motifs = subparsers.add_parser(
-        'find_motifs', 
-        help=argparse.SUPPRESS,
-        add_help=False
-    )
-    # Hide find_motifs help from nanomotif commands
-    for action in subparsers._choices_actions:
-        if action.dest == "find_motifs":
-            subparsers._choices_actions.remove(action)
-            break
-
-    parser_find_motifs_options = parser_find_motifs.add_argument_group("Options") 
-
-    parser_find_motifs.add_argument(
-        "assembly", type=str, 
-        help="path to the assembly file."
-    )
-
-    parser_find_motifs.add_argument(
-        "pileup", type=str, 
-        help="path to the modkit pileup file."
-    )   
-    
-    parser_find_motifs_options.add_argument(
-        "--out", type=str, 
-        help="path to the output folder", default="nanomotif"
-    )
-    
-    add_methylation_threshold_arguments(parser_find_motifs_options)
-
-    add_motif_search_arguments(parser_find_motifs_options)
-
-    parser_find_motifs_options.add_argument(
-        "--threshold_valid_coverage", type=int, default=5, 
-        help="minimum valid base coverage for a position to be considered. Default: %(default)s"
-    )
-    
-    parser_find_motifs_options.add_argument(
-        "--min_motifs_contig", type=int, default=20, 
-        help="minimum number of times a motif has to have been oberserved in a contig. Default: %(default)s"
-    )
-    
-    parser_find_motifs_options.add_argument(
-        "--read_level_methylation", action="store_true", 
-        help="If specified, methylation is calculated on read level instead of contig level. This is slower but produces more stable motifs."
-    )
-    
-    add_general_arguments(parser_find_motifs)
 
     ###########################################################################
     # Find motifs on bin level
