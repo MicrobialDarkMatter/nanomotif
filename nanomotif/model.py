@@ -10,10 +10,26 @@ DEFAULT_PRIOR_ALPHA = 5
 
 class BetaBernoulliModel():
     def __init__(self, alpha = DEFAULT_PRIOR_ALPHA, beta = DEFAULT_PRIOR_BETA):
-        self.alpha = alpha
-        self.beta = beta
         self._alpha = alpha
         self._beta = beta
+        self._alpha_prior = alpha
+        self._beta_prior = beta
+
+    def __getstate__(self):
+        # Return a serializable representation of the state
+        return {
+            "_alpha": self._alpha,
+            "_beta": self._beta,
+            "_alpha_prior": self._alpha_prior,
+            "_beta_prior": self._beta_prior,
+        }
+
+    def __setstate__(self, state):
+        # Restore from serialized state
+        self._alpha = state["_alpha"]
+        self._beta = state["_beta"]
+        self._alpha_prior = state["_alpha_prior"]
+        self._beta_prior = state["_beta_prior"]
 
     def get_raw_counts(self):
         return self._alpha - DEFAULT_PRIOR_ALPHA, self._beta - DEFAULT_PRIOR_BETA

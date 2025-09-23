@@ -211,13 +211,12 @@ def find_motifs(args, pl,  pileup = None, assembly = None, min_mods_pr_contig = 
     log.info("Done finding motifs")
     return format_motif_df(motifs)
 
-def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_contig = 50, min_mod_frequency = 10000):
+def find_motifs_bin(args, pl, min_mods_pr_contig = 50, min_mod_frequency = 10000):
     """
     Nanomotif motif finder module
 
     Args:
         args (argparse.Namespace): Arguments
-        pileup (pandas.DataFrame): Pileup data
         assembly (nanomotif.Assembly): Assembly data
     
     Returns:
@@ -226,16 +225,13 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
     import polars as pl
 
     log.info("Starting nanomotif motif finder")
-    # Bin contig relationsship
     bin_contig = nm.fasta.generate_contig_bin(args)
     if bin_contig is None or len(bin_contig) == 0:
         log.error("No bin contig mapping found")
         return
 
-    # Assembly
-    if assembly is None:
-        log.info("Loading assembly")
-        assembly = nm.fasta.load_fasta(args.assembly)
+    log.info("Loading assembly")
+    assembly = nm.fasta.load_fasta(args.assembly)
 
     log.info("Identifying motifs")
     config = nm.find_motifs_bin.ProcessorConfig(
@@ -250,115 +246,22 @@ def find_motifs_bin(args, pl,  pileup = None, assembly = None, min_mods_pr_conti
         score_threshold = args.min_motif_score,
         verbose = args.verbose,
         log_dir = args.out + "/logs",
-        seed = args.seed
+        seed = args.seed,
+        output_dir = args.out
     )
     motif_discovery_parralel = nm.find_motifs_bin.BinMotifProcessorBuilder(config).build()
     motifs = motif_discovery_parralel.run()
-    motifs = pl.DataFrame(motifs)
     if motifs is None or len(motifs) == 0:
         log.info("No motifs were identified")
-        return
+        return None
     else:
-        log.debug(f"Identified {len(motifs)} motifs in {len(motifs['bin'].unique())} bins")
+        log.debug(f"Identified {len(motifs)} motifs in {len(motifs['reference'].unique())} bins")
 
     log.info("Writing motifs")
-    def format_motif_df(df):
-        if "model" in df.columns:
-            n_mod = [x._alpha for x in df["model"]]
-            n_nomod = [x._beta for x in df["model"]]
-        motif_iupac = [nm.seq.regex_to_iupac(x) for x in df["motif"]]
-        motif_type = [nm.utils.motif_type(x) for x in motif_iupac]
-
-        df_out = df.with_columns([
-            pl.Series("motif", motif_iupac),
-            pl.Series("motif_type", motif_type)
-        ])
-        if "model" in df.columns:
-            df_out = df_out.with_columns([
-                pl.col("model").map_elements(lambda x: x._alpha, return_dtype=pl.Float64).alias("alpha"),
-                pl.col("model").map_elements(lambda x: x._beta, return_dtype=pl.Float64).alias("beta")
-            ]).with_columns([
-                (pl.col("beta") - nm.model.DEFAULT_PRIOR_BETA).alias("n_nomod"),
-                (pl.col("alpha") - nm.model.DEFAULT_PRIOR_ALPHA).alias("n_mod")
-            ]).drop("model")
-        try:
-            df_out = df_out.select([
-                "bin", "motif", "mod_position", "mod_type", "n_mod", "n_nomod", "motif_type",
-                "motif_complement", "mod_position_complement", "n_mod_complement", "n_nomod_complement"
-            ])
-        except:
-            df_out = df_out.select([
-                "bin", "motif", "mod_position", "mod_type", "n_mod", "n_nomod", "motif_type",
-            ])
-        return df_out
-    def save_motif_df(df, name):
-        df = format_motif_df(df)
-        df = df.sort(["bin", "mod_type", "motif"])
-        df.write_csv(args.out + "/" + name + ".tsv", separator="\t")
-    os.makedirs(args.out + "/precleanup-motifs/", exist_ok=True)
-    motifs.with_columns([
-        pl.col("model").map_elements(lambda x: x._alpha, return_dtype=pl.Float64).alias("alpha"),
-        pl.col("model").map_elements(lambda x: x._beta, return_dtype=pl.Float64).alias("beta")
-    ]).with_columns([
-        (pl.col("beta") - nm.model.DEFAULT_PRIOR_BETA).alias("n_nomod"),
-        (pl.col("alpha") - nm.model.DEFAULT_PRIOR_ALPHA).alias("n_mod")
-    ]).drop("model").write_csv(args.out + "/precleanup-motifs/motifs-raw-unformatted.tsv", separator="\t")
-    save_motif_df(motifs, "precleanup-motifs/motifs-raw")
-
-    log.info("Refining motifs")
-    motifs_file_name = "precleanup-motifs/motifs"
-
-    log.info(" - Removing noisy motifs")
-    motifs = nm.postprocess.remove_noisy_motifs(motifs)
-    if len(motifs) == 0:
-        log.info("No motifs found")
-        return
-    motifs_file_name = motifs_file_name +   "-noise"
-    save_motif_df(motifs, motifs_file_name)
-
-    log.info(" - Merging motifs")
-    motifs = nm.find_motifs_bin.merge_motifs_in_df(motifs, pileup, assembly, bin_contig)
-    if len(motifs) == 0:
-        log.info("No motifs found")
-        return
-    motifs = motifs.unique()
-    motifs_file_name = motifs_file_name +   "-merge"
-    save_motif_df(motifs, motifs_file_name)
-
-    log.info(" - Removing sub motifs")
-    motifs = motifs.rename({"bin":"contig"})
-    motifs = nm.postprocess.remove_sub_motifs(motifs)
-    if len(motifs) == 0:
-        log.info("No motifs found")
-        return
-    motifs_file_name = motifs_file_name +   "-sub"
-    motifs = motifs.rename({"contig":"bin"})
-    save_motif_df(motifs, motifs_file_name)
-
-    log.info(" - Joining motif complements")
-    motifs = motifs.rename({"bin":"contig"})
-    motifs = nm.postprocess.join_motif_complements(motifs)
-    if len(motifs) == 0:
-        log.info("No motifs found")
-        return
-    motifs_file_name = motifs_file_name +   "-complement"
-    motifs = motifs.rename({"contig":"bin"})
-    save_motif_df(motifs, motifs_file_name)
-
-    log.info(" - Removing motifs observed less than min count")
-    motifs = motifs.filter((pl.col("n_mod") + pl.col("n_nomod")) > args.min_motifs_bin)
-    if len(motifs) == 0:
-        log.info("No motifs found")
-        return
-    motifs_file_name = motifs_file_name +   "-mincount"
-    save_motif_df(motifs, motifs_file_name)
-
-
-    save_motif_df(motifs, "bin-motifs")
-
+    motifs.write_motif_formatted(args.out + "/motifs-bin.tsv")
     log.info("Done finding motifs")
-    log.info(f"Identified {len(motifs)} motifs in {len(motifs['bin'].unique())} bins")
-    return format_motif_df(motifs)
+    log.info(f"Identified {len(motifs)} motifs in {len(motifs['reference'].unique())} bins")
+    return motifs
 
 
 def motif_discovery_legacy(args, pl):

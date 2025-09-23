@@ -19,7 +19,7 @@ def remove_noisy_motifs(motif_df):
         if not motif.have_isolated_bases(isolation_size = 3):
             clean_motifs.append(motif.string)
     if not clean_motifs:
-        return motif_df.clear()
+        return motif_df
     else: 
         motif_df_clean = motif_df.filter(pl.col("motif").is_in(clean_motifs))
         return motif_df_clean
@@ -49,12 +49,12 @@ def get_motif_parental_relationship(motifs):
     return relationships
 
 
-def remove_sub_motifs(motif_df):
+def remove_sub_motifs(motif_df: nm.motif.MotifSearchResult):
     assert "motif" in motif_df.columns
     assert "mod_position" in motif_df.columns
     assert "model" in motif_df.columns
     assert len(motif_df) > 0
-    for (contig, mod_type), df in motif_df.group_by("contig", "mod_type"):
+    for (contig, mod_type), df in motif_df.group_by("reference", "mod_type"):
         log.debug(f"Processing evaluating sub-motifs for: {contig}, mod_type {mod_type}")
         motif_strings = df.get_column("motif").to_list()
         positions = df.get_column("mod_position").to_list()
@@ -81,9 +81,9 @@ def remove_sub_motifs(motif_df):
             )
     return motif_df
 
-def merge_motifs_in_df(motif_df, pileup, assembly, mean_shift_threshold = -0.2):
+def merge_motifs_in_df(motif_df: nm.motif.MotifSearchResult, pileup, assembly, mean_shift_threshold = -0.2):
     new_df = []
-    for (contig, mod_type), df in motif_df.group_by("contig", "mod_type"):
+    for (contig, mod_type), df in motif_df.group_by("reference", "mod_type"):
         # Get list of motifs
         motif_seq = df["motif"].to_list()
         motif_pos = df["mod_position"].to_list()
@@ -147,41 +147,25 @@ def merge_motifs_in_df(motif_df, pileup, assembly, mean_shift_threshold = -0.2):
     new_df = pl.concat(new_df)
     return new_df
 
-def join_motif_complements(motif_df):
-    if "model" in motif_df.columns:
-        motif_df = motif_df.with_columns([
-            pl.col("model").map_elements(lambda x: x._alpha, return_dtype=pl.Float64).alias("alpha"),
-            pl.col("model").map_elements(lambda x: x._beta, return_dtype=pl.Float64).alias("beta")
-        ]).with_columns([
-            (pl.col("beta") - nm.model.DEFAULT_PRIOR_BETA).alias("n_nomod"),
-            (pl.col("alpha") - nm.model.DEFAULT_PRIOR_ALPHA).alias("n_mod")
-        ]).drop("model")
-    motif_df = motif_df.select([
-        "contig", "mod_type", "motif", "mod_position", "n_mod", "n_nomod"
+def join_motif_complements(motif_df: nm.motif.MotifSearchResult):
+    motif_rev_complement = motif_df.with_columns([
+        pl.col("motif_iupac").map_elements(
+            lambda x: nm.motif.reverse_compliment(x), 
+            return_dtype=pl.Utf8
+        ).alias("motif_reverse")
     ])
-    motif_df = motif_df.with_columns([
-        pl.col("motif").map_elements(lambda x: nm.motif.regex_to_iupac(x)).alias("motif")
-    ]).with_columns([
-        pl.col("motif").map_elements(lambda x: nm.utils.motif_type(x)).alias("motif_type")
-    ]).with_columns([
-        pl.col("motif").map_elements(lambda x: nm.motif.reverse_compliment(x)).alias("motif_complement")
-    ])
-    
-    
+
+
     motifs_out = motif_df \
         .join(
-            motif_df.select([
-                "contig", "mod_type", "motif_complement", "mod_position", "n_mod", "n_nomod"
-            ]),
-            left_on = ["contig", "mod_type", "motif"],
-            right_on = ["contig", "mod_type", "motif_complement"],
+            motif_rev_complement,
+            left_on = ["reference", "mod_type", "motif_iupac"],
+            right_on = ["reference", "mod_type", "motif_reverse"],
             how = "left",
             suffix = "_complement"
-        ) \
-        .filter(
-            (pl.col("motif") >= pl.col("motif_complement")) | pl.col("mod_position_complement").is_null()
-        ) \
-        .with_columns([
+        ).filter(
+            (pl.col("motif_iupac") >= pl.col("motif_complement")) | pl.col("mod_position_complement").is_null()
+        ).with_columns([
             pl.when(pl.col("mod_position_complement").is_not_null()) \
                 .then(pl.col("motif_complement")) \
                 .otherwise(None) \

@@ -6,6 +6,7 @@ nanomotif/flamegraph*
 austin
 results
 reports
+nanomotif_debug_dir
 development_output
 development_sbatch_jobs
 .vscode

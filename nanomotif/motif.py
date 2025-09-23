@@ -8,6 +8,9 @@ import logging as log
 from scipy.stats import entropy
 from nanomotif.constants import *
 from nanomotif.seq import regex_to_iupac, iupac_to_regex, reverse_compliment
+from nanomotif.model import BetaBernoulliModel
+import nanomotif.utils as nm_utils
+import polars as pl
 class Motif(str):
     def __new__(cls, motif_string, *args, **kwargs):
         return str.__new__(cls, motif_string)
@@ -543,6 +546,189 @@ def remove_child_motifs(motifs):
 class MotifTree(nx.DiGraph):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+
+class MotifSearchResult(pl.DataFrame):
+
+    REQUIRED_COLUMNS = {
+        "reference": pl.Utf8, 
+        "motif": pl.Utf8,
+        "mod_type": pl.Utf8, 
+        "mod_position": pl.Int64, 
+        "model": pl.Object,
+        "score": pl.Float64,
+    }
+
+    DERIVED_COLUMNS = {
+        "n_mod": pl.Int64,
+        "n_nomod": pl.Int64,
+        "motif_iupac": pl.Utf8,
+        "mod_position_iupac": pl.Int64
+    }
+
+
+    def __init__(self, data=None, *args, **kwargs):
+        if isinstance(data, pl.DataFrame):
+            # Use Polars' internal constructor to wrap without copying
+            super().__init__(pl.DataFrame._from_pydf(data._df))
+        else:
+            super().__init__(data, *args, **kwargs)
+
+        self._ensure_required()
+        self._ensure_derived()
+        self._ensure_column_order()
+        self._coerce_dtypes()
+
+    def __getattribute__(self, name):
+        # Ignore dunder methods
+        if name.startswith("__"):
+            return object.__getattribute__(self, name)
+        attr = object.__getattribute__(self, name)
+        if callable(attr):
+            def wrapper(*args, **kwargs):
+                out = attr(*args, **kwargs)
+                if isinstance(out, pl.DataFrame) and not isinstance(out, self.__class__):
+                    obj = self.__class__.__new__(self.__class__)
+                    obj._df = out._df
+                    return obj
+                return out
+            return wrapper
+        return attr
+    
+    def __getstate__(self):
+        """Serialize to a pickle-friendly dict, converting model objects to state dicts."""
+        serialized = {}
+        for col in self.columns:
+            values = self[col].to_list()
+            if any(isinstance(v, BetaBernoulliModel) for v in values if v is not None):
+                serialized[col] = [v.__getstate__() if v is not None else None for v in values]
+            else:
+                serialized[col] = values
+        return {"data": serialized, "schema": self.schema}
+
+    def __setstate__(self, state):
+        """Restore from pickle-friendly dict, rehydrating model objects."""
+        restored = {}
+        for col, values in state["data"].items():
+            if isinstance(values, list) and values and isinstance(values[0], dict) and "_alpha" in values[0]:
+                # Looks like a BetaBernoulliModel state dict
+                restored[col] = [
+                    self._restore_model_from_state(v) if v is not None else None
+                    for v in values
+                ]
+            else:
+                restored[col] = values
+        df = pl.DataFrame(restored)
+        self._df = df._df  # reinitialize the Polars parent
+        self._ensure_column_order()
+
+    @staticmethod
+    def _restore_model_from_state(state_dict):
+        model = BetaBernoulliModel.__new__(BetaBernoulliModel)
+        model.__setstate__(state_dict)
+        return model
+
+    def _load_motifs(self):
+        assert "motif" in self.columns
+        assert "mod_position" in self.columns
+        assert len(self) > 0
+        motif_strings = self.get_column("motif").to_list()
+        positions = self.get_column("mod_position").to_list()
+        motifs = [Motif(motif_string, pos) for motif_string, pos in zip(motif_strings, positions)]
+        return motifs
+
+    def _ensure_required(self):
+        # Ensure required columns are present
+        # Convert contig or bin to reference if present
+        if "contig" in self.columns:
+            self._df = self.rename({"contig": "reference"})._df
+        elif "bin" in self.columns:
+            self._df = self.rename({"bin": "reference"})._df
+
+        missing = [c for c in self.REQUIRED_COLUMNS if c not in self.columns]
+
+        if missing:
+            raise ValueError(f"Missing required columns: {missing}")
+        
+    def _ensure_derived(self):
+        """Compute missing derived columns if possible."""
+        to_add = {}
+        if "n_mod" not in self.columns or "n_nomod" not in self.columns:
+            if "model" not in self.columns:
+                raise ValueError(
+                    "Cannot derive n_mod/n_nomod because 'model' column is missing"
+                )
+
+            to_add["n_mod"] = [m._alpha - m._alpha_prior for m in self["model"]]
+            to_add["n_nomod"] = [m._beta - m._beta_prior for m in self["model"]]
+        if "motif_iupac" not in self.columns:
+            if "motif" not in self.columns:
+                raise ValueError(
+                    "Cannot derive motif_iupac because 'motif' column is missing"
+                )
+            if "mod_position" not in self.columns:
+                raise ValueError(
+                    "Cannot derive motif_iupac because 'mod_position' column is missing"
+                )
+            motifs = self._load_motifs()
+            motifs_trimmed = [m.new_stripped_motif() for m in motifs]
+            to_add["mod_position_iupac"] = [m.mod_position for m in motifs_trimmed]
+            to_add["motif_iupac"] = [m.iupac() for m in motifs_trimmed]
+        if to_add:
+            # Concatenate derived columns
+            derived_df = pl.DataFrame(to_add)
+            self._df = self.hstack(derived_df)._df 
+    
+    def _coerce_dtypes(self):
+        """Coerce any existing columns to expected dtype if mismatched."""
+        exprs = []
+        for c, dtype in {**self.REQUIRED_COLUMNS, **self.DERIVED_COLUMNS}.items():
+            if c in self.columns and self[c].dtype != dtype:
+                exprs.append(pl.col(c).cast(dtype))
+        if exprs:
+            self._df = self.with_columns(exprs)._df
+
+    def _ensure_column_order(self):
+        fixed_order_columns = list(self.REQUIRED_COLUMNS.keys()) + list(self.DERIVED_COLUMNS.keys())
+        ordered_columns = fixed_order_columns + [col for col in self.columns if col not in fixed_order_columns]
+        self._df = self.select(ordered_columns)._df
+
+    def write_motifs(self, file_path):
+        df = pl.DataFrame(self)
+        df = df.sort(["reference", "mod_type", "motif"])
+        for column in df.columns:
+            if df[column].dtype == pl.Object:
+                df = df.drop(column)
+        df.write_csv(file_path, separator="\t")
+
+    def write_motif_formatted(self, file_path):
+        df = pl.DataFrame(self)
+        df_formatted = df.select([
+            "reference", "motif_iupac", "mod_position_iupac", "mod_type", "n_mod", "n_nomod"
+        ])
+        df_formatted = df_formatted.rename({
+            "motif_iupac": "motif",
+            "mod_position_iupac": "mod_position"
+        })
+        # Add motif type column
+        df_formatted = df_formatted.with_columns([
+            pl.col("motif").map_elements(lambda x: nm_utils.motif_type(x)).alias("motif_type")
+        ])
+        # Include complement columns if present
+        complement_cols = [
+            "motif_iupac_complement", "mod_position_iupac_complement", "n_mod_complement", "n_nomod_complement"
+        ]
+        if all(col in df.columns for col in complement_cols):
+            df_complement = df.select([
+                pl.col("motif_iupac_complement").alias("motif_complement"),
+                pl.col("mod_position_iupac_complement").alias("mod_position_complement"),
+                pl.col("n_mod_complement"),
+                pl.col("n_nomod_complement")
+            ])
+            df_formatted = df_formatted.hstack(df_complement)
+
+        df_formatted = df_formatted.sort(["reference", "mod_type", "motif"])
+        df_formatted.write_csv(file_path, separator="\t")
 
 
 if __name__ == "__main__":
