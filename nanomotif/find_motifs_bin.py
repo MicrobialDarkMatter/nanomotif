@@ -263,6 +263,7 @@ class BinMotifProcessor:
             log.debug("No motifs found")
             return None
         motifs = pl.concat(results, rechunk=True, parallel=False)
+        motifs = nm.motif.MotifSearchResult(motifs)
 
         return motifs
 
@@ -374,7 +375,7 @@ def process_subpileup(
         padding=padding,
         min_kl=min_kl_divergence,
         max_dead_ends=10,
-        max_rounds_since_new_best=30,
+        max_rounds_since_new_best=15,
         score_threshold=score_threshold
     )
     identified_motifs = nxgraph_to_dataframe(motif_graph) \

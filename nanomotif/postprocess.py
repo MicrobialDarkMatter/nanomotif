@@ -99,11 +99,11 @@ def join_motif_complements(motif_df: nm.motif.MotifSearchResult):
             how = "left",
             suffix = "_complement"
         ).filter(
-            (pl.col("motif_iupac") >= pl.col("motif_complement")) | pl.col("mod_position_complement").is_null()
+            (pl.col("motif_iupac") >= pl.col("motif_iupac_complement")) | pl.col("mod_position_complement").is_null()
         ).with_columns([
             pl.when(pl.col("mod_position_complement").is_not_null()) \
-                .then(pl.col("motif_complement")) \
+                .then(pl.col("motif_iupac_complement")) \
                 .otherwise(None) \
-                .alias("motif_complement")
+                .alias("motif_iupac_complement")
         ])
     return motifs_out

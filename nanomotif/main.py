@@ -305,14 +305,16 @@ def main():
         mtase_linker(args)
 
     elif args.command == "check_installation":
-        
-        outdir = "tests/cli_test_motif_discovery"
+        fasta = nm.datasets.geobacillus_plasmids_assembly_path()
+        pileup = nm.datasets.geobacillus_plasmids_pileup_path()
+        contig_bin = nm.datasets.geobacillus_plasmids_bin_path()
+        outdir = "nanomotif_check_installation_output"
         cmd = [
             "nanomotif", "motif_discovery",
             "-t", "1",
-            "nanomotif/datasets/geobacillus-plasmids.assembly.fasta",
-            "nanomotif/datasets/geobacillus-plasmids.pileup.bed",
-            "-c", "nanomotif/datasets/geobacillus-contig-bin.tsv",
+            fasta,
+            pileup,
+            "-c", contig_bin,
             "--out", outdir
         ]
         subprocess.run(cmd)
