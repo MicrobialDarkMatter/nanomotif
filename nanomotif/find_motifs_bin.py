@@ -556,8 +556,8 @@ def find_best_candidates(
             # Find positions to prune
             for parent, data in parent_motif_scores.items():
                 if data["score"] < 0.5:
-                    log.debug(f"    Pruning position {data["motif_position"]} from {temp_motif}, score: {data["score"]}")
-                    log.debug(f"    Poor parent motif: {parent}, model: {data["parent_model"]}")
+                    log.debug(f"    Pruning position {data['motif_position']} from {temp_motif}, score: {data['score']}")
+                    log.debug(f"    Poor parent motif: {parent}, model: {data['parent_model']}")
                     indices_to_prune.add(data["motif_position"])
             log.debug(f"Pruning round {pruning_round} complete, pruned {len(indices_to_prune)} positions.")
 
