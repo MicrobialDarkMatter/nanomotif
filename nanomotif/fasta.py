@@ -3,7 +3,6 @@ import polars as pl
 from pathlib import Path
 import logging as log
 from .seq import Assembly
-from .feature import Pileup
 import sys
 import os
 from nanomotif.seq import DNAsequence

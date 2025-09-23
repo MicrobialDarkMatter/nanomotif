@@ -1,7 +1,6 @@
 # Data loading functionalities
 import polars as pl
 from .seq import Assembly
-from .feature import Pileup
 from epymetheus import query_pileup_records
 import sys
 
@@ -94,38 +93,6 @@ def load_contigs_pileup_bgzip(path: str, contigs: list[str]):
         .select(["contig", "position", "mod_type", "strand", "fraction_mod", "Nvalid_cov"])
 
     return pileup
-
-def extract_contig_mods_with_sufficient_information(pileup: Pileup, assembly: Assembly, min_mods_pr_contig: int, min_mod_frequency: int):
-    contigs_in_assembly = list(assembly.keys())
-    pileup = pileup.filter(pl.col("contig").is_in(contigs_in_assembly))
-
-    if pileup.is_empty():
-        #TODO: 
-        print("Pileup empty after filtering contigs in assembly. Check pileup and assembly mismatch!")
-        return([], [])
-
-    contigmods_with_more_than_min_mods = pileup.group_by("contig_mod").count().filter(
-            pl.col("count") > min_mods_pr_contig
-        ).get_column("contig_mod").to_list()
-
-    assm_lengths = pl.DataFrame({
-        "contig": list(assembly.keys()),
-        "length": [len(contig) for contig in assembly.values()]
-    })
-    contigmods_with_sufficient_mod_frequency = pileup \
-        .group_by(["contig", "mod_type"]) \
-        .agg(pl.count()) \
-        .join(assm_lengths, on = "contig") \
-        .filter(pl.col("count") > pl.col("length")/min_mod_frequency) \
-        .with_columns([
-            (pl.col("contig") + "_" + pl.col("mod_type")).alias("contig_mod")
-        ]) \
-        .get_column("contig_mod").unique().to_list()
-    
-    # Get contig_mods to keep and to remove
-    contig_mods_to_keep = list(set(contigmods_with_more_than_min_mods) & set(contigmods_with_sufficient_mod_frequency))
-    contig_mods_to_remove = list(set(pileup.get_column("contig_mod").unique().to_list()) - set(contig_mods_to_keep))
-    return contig_mods_to_keep, contig_mods_to_remove
 
 
 def load_low_coverage_positions(path_pileup: str, contig_mods_to_load: list[str], min_coverage: float = 5):
