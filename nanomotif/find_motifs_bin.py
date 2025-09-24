@@ -264,7 +264,7 @@ class BinMotifProcessor:
             return None
         motifs = pl.concat(results, rechunk=True, parallel=False)
         motifs = nm.motif.MotifSearchResult(motifs)
-
+        log.debug("Returning final dataframe")
         return motifs
 
 class BinMotifProcessorBuilder:

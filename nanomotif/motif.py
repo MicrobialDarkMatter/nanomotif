@@ -609,6 +609,7 @@ class MotifSearchResult(pl.DataFrame):
     def __setstate__(self, state):
         """Restore from pickle-friendly dict, rehydrating model objects."""
         restored = {}
+        object_columns = []
         for col, values in state["data"].items():
             if isinstance(values, list) and values and isinstance(values[0], dict) and "_alpha" in values[0]:
                 # Looks like a BetaBernoulliModel state dict
@@ -616,9 +617,12 @@ class MotifSearchResult(pl.DataFrame):
                     self._restore_model_from_state(v) if v is not None else None
                     for v in values
                 ]
+                object_columns.append(col)
             else:
                 restored[col] = values
         df = pl.DataFrame(restored)
+        for col in object_columns:
+            df = df.with_columns(pl.col(col).cast(pl.Object))
         self._df = df._df  # reinitialize the Polars parent
         self._ensure_column_order()
 

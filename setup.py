@@ -39,7 +39,8 @@ setup(
         "hdbscan",
         "Bio>=1.6.2",
         "snakemake>=7.32.4",
-        "progressbar2>=3.53.1"
+        "progressbar2>=3.53.1",
+        "pyfastx>=0.2.10"
     ],
     entry_points={
             'console_scripts': [

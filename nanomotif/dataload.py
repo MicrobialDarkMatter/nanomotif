@@ -3,6 +3,7 @@ import polars as pl
 from .seq import Assembly
 from epymetheus import query_pileup_records
 import sys
+import pyfastx
 
 PILEUP_SCHEMA = {
     "column_1": pl.Utf8,
@@ -44,6 +45,20 @@ def load_fasta(path, trim_names=False, trim_character=" ") -> dict:
                 data[active_sequence_name] = ''
         else:
             data[active_sequence_name] += line
+    return data
+
+def load_fasta_fastx(path, trim_names=False, trim_character=" ") -> dict:
+    """
+    Reads a fasta file using pyfastx and returns a dictionary with the contig names as 
+    keys and the sequences as values
+    """
+    fasta = pyfastx.Fasta(path, build_index=True)
+    data = {}
+    for name in fasta.keys():
+        seq_name = name
+        if trim_names:
+            seq_name = seq_name.split(trim_character)[0]
+        data[seq_name] = str(fasta[name])
     return data
 
 def load_pileup(path: str):
@@ -128,7 +143,7 @@ def load_assembly(path: str):
     """
     Load assembly from path to fasta file
     """
-    return Assembly(load_fasta(path))
+    return Assembly(load_fasta_fastx(path))
 
 def filter_pileup(
         pileup: pl.DataFrame,
