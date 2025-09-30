@@ -16,7 +16,7 @@ from nanomotif.constants import *
 from nanomotif.model import BetaBernoulliModel
 from nanomotif.utils import subseq_indices, calculate_match_length
 from nanomotif.seq import EqualLengthDNASet, DNAsequence, DNAarray
-from nanomotif.motif import Motif, MotifTree
+from nanomotif.motif import Motif, MotifTree, MotifSearchResult
 from nanomotif.logger import configure_logger
 from nanomotif.parallel import update_progress_bar
 from nanomotif.seed import set_seed
@@ -25,160 +25,344 @@ import networkx as nx
 import warnings
 import time
 from typing import Generator, Optional, List, Tuple
+from dataclasses import dataclass
+import pysam
+
 
 
 def set_polars_env():
     os.environ["POLARS_MAX_THREADS"] = "1"
 
+@dataclass
+class ProcessorConfig:
+    assembly: object
+    pileup_path: str
+    bin_contig: pl.DataFrame
+    threads: int
+    search_frame_size: int
+    methylation_threshold_low: float
+    methylation_threshold_high: float
+    minimum_kl_divergence: float
+    score_threshold: float
+    log_dir: str
+    seed: int
+    output_dir: str
+    verbose: bool = False
 
+    def __post_init__(self):
+        if self.assembly is None:
+            raise ValueError("assembly cannot be None")
+        
+        if self.pileup_path is None:
+            raise ValueError("pileup_path cannot be None")
 
-def process_binned_sample_parallel(
-        assembly, pileup, bin_contig,
-        threads = 2,
-        search_frame_size = 40,
-        methylation_threshold_low = 0.3,
-        methylation_threshold_high = 0.7,
-        minimum_kl_divergence = 0.05,
-        verbose = False,
-        log_dir = None,
-        seed = None,
-        score_threshold = 2
-    ):
-    """
-    Process a sample
+        if self.bin_contig is None or self.bin_contig.is_empty():
+            raise ValueError("bin_contig cannot be None or empty")
+        
+        if self.threads <= 0:
+            raise ValueError("threads must be greater than 0")
+
+        if self.search_frame_size <= 1:
+            raise ValueError("search_frame_size must be greater than 1")
+
+        if not (0 <= self.methylation_threshold_high <= 1):
+            raise ValueError("methylation_threshold_high must be in [0,1]")
+
+        if not (0 <= self.methylation_threshold_low <= 1):
+            raise ValueError("methylation_threshold_low must be in [0,1]")
+
+        if self.methylation_threshold_high <= self.methylation_threshold_low:
+            raise ValueError("methylation_threshold_high must be greater than methylation_threshold_low")
+
+        if self.minimum_kl_divergence <= 0:
+            raise ValueError("minimum_kl_divergence must be > 0")
+        
+        if not (0 <= self.score_threshold):
+            raise ValueError("score_threshold must be > 0")
+
+    @property
+    def padding(self):
+        return self.search_frame_size // 2
+
+class TaskStrategy:
+    def task_generator(self):
+        raise NotImplementedError
+    def worker_function(self, args):
+        raise NotImplementedError
+
+class PileupStrategyPlain:
+    def __init__(
+            self, 
+            partitioned_assembly: dict[str, nm.seq.Assembly],
+            partitioned_pileup: dict[Tuple[str, str], pl.DataFrame],
+            bin_contig: dict[str, list[str]],
+            config: ProcessorConfig
+        ):
+        self.partitioned_assembly = partitioned_assembly
+        self.partitioned_pileup = partitioned_pileup
+        self.bin_contig = bin_contig
+        self.config = config
+
+    def task_generator(self, counter, lock):
+        for bin_name in self.partitioned_assembly.keys():
+            for modtype in nm.constants.MOD_CODE_TO_PRETTY.keys():
+                if (bin_name, modtype) not in self.partitioned_pileup:
+                    log.warning(f"Bin {bin_name} has no pileup data, skipping")
+                    with lock:
+                        counter.value += 1
+                    continue
+                if bin_name not in self.bin_contig.keys():
+                    log.debug(f"Bin {bin_name} not in bin_contig, skipping")
+                    with lock:
+                        counter.value += 1
+                    continue
+                bin_pileup = self.partitioned_pileup[(bin_name, modtype)]
+                bin_assembly = self.partitioned_assembly[bin_name]
+                yield (modtype, bin_assembly, bin_pileup)
+
+    def worker_function(self, args):
+        modtype, assembly, bin_pileup = args
+        set_seed(seed=self.config.seed)
+        process_id = os.getpid()
+        if self.config.log_dir:
+            log_file = f"{self.config.log_dir}/find-motifs.{process_id}.log"
+            configure_logger(log_file, verbose=self.config.verbose)
+        log.info(f"[Worker {process_id}] started")
+        return process_subpileup(
+            self.bin_contig,
+            modtype,
+            bin_pileup,
+            assembly,
+            self.config.minimum_kl_divergence,
+            self.config.padding,
+            self.config.methylation_threshold_low,
+            self.config.methylation_threshold_high,
+            self.config.score_threshold,
+            output_dir = self.config.output_dir
+        )
     
-    Parameters:
-    - assembly (Assembly): The assembly of all bins.
-    - pileup (Pileup): The pileup to be processed.
-    - max_candidate_size (int): The maximum size of the candidate motifs.
-    - min_read_methylation_fraction (float): The minimum fraction of reads that must be methylated for a position to be considered methylated.
-    - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
-    - min_cdf_score (float): Minimum score of 1 - cdf(cdf_position) for a motif to be considered valid.
-    - cdf_position (float): The position to evaluate the cdf at.
-    - min_motif_frequency (int): Used to get minimum number of sequences to evaluate motif at.
-    """
-    assert pileup is not None, "Pileup is None"
-    assert len(pileup) > 0, "Pileup is empty" 
-    assert assembly is not None, "Assembly is None"
-    assert search_frame_size > 0, "search_frame_size must be greater than 0"
-    assert methylation_threshold_high >= 0 and methylation_threshold_high <= 1, "threshold_methylation_confident must be between 0 and 1"
-    assert minimum_kl_divergence >= 0, "mininum_kl_divergence must be greater than 0"
+class PileupStrategyBgzip:
+    def __init__(
+            self, 
+            partitioned_assembly: dict[str, nm.seq.Assembly],
+            pileup_path: str, 
+            bin_contig: dict[str, list[str]], 
+            config: ProcessorConfig
+        ):
+        self.partitioned_assembly = partitioned_assembly
+        self.pileup_path = pileup_path
+        self.bin_contig = bin_contig
+        self.config = config
 
-    # Infer padding size from candidate_size
-    padding = search_frame_size // 2
-    
-    pileup = pileup.join(bin_contig, on="contig", how = "inner")
+    def task_generator(self, counter, lock):
+        for bin_name in self.partitioned_assembly.keys():
+            if bin_name not in self.bin_contig.keys():
+                log.info(f"Bin {bin_name} not in bin_contig, skipping")
+                with lock:
+                    counter.value += 1
+                continue
 
-    log.debug("Partitining pileups to dict")
-    pileup_dict = pileup.partition_by(["bin", "mod_type"], as_dict=True)
+            bin_assembly = self.partitioned_assembly[bin_name]
+            time.sleep(1)
+            yield (
+                bin_name,
+                bin_assembly
+            )
+    def worker_function(self, args):
+        bin_name, assembly = args
+        set_seed(seed=self.config.seed)
+        process_id = os.getpid()
+        if self.config.log_dir is not None:
+            log_file = f"{self.config.log_dir}/find-motifs.{process_id}.log"
+            configure_logger(log_file, verbose=self.config.verbose)
+        log.info(f"Worker {process_id} started")
+        
+        log.debug(f"Worker {process_id} processing bin {bin_name}")
+        results = []
 
-    def task_generator(pileup_dict):
-        for (bin_name, modtype) in pileup_dict:
-            subpileup = pileup_dict[(bin_name, modtype)]
-            bin_contig_dict = {
-                bin_name: subpileup.get_column("contig").unique().to_list()
+        log.debug(f"Loading pileup for {bin_name}")
+        bin_pileup = nm.dataload.load_contigs_pileup_bgzip(self.pileup_path, self.bin_contig[bin_name])
+        log.debug(f"Filtering pileup for {bin_name}")
+        bin_pileup = nm.dataload.filter_pileup(bin_pileup)
+        bin_pileup = nm.dataload.filter_pileup_minimummod_frequency(bin_pileup)
+        log.debug(f"Loaded pileup for {bin_name}")
+
+        for modtype in MOD_CODE_TO_PRETTY.keys():
+            log.debug(f"Procesing modtype {modtype}")
+            bin_pileup_mod_type = bin_pileup.filter(pl.col("mod_type") == modtype)
+            if bin_pileup_mod_type is None or len(bin_pileup_mod_type) == 0:
+                log.info(f"Bin {bin_name} modtype {modtype} has no pileup data, skipping")
+                continue
+
+            
+            
+            contigs_in_pileup = bin_pileup_mod_type.get_column("contig").unique().to_list()
+            # Keep only contigs in pileup
+            filtered_bin_contig = {
+                bin_name: [contig for contig in self.bin_contig[bin_name] if contig in contigs_in_pileup]
             }
-            yield (bin_contig_dict, modtype, subpileup, counter, lock, assembly, 
-                       minimum_kl_divergence, search_frame_size // 2,
-                       log_dir, verbose, seed,
-                       methylation_threshold_low, methylation_threshold_high,
-                       score_threshold)
+            log.debug(f"Contigs in pileup for {bin_name} {modtype}: {contigs_in_pileup}")
+            assembly_modtype = nm.seq.Assembly({contig: assembly[contig].sequence for contig in assembly.assembly.keys() if contig in contigs_in_pileup})
 
-    # Create a progress manager
-    manager = multiprocessing.Manager()
-    counter = manager.Value('i', 0)
-    lock = manager.Lock()
-
-    # Create a pool of workers
-    pool = get_context("spawn").Pool(processes=threads, initializer=set_polars_env)
-
-    # Create a process for the progress bar
-    log.debug("Counting number of tasks")
-    total_tasks = len(pileup.select("bin", "mod_type").unique())
-
-    log.debug("Starting progress bar")
-    progress_bar_process = multiprocessing.Process(target=update_progress_bar, args=(counter, total_tasks, True))
-    progress_bar_process.start()
-
-    # Put them workers to work
-    log.debug("Starting workers")
-    chunksize = max(min(100, total_tasks // threads), 1)
-    results = pool.imap(worker_function, task_generator(pileup_dict), chunksize=chunksize)
-    results = [result for result in results if result is not None]
-    log.debug("Joining results")
-
-    log.debug("Closing pool")
-    pool.close()
-    pool.join()
-
-    log.debug("Joining progress bar")
-    progress_bar_process.join()
-
-    log.debug("Creating final dataframe")
-    if len(results) == 0:
-        log.debug("No motifs found")
-        return None
-    motifs = pl.concat(results, rechunk=True, parallel=False)
-
-    model_col = []
-    for a, b in zip(motifs.get_column("alpha").to_list(), motifs.get_column("beta").to_list()):
-        model_col.append(BetaBernoulliModel(a, b))
+            results.append(process_subpileup(
+                filtered_bin_contig,
+                modtype,
+                bin_pileup_mod_type,
+                assembly_modtype,
+                self.config.minimum_kl_divergence,
+                self.config.padding,
+                self.config.methylation_threshold_low,
+                self.config.methylation_threshold_high,
+                self.config.score_threshold,
+                output_dir = self.config.output_dir
+            ))
+        results = [result for result in results if result is not None]
+        if len(results) == 0:
+            log.info(f"No motifs found for bin {bin_name}")
+            return None
+        motifs = pl.concat(results, rechunk=True, parallel=False)
+        motifs = nm.motif.MotifSearchResult(motifs)
+        return motifs
 
 
-    motifs = motifs.with_columns([
-            pl.Series(model_col).alias("model"),
-            pl.col("sequence").map_elements(lambda motif: motif[count_periods_at_start(motif):len(motif)-count_periods_at_end(motif)]).alias("motif"),
-            pl.col("sequence").map_elements(lambda motif: padding - count_periods_at_start(motif)).alias("mod_position")
-        ]).drop(["alpha", "beta"])
-
-    return motifs
-
-
-##########################################
-# Motif candidate state space search
-##########################################
-
-def worker_function(
-        args
+class BinMotifProcessor:
+    def __init__(
+        self,
+        task_strategy: TaskStrategy,
+        config: ProcessorConfig,
     ):
-    """
-    Process a single subpileup for one bin and one modtype
-
-    Parameters:
-    - args (tuple): The arguments to the function: bin, modtype, subpileup
-    - counter (multiprocessing.Value): The progress counter
-    - lock (multiprocessing.Lock): The lock for the progress counter
-    - assembly (Assembly): The assembly to be processed.
-    - min_kl_divergence (float): Early stopping criteria, if max KL-divergence falls below, stops building motif.
-    - padding (int): The padding to use for the motif.
-    """
-    (
-        bin_contig, modtype, subpileup, counter, lock, assembly, 
-        min_kl_divergence, padding, 
-        log_dir, verbose, seed, 
-        low_meth_threshold, high_meth_threshold,
-        score_threshold
-    ) = args
-    bin_name = list(bin_contig.keys())[0]
-    set_seed(seed=seed)
-    warnings.filterwarnings("ignore")
-    process_id = os.getpid()
-    if log_dir is not None:
-        log_file = f"{log_dir}/find-motifs.{process_id}.log"
-        configure_logger(log_file, verbose=verbose)
-    log.info(f"Worker {process_id} started")
+        self.task_strategy = task_strategy
+        self.config = config
+        self.ctx = get_context("spawn")
+        self.manager = self.ctx.Manager()
+        self.counter = self.manager.Value("i", 0)
+        self.lock = self.manager.Lock()
 
 
-    result = process_subpileup(
-        bin_contig, modtype, subpileup, assembly, 
-        min_kl_divergence, padding, 
-        low_meth_threshold, high_meth_threshold,
-        score_threshold
-    )
-    with lock:
-        counter.value += 1
-        log.debug(f"Task for ({bin_name}, {modtype}) complete; progress: {counter.value}")
-    return result
+
+    def run(self):
+        # Create a pool of workers
+        pool = self.ctx.Pool(processes=self.config.threads, initializer=set_polars_env)
+
+        # Create a process for the progress bar
+        log.debug("Counting number of tasks")
+        n_bins = len(self.config.bin_contig.get_column("bin").unique())
+        total_tasks = n_bins
+
+        log.debug("Starting progress bar")
+        progress_bar_process = self.ctx.Process(target=update_progress_bar, args=(self.counter, total_tasks, True))
+        progress_bar_process.start()
+
+        # Put them workers to work
+        log.debug("Starting workers")
+        chunksize = max(min(100, total_tasks // self.config.threads), 1)
+        results = []
+        for r in pool.imap_unordered(
+            self.task_strategy.worker_function, 
+            self.task_strategy.task_generator(self.counter, self.lock), 
+            chunksize=1
+            ):
+            with self.lock:
+                self.counter.value += 1
+            results.append(r)
+        log.debug("Joining results")
+        results = [result for result in results if result is not None]
+        results = [result for result in results if not result.is_empty()]
+        log.debug("Closing pool")
+        pool.close()
+        pool.join()
+
+        log.debug("Joining progress bar")
+        progress_bar_process.join()
+
+        log.debug("Creating final dataframe")
+        if len(results) == 0:
+            log.debug("No motifs found")
+            return None
+
+        motifs = pl.concat(results, rechunk=True, parallel=False)
+        motifs = nm.motif.MotifSearchResult(motifs)
+        log.debug("Returning final dataframe")
+        return motifs
+
+class BinMotifProcessorBuilder:
+    def __init__(self, config: ProcessorConfig):
+        self.config = config
+        self.bin_contig_dict = self._contig_bin_dict()
+    
+    def build(self) -> BinMotifProcessor:
+        pileup_path = self.config.pileup_path
+
+        if pileup_path.endswith(".gz"):
+            if not os.path.exists(pileup_path + ".tbi"):
+                raise FileNotFoundError(f"Tabix index for {pileup_path} not found.")
+            partitioned_assembly = self._partition_assembly()
+            # Remove contigs not in tabix index from contig_bin_dict
+            for bin_name, contigs in self.bin_contig_dict.items():
+                with pysam.TabixFile(pileup_path) as tbx:
+                    contigs_present = [c for c in contigs if c in tbx.contigs]
+                self.bin_contig_dict[bin_name] = contigs_present
+            strategy = PileupStrategyBgzip(
+                partitioned_assembly=partitioned_assembly,
+                pileup_path=pileup_path,
+                bin_contig=self.bin_contig_dict,
+                config=self.config,
+            )
+        else:
+            log.warning("Pileup is not bgzipped, loading full pileup into memory.")
+            pileup = nm.dataload.load_pileup(pileup_path)
+            pileup = nm.dataload.filter_pileup(pileup)
+            pileup = nm.dataload.filter_pileup_minimummod_frequency(pileup)
+
+            pileup = pileup.join(self.config.bin_contig, left_on="contig", right_on="contig", how="inner")
+
+            partitioned_pileup = pileup.partition_by(["bin", "mod_type"], as_dict=True)
+            partitioned_assembly = self._partition_assembly()
+            strategy = PileupStrategyPlain(
+                partitioned_assembly=partitioned_assembly,
+                partitioned_pileup=partitioned_pileup,
+                bin_contig=self.bin_contig_dict,
+                config=self.config,
+            )
+
+        return BinMotifProcessor(task_strategy=strategy, config=self.config)
+
+    def _partition_assembly(self):
+        return {
+            bin_name: nm.seq.Assembly(
+                {contig: self.config.assembly[contig].sequence for contig in contigs if contig in self.config.assembly}
+            )
+            for bin_name, contigs in self.bin_contig_dict.items()
+        }
+    def _contig_bin_dict(self):
+        bin_contig_dict = {}
+        for row in self.config.bin_contig.iter_rows(named=True):
+            bin_name = row["bin"]
+            contig_name = row["contig"]
+            if bin_name not in bin_contig_dict:
+                bin_contig_dict[bin_name] = []
+            bin_contig_dict[bin_name].append(contig_name)
+        return bin_contig_dict
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -186,7 +370,8 @@ def process_subpileup(
         bin_contig: dict, modtype, bin_pileup, assembly, 
         min_kl_divergence, padding, 
         low_meth_threshold, high_meth_threshold,
-        score_threshold
+        score_threshold,
+        output_dir = None
     ):
     """
     Process a single subpileup for one bin and one modtype
@@ -203,6 +388,7 @@ def process_subpileup(
     log.debug(f"Subpileup for {bin_name} {modtype}: {bin_pileup}")
     bin_sequences = {contig: assembly[contig] for contig in bin_contig[bin_name]}
 
+    # Find motifs
     motif_graph, best_candidates = find_best_candidates(
         bin_pileup, 
         bin_sequences, 
@@ -211,7 +397,7 @@ def process_subpileup(
         high_meth_threshold=high_meth_threshold,
         padding=padding,
         min_kl=min_kl_divergence,
-        max_dead_ends=25,
+        max_dead_ends=10,
         max_rounds_since_new_best=15,
         score_threshold=score_threshold
     )
@@ -221,15 +407,58 @@ def process_subpileup(
     if len(identified_motifs) == 0:
         log.info("No motifs found")
         return None
-    else:
-        identified_motifs = identified_motifs.with_columns(
-            pl.lit(bin_name).alias("bin"),
-            pl.lit(modtype).alias("mod_type")
-        ).with_columns([
-            pl.col("model").map_elements(lambda x: x._alpha, return_dtype=pl.Float64).alias("alpha"),
-            pl.col("model").map_elements(lambda x: x._beta, return_dtype=pl.Float64).alias("beta")
-        ]).drop("model")
-        return identified_motifs
+    
+    identified_motifs = identified_motifs.with_columns(
+        pl.lit(padding).alias("mod_position"),
+        pl.lit(bin_name).alias("reference"),
+        pl.lit(modtype).alias("mod_type"),
+    ).rename({"sequence": "motif"})
+    motifs = nm.motif.MotifSearchResult(identified_motifs)
+
+    # Post-process motifs
+    log.info("Refining motifs")
+    if output_dir is None:
+        output_dir = "./"
+    motifs_outdir = output_dir + "/precleanup-motifs/" + bin_name + "-" + modtype
+    os.makedirs(motifs_outdir, exist_ok=True)
+    motifs_file_name = motifs_outdir + "/motifs"
+    motifs.write_motifs(motifs_file_name + ".tsv")
+
+    log.info(" - Removing noisy motifs")
+    motifs = nm.postprocess.remove_noisy_motifs(motifs)
+    if motifs.is_empty():
+        log.info("No motifs found")
+        return None
+    motifs_file_name = motifs_file_name +   "-noise"
+    motifs.write_motifs(motifs_file_name + ".tsv")
+
+    log.info(" - Merging motifs")
+    motifs = nm.find_motifs_bin.merge_motifs_in_df(motifs, bin_pileup, assembly, bin_contig)
+    if motifs.is_empty():
+        log.info("No motifs found")
+        return None
+    motifs = motifs.unique()
+    motifs_file_name = motifs_file_name +   "-merge"
+    motifs.write_motifs(motifs_file_name + ".tsv")
+
+    log.info(" - Removing sub motifs")
+    motifs = nm.postprocess.remove_sub_motifs(motifs)
+    if motifs.is_empty():
+        log.info("No motifs found")
+        return None
+    motifs_file_name = motifs_file_name +   "-sub"
+    motifs.write_motifs(motifs_file_name + ".tsv")
+
+    log.info(" - Joining motif complements")
+    motifs = nm.postprocess.join_motif_complements(motifs)
+    if motifs.is_empty():
+        log.info("No motifs found")
+        return None
+    motifs_file_name = motifs_file_name +   "-complement"
+    motifs.write_motifs(motifs_file_name + ".tsv")
+
+
+    return motifs
 
 
 
@@ -248,7 +477,7 @@ def find_best_candidates(
         padding: int,
         min_kl: float = 0.2, 
         max_dead_ends: int = 25, 
-        max_rounds_since_new_best: int = 15,
+        max_rounds_since_new_best: int = 30,
         score_threshold: float = 0.2,
         remaining_sequences_threshold: float = 0.01
     ) -> tuple[MotifTree, list[Motif]]:
@@ -292,9 +521,9 @@ def find_best_candidates(
         else:
             methylation_sequences = methylation_sequences + methylation_sequences_contig
     methylation_sequences = methylation_sequences.convert_to_DNAarray()
+    total_seqs = methylation_sequences.shape[0]
     bin_pssm = background_sequences.pssm()
 
-    total_sequences = methylation_sequences.shape[0]
     root_motif = Motif("." * padding + MOD_TYPE_TO_CANONICAL[mod_type] + "." * padding, padding)
     methylation_sequences_clone = methylation_sequences.copy()
     best_candidates = []
@@ -328,8 +557,83 @@ def find_best_candidates(
             log.debug("No naive guess found, stopping search")
             break
 
+        # Prune the motif for low scoring positions
+        pruning = True
+        pruning_round = 1
+        indices_to_prune = set()
+        temp_motif = naive_guess
+        pruned_to_single_base = False
+        while pruning:
+            log.debug(f"Pruning round {pruning_round} for motif {temp_motif}")
+            parent_motif_scores = get_parent_scores(
+                temp_motif,
+                bin_pileup,
+                bin_sequences,
+                low_meth_threshold,
+                high_meth_threshold 
+            )
+            parent_scores = [d["score"] for d in parent_motif_scores.values()]
+            mean_parent_score = np.mean(parent_scores)
+            log.debug(f"Mean parent score: {mean_parent_score}")
+            parent_pretty_print = ", ".join([f"{parent} (pos {data['motif_position']}, score {data['score']:.2f}, model {data['parent_model']})" for parent, data in parent_motif_scores.items()])
+            log.debug(f"Parents: {parent_pretty_print}")
+            # Find positions to prune
+            for parent, data in parent_motif_scores.items():
+                if data["score"] < 0.2:
+                    log.debug(f"    Pruning position {data['motif_position']} from {temp_motif}, score: {data['score']}")
+                    log.debug(f"    Poor parent motif: {parent}, model: {data['parent_model']}")
+                    indices_to_prune.add(data["motif_position"])
+            log.debug(f"Pruning round {pruning_round} complete, pruned {len(indices_to_prune)} positions.")
+
+            if len(indices_to_prune) == 0:
+                log.debug("No more positions to prune")
+                pruning = False
+                break
+
+            motif_split = temp_motif.split()
+            for i in indices_to_prune:
+                motif_split[i] = "."
+            pruned_motif_str = "".join(motif_split)
+            pruned_motif = Motif(pruned_motif_str, temp_motif.mod_position)
+            log.debug(f"Pruned motif to {pruned_motif}")
+            if len(pruned_motif_str.replace(".", "")) == 1:
+                pruned_to_single_base = True
+                pruning = False
+                break
+            if pruned_motif == temp_motif:
+                pruning = False
+                break
+            pruning_round += 1
+            temp_motif = pruned_motif
+        
+        if pruned_to_single_base:
+            log.debug("Motif reduced to single base, removing original motif from methylation sequences")
+            log.debug("Updating score based on parents")
+            mean_parent_score = np.mean([d["score"] for d in parent_motif_scores.values()])
+            motif_graph.nodes[naive_guess]["score"] = mean_parent_score
+        elif temp_motif != naive_guess:
+            log.debug(f"Pruned motif from {naive_guess} to {temp_motif}")
+            
+            child_model = [d["child_model"] for _, d in parent_motif_scores.items()][0]
+            # Add the pruned motif to the graph
+            motif_graph.add_node(
+                temp_motif,
+                model=child_model,
+                motif=temp_motif,
+                visited=True,
+                score=mean_parent_score,
+                priority=0,
+                depth=0
+            )
+            naive_guess = temp_motif
+        else:
+            log.debug(f"No pruning performed for {temp_motif}")
+            log.debug("Updating score based on parents")
+            mean_parent_score = np.mean([d["score"] for d in parent_motif_scores.values()])
+            motif_graph.nodes[naive_guess]["score"] = mean_parent_score
+
         # Remove new candidate from methylation sequences
-        seq_before = methylation_sequences.shape[0]
+        seq_before = methylation_sequences_clone.shape[0]
         methylation_sequences_clone = methylation_sequences_clone.filter_sequence_matches(naive_guess.one_hot(), keep_matches = False)
         if methylation_sequences_clone is None:
             log.debug("No more sequences left")
@@ -337,7 +641,7 @@ def find_best_candidates(
 
         # Check if we should continue the search
         seq_remaining = methylation_sequences_clone.shape[0]
-        seq_remaining_percent = seq_remaining/total_sequences
+        seq_remaining_percent = seq_remaining/total_seqs
 
         if motif_graph.nodes[naive_guess]["score"] < score_threshold:
             dead_ends += 1
@@ -348,7 +652,7 @@ def find_best_candidates(
 
         best_candidates.append(naive_guess)
         
-        if (seq_remaining/total_sequences) < remaining_sequences_threshold:
+        if (seq_remaining/total_seqs) < remaining_sequences_threshold:
             log.debug("Stopping search, too few sequences remaining")
             break
         log.debug("Continuing search")
@@ -375,8 +679,8 @@ class MotifSearcher:
         motif_graph: Optional[MotifTree] = None,
         min_kl: float = 0.1,
         freq_threshold: float = 0.25,
-        max_rounds_since_new_best: int = 10,
-        max_motif_length: int = 18
+        max_rounds_since_new_best: int = 30,
+        max_motif_length: int = 25
     ):
         """
         Initialize the MotifSearcher class.
@@ -426,6 +730,9 @@ class MotifSearcher:
         Returns:
             float: The calculated priority.
         """
+        # score = self._scoring_function(next_model, root_model)
+        # return -score
+        odds_ratio = (next_model._alpha * root_model._beta) / (next_model._beta * root_model._alpha)
         try:
             d_alpha = 1 - (next_model._alpha / root_model._alpha)
         except ZeroDivisionError:
@@ -435,7 +742,7 @@ class MotifSearcher:
         except ZeroDivisionError:
             d_beta = 1
         priority = d_alpha * d_beta
-        return priority
+        return odds_ratio
 
     def _scoring_function(self, next_model, current_model) -> float:
         """
@@ -466,13 +773,7 @@ class MotifSearcher:
         Returns:
             float: The calculated score.
         """
-        extra_positive, extra_negative = current_model._alpha - next_model._alpha, current_model._beta - next_model._beta
-
-        log_likelihood_next_per_obs = next_model.log_likelihood_per_obs()
-        log_likelihood_extra_per_obs = next_model.posterior_predictive_per_obs(extra_positive, extra_negative)
-        mean_ratio = next_model.mean() / current_model.mean() if current_model.mean() > 0 else next_model.mean()
-
-        return mean_ratio * (log_likelihood_next_per_obs - log_likelihood_extra_per_obs)
+        return predictive_evaluation_score(next_model, current_model)
 
     def _motif_child_nodes_kl_dist_max(
         self,
@@ -509,7 +810,7 @@ class MotifSearcher:
         pos = int(np.argmax(kl_divergence_masked))
 
         # Methylation frequency must be above bin frequency
-        index_meth_freq_higher = meth_pssm[:, pos] > bin_pssm[:, pos] * 0.5
+        index_meth_freq_higher = meth_pssm[:, pos] > bin_pssm[:, pos] * 0.8
 
         # Methylation frequency must be above a threshold
         index_meth_freq_above_thresh = meth_pssm[:, pos] > self.freq_threshold
@@ -523,9 +824,11 @@ class MotifSearcher:
             return
 
         # All combinations of the bases
-        #max_combination_length = min(len(bases_filtered), 4)
-        #for i in range(1, max_combination_length + 1):
+        # max_combination_length = min(len(bases_filtered), 4)
+        # for i in range(1, max_combination_length + 1):
         #    for base_tuple in itertools.combinations(bases_filtered, i):
+        #        if len(base_tuple) > 2:
+        #             continue
         #        if len(base_tuple) > 1:
         #            base_str = "[" + "".join(base_tuple) + "]"
         #        else:
@@ -857,18 +1160,92 @@ def methylated_reads_counts(
     n_nonmod = counts.get_column("n_nonmod")[0]
     return n_mod, n_nonmod
 
+def predictive_evaluation_score(next_model, current_model) -> float:
+    """
+    Calculate the score for a motif based on its predictive model.
+
+    Parameters:
+        next_model: The model of the next motif.
+        current_model: The model of the current motif.
+
+    Returns:
+        float: The calculated score.
+    """
+    extra_positive, extra_negative = current_model._alpha - next_model._alpha, current_model._beta - next_model._beta
+    model_extra = BetaBernoulliModel()
+    model_extra.update(extra_positive, extra_negative)
+
+    ppcp_next = next_model.posterior_predictive_per_obs(next_model._alpha, next_model._beta)
+    ppcp_extra = next_model.posterior_predictive_per_obs(extra_positive, extra_negative)
+    mean_ratio = next_model.mean()  / current_model.mean()
+
+    return mean_ratio * (ppcp_next - ppcp_extra)
 
 
-def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshold=0.3, high_meth_threshold=0.7, merge_threshold = -0.2):
+def get_parent_scores(
+        motif: Motif,
+        pileup: pl.DataFrame,
+        contigs: dict[str, DNAsequence],
+        low_meth_threshold: float,
+        high_meth_threshold: float,
+    ):
+    """
+    Get the scores for all parent motifs of a motif.
+    Parameters:
+    - motif (Motif): The motif to be processed.
+    - pileup (Pileup): The pileup to be processed.
+    - contigs (dict): Dictionary of contig sequences.
+    - low_meth_threshold (float): The threshold for low methylation.
+    - high_meth_threshold (float): The threshold for high methylation.
+    Returns:
+    - dict: A dictionary of parent motifs and their scores.
+    """
+    motif_model = motif_model_bin(
+        pileup=pileup,
+        contigs=contigs,
+        motif=motif,
+        model=BetaBernoulliModel(),
+        low_meth_threshold=low_meth_threshold,
+        high_meth_threshold=high_meth_threshold,
+    )
+    motif_split = motif.split()
+
+    parent_motifs = {}
+    for i, base in enumerate(motif_split):
+        if i == motif.mod_position:
+            continue
+        if (base != ".") and (base != "N"):
+            new_motif = motif_split.copy()
+            new_motif[i] = "."
+            parent_motif = Motif("".join(new_motif), motif.mod_position)
+            parent_model = motif_model_bin(
+                pileup=pileup,
+                contigs=contigs,
+                motif=parent_motif,
+                model=BetaBernoulliModel(),
+                low_meth_threshold=low_meth_threshold,
+                high_meth_threshold=high_meth_threshold,
+            )
+            score = predictive_evaluation_score(motif_model, parent_model)
+            parent_motifs[parent_motif] = dict(
+                motif_position=i,
+                parent_model=parent_model,
+                child_model=motif_model,
+                score=score
+            )
+    return parent_motifs
+    
+
+def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshold=0.3, high_meth_threshold=0.7, merge_threshold = 0.5):
     new_df = []
-    for (bin_name, mod_type), df in motif_df.group_by("bin", "mod_type"):
-        contigs = contig_bin.filter(col("bin") == bin_name).get_column("contig").unique().to_list()
+    for (bin_name, mod_type), df in motif_df.group_by("reference", "mod_type"):
+        contigs = contig_bin[bin_name]
         log.debug(f"Merging motifs of bin: {bin_name}, modtype: {mod_type}")
         
         # Create dictionary of bin contigs to sequence
         bin_sequences = {contig: assembly[contig] for contig in contigs}
 
-
+          
         # Get list of motifs
         motif_seq = df["motif"].to_list()
         motif_pos = df["mod_position"].to_list()
@@ -878,11 +1255,13 @@ def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshol
         merged_motifs = nm.motif.merge_motifs(motifs)
         all_merged_motifs = []
         all_premerge_motifs = []
-        # Check mean shift of premerge motifs to merged motif is high enough
-        for _, motifs in merged_motifs.items():
-            merged_motif = motifs[0]
-            premerge_motifs = motifs[1]
 
+        for _, (merged_motif, premerge_motifs, premerge_motif_variants, new_motif_variants) in merged_motifs.items():
+            if len(new_motif_variants) == 0:
+                log.debug(f"Merging motifs {premerge_motifs} to {merged_motif}, as no new motif variants were generated")
+                all_merged_motifs.append(merged_motif)
+                all_premerge_motifs.extend(premerge_motifs)
+                continue
             merge_model = motif_model_bin(
                 pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)), 
                 bin_sequences,
@@ -892,25 +1271,26 @@ def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshol
                 high_meth_threshold=high_meth_threshold
             )
 
-            pre_merge_model = BetaBernoulliModel()
-            for pre_merge_motif in premerge_motifs:
-                pre_merge_model = motif_model_bin(
+            premerge_motif_variants_model = BetaBernoulliModel()
+            for premerge_motif_variant in premerge_motif_variants:
+                premerge_motif_variants_model = motif_model_bin(
                     pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)),
                     bin_sequences,
-                    pre_merge_motif,
-                    pre_merge_model,
+                    premerge_motif_variant,
+                    premerge_motif_variants_model,
                     low_meth_threshold=low_meth_threshold,
                     high_meth_threshold=high_meth_threshold
                 )
-            mean_diff = merge_model.mean() - pre_merge_model.mean()
-            if mean_diff > merge_threshold:
-                log.debug(f"Merging motifs {premerge_motifs} to {merged_motif}, mean diff: {mean_diff}")
+            merge_score = predictive_evaluation_score(premerge_motif_variants_model, merge_model)
+            if merge_score < merge_threshold:
+                log.debug(f"Merging motifs {premerge_motifs} to {merged_motif}, merge score: {merge_score}")
+                all_merged_motifs.append(merged_motif)
+                all_premerge_motifs.extend(premerge_motifs)
             else:
-                log.debug(f"Not merging motifs {premerge_motifs} to {merged_motif}, mean diff: {mean_diff}")
+                log.debug(f"Not merging motifs {premerge_motifs} to {merged_motif}, merge score: {merge_score}")
                 continue
 
-            all_merged_motifs.append(merged_motif)
-            all_premerge_motifs.extend(premerge_motifs)
+            
         log.info(f"Motif merge for bin {bin_name} modtype {mod_type} complete")
         # Create a new dataframe with the non merged motifs
         if  len(all_premerge_motifs) == 0:
@@ -931,17 +1311,30 @@ def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshol
                 low_meth_threshold=low_meth_threshold,
                 high_meth_threshold=high_meth_threshold
             )
-            merged_df.append(pl.DataFrame({
-                "sequence": motif.string,
-                "score": -1.,
-                "bin": bin_name,
-                "mod_type": mod_type,
-                "model": merged_model,
+            merged_model_parents = get_parent_scores(
+                motif,
+                pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)),
+                bin_sequences,
+                low_meth_threshold,
+                high_meth_threshold
+            )
+            if len(merged_model_parents) > 0:   
+                merged_score = np.mean([d["score"] for d in merged_model_parents.values()])
+            else:
+                merged_score = -1
+            merge_motif_df = nm.motif.MotifSearchResult(pl.DataFrame({
                 "motif": motif.string,
-                "mod_position": motif.mod_position
-            }).cast({'bin': pl.String}))
+                "score": merged_score,
+                "mod_position": motif.mod_position,
+                "reference": bin_name,
+                "mod_type": mod_type,
+                "model": merged_model
+            }))
+            merged_df.append(merge_motif_df)
 
         merged_df_con = pl.concat(merged_df)
+        merged_df_con = nm.motif.MotifSearchResult(merged_df_con)
         new_df.append(merged_df_con)
     new_df = pl.concat(new_df)
+    new_df = nm.motif.MotifSearchResult(new_df)
     return new_df

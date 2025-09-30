@@ -7,7 +7,8 @@ def create_parser():
     formatter = lambda prog: argparse.HelpFormatter(prog, max_help_position=28)
     parser = argparse.ArgumentParser(description="Motif identification and utilisation commands", formatter_class=formatter)
     parser.add_argument("--version", action="version", version="%(prog)s {}".format(__version__))
-    subparsers = parser.add_subparsers(help="-- Command descriptions --", dest="command")
+    subparsers = parser.add_subparsers(help="-- Command descriptions --", dest="command", title = "commands",
+                                       metavar='{motif_discovery, detect_contamination, include_contigs, MTase-linker, check_installation}')
 
     def add_general_arguments(parser):
         """
@@ -90,55 +91,10 @@ def create_parser():
         )
         
         parser.add_argument(
-            "--min_motif_score", type=float, default=1, 
+            "--min_motif_score", type=float, default=1.5, 
             help="Minimum score for a motif to be kept after identification. Default: %(default)s"
         )   
 
-    ###########################################################################
-    # Find Motifs
-    parser_find_motifs = subparsers.add_parser(
-        'find_motifs', 
-        help="Finds motifs directly on contig level in provided assembly",
-        add_help=False
-    )
-
-    parser_find_motifs_options = parser_find_motifs.add_argument_group("Options") 
-
-    parser_find_motifs.add_argument(
-        "assembly", type=str, 
-        help="path to the assembly file."
-    )
-
-    parser_find_motifs.add_argument(
-        "pileup", type=str, 
-        help="path to the modkit pileup file."
-    )   
-    
-    parser_find_motifs_options.add_argument(
-        "--out", type=str, 
-        help="path to the output folder", default="nanomotif"
-    )
-    
-    add_methylation_threshold_arguments(parser_find_motifs_options)
-
-    add_motif_search_arguments(parser_find_motifs_options)
-
-    parser_find_motifs_options.add_argument(
-        "--threshold_valid_coverage", type=int, default=5, 
-        help="minimum valid base coverage for a position to be considered. Default: %(default)s"
-    )
-    
-    parser_find_motifs_options.add_argument(
-        "--min_motifs_contig", type=int, default=20, 
-        help="minimum number of times a motif has to have been oberserved in a contig. Default: %(default)s"
-    )
-    
-    parser_find_motifs_options.add_argument(
-        "--read_level_methylation", action="store_true", 
-        help="If specified, methylation is calculated on read level instead of contig level. This is slower but produces more stable motifs."
-    )
-    
-    add_general_arguments(parser_find_motifs)
 
     ###########################################################################
     # Find motifs on bin level
@@ -229,6 +185,13 @@ def create_parser():
         "--write_bins",
         action='store_true',
         help="If specified, new bins will be written to a bins folder. Requires --assembly_file to be specified.",
+    )
+
+    parser_binnary_shared.add_argument(
+        "--methylation_output_type",
+        default="median",
+        help="Specify whether to use the median of mean methylated motif positions or the weighted mean. [default: median]",
+        choices = ["median", "weighted_mean"]
     )
     
     parser_binnary_shared_mandatory.add_argument("--out", type=str, help="Path to output directory", required=True, default="nanomotif")

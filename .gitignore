@@ -6,10 +6,13 @@ nanomotif/flamegraph*
 austin
 results
 reports
-run_defaults.sh
-test_output*
-test_*
-job_*
+nanomotif_debug_dir
+development_output
+development_sbatch_jobs
+.vscode
+launch_*
+.envrc
+flake*
 
 !bin/.gitkeep
 bin/
@@ -181,3 +184,6 @@ cython_debug/
 # mtase_linker rules test
 tests/mtase_linker/test_rules.py
 datasets/mtase_linker_testdata
+msr_complement.pkl
+.gitignore
+pyrightconfigt.json

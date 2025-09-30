@@ -18,7 +18,10 @@ The assembly file should contain all contigs in FASTA format. Each header should
 
 ## Methylation Pileup
 
-The methylation pileup file indicates how many mapped reads at each position show evidence of methylation. To generate this file:
+The methylation pileup file indicates how many mapped reads at each position show evidence of methylation. Nanomotif can accept both raw pileup files and bgzipped pileup files (with a `.gz` extension). If using a bgzipped file, ensure that it is indexed with `tabix` or use [epimetheus](https://github.com/SebastianDall/epimetheus/actions/workflows/pypi-release.yml)`epimetheus bgzip compress`. Using a bgzipped and indexed file will significantly speed up processing time.
+
+
+To generate this file:
 
 1. Map reads (with methylation calls) to the assembly.
 2. Use [modkit pileup](https://github.com/nanoporetech/modkit/blob/master/book/src/advanced_usage.md#pileup) to create the pileup.
@@ -36,6 +39,8 @@ samtools fastq -T MM,ML $MODCALLS | \
     samtools sort -o $MAPPING
 
 modkit pileup --only-tabs $MAPPING $PILEUP
+
+epimetheus bgzip compress -i $PILEUP # --keep to not remove pileup file.
 ```
 
 

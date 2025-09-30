@@ -71,7 +71,7 @@ def test_add(loaded_data):
     )
     
     # Assert that the number of columns is 12
-    assert set(motifs_scored_in_bins.columns) == set(['contig', 'median', 'N_motif_obs', 'motif_mod', 'bin']) # number of columns
+    assert set(motifs_scored_in_bins.columns) == set(['contig', 'methylation_value', 'n_motif_obs', 'motif_mod', 'bin']) # number of columns
     # Assert contig 1 belongs to bin 1
     assert motifs_scored_in_bins.filter(pl.col("contig") == "contig_1").select("bin").unique()["bin"].item() == "b1"
     
@@ -94,8 +94,8 @@ def test_impute_contig_methylation_within_bin(loaded_data, motifs_scored_in_bins
     )
     print(imputed_binned_contig_methylation)
     assert imputed_binned_contig_methylation is not None
-    assert set(imputed_binned_contig_methylation.columns) == set(['contig', 'bin', 'motif_mod', 'mean_bin_median', 'median' ])
-    assert None not in imputed_binned_contig_methylation.to_pandas()["median"] 
+    assert set(imputed_binned_contig_methylation.columns) == set(['contig', 'bin', 'motif_mod', 'mean_bin_methylation', 'methylation_value' ])
+    assert None not in imputed_binned_contig_methylation.to_pandas()["methylation_value"] 
     
 def test_impute_contig_methylation_within_bin2():
     # Sample input DataFrame
@@ -103,8 +103,8 @@ def test_impute_contig_methylation_within_bin2():
         "contig": ["contig_1", "contig_1", "contig_1", "contig_2", "contig_3"],
         "bin": ["bin1", "bin1", "bin1", "bin1", "bin2"],
         "motif_mod": ["mod1", "mod2", "mod3", "mod3", "mod2"],
-        "median": [0.5, 0.0, 0.9, 0.5, 0.9],
-        "N_motif_obs": [10, 5, 15, 20, 25]
+        "methylation_value": [0.5, 0.0, 0.9, 0.5, 0.9],
+        "n_motif_obs": [10, 5, 15, 20, 25]
     })
 
     # Expected output DataFrame after imputation
@@ -112,7 +112,7 @@ def test_impute_contig_methylation_within_bin2():
         "contig": ["contig_1", "contig_1", "contig_1", "contig_2", "contig_2", "contig_2", "contig_3"],
         "bin": ["bin1", "bin1", "bin1", "bin1", "bin1", "bin1", "bin2"],
         "motif_mod": ["mod1", "mod2","mod3", "mod1","mod2", "mod3","mod2"],
-        "median": [0.5, 0.0, 0.9, 0.5, 0.0, 0.5, 0.9]
+        "methylation_value": [0.5, 0.0, 0.9, 0.5, 0.0, 0.5, 0.9]
     })
 
     # Since args is not used in the function (commented out), we can pass None
@@ -139,7 +139,7 @@ def test_impute_unbinned_contigs():
         "bin": ["unbinned", "binned", "unbinned", "binned"],
         "contig": ["contig_1", "contig_2", "contig_3", "contig_4"],
         "motif_mod": ["mod1", "mod2", "mod1", "mod3"],
-        "median": [0.0, 0.3, 0.95, 0.5]
+        "methylation_value": [0.0, 0.3, 0.95, 0.5]
     })
 
     # Define the expected behavior of the pseudo-random number generator
@@ -147,15 +147,15 @@ def test_impute_unbinned_contigs():
     print(result)
 
     # Validate the resulting DataFrame structure
-    assert "median" in result.columns
+    assert "methylation_value" in result.columns
     assert len(result.get_column("contig")) == 6
     assert set(result.get_column("motif_mod").unique()) == set(["mod1", "mod2", "mod3"])
-    assert None not in result.to_pandas()["median"]
+    assert None not in result.to_pandas()["methylation_value"]
     # Expected values for the "median" column (based on your output)
     expected_median = [0.0, 0.142607, 0.109799, 0.95, 0.023403, 0.023399]
 
     # Extract actual "median" values from the DataFrame
-    actual_median = result.get_column("median").to_list()
+    actual_median = result.get_column("methylation_value").to_list()
 
     # Assert the two lists are equal with some tolerance for floating-point precision
     assert np.allclose(actual_median, expected_median, atol=1e-6), \
