@@ -35,12 +35,13 @@ setup(
         "scikit-learn>=1.5.2",
         "networkx>=3.1",
         "pyarrow>=15.0.2",
-        "epimetheus-py==0.7.2",
+        "epimetheus-py==0.7.4",
         "hdbscan",
         "Bio>=1.6.2",
         "snakemake>=7.32.4",
         "progressbar2>=3.53.1",
-        "pyfastx>=0.2.10"
+        "pyfastx>=0.2.10",
+        "pysam>=0.22.0",
     ],
     entry_points={
             'console_scripts': [

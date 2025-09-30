@@ -26,7 +26,8 @@ import warnings
 import time
 from typing import Generator, Optional, List, Tuple
 from dataclasses import dataclass
-from epymetheus import query_pileup_records
+import pysam
+
 
 
 def set_polars_env():
@@ -43,10 +44,10 @@ class ProcessorConfig:
     methylation_threshold_high: float
     minimum_kl_divergence: float
     score_threshold: float
+    log_dir: str
+    seed: int
+    output_dir: str
     verbose: bool = False
-    log_dir: str = None
-    seed: int = None
-    output_dir: str = None
 
     def __post_init__(self):
         if self.assembly is None:
@@ -155,33 +156,20 @@ class PileupStrategyBgzip:
 
     def task_generator(self, counter, lock):
         for bin_name in self.partitioned_assembly.keys():
-            log.debug("Loading pileup for bin contigs")
-            bin_pileup = nm.dataload.load_contigs_pileup_bgzip(self.pileup_path, self.bin_contig[bin_name])
-            bin_pileup = nm.dataload.filter_pileup(bin_pileup)
-            bin_pileup = nm.dataload.filter_pileup_minimummod_frequency(bin_pileup)
-            for modtype in nm.constants.MOD_CODE_TO_PRETTY.keys():
-                bin_pileup_mod_type = bin_pileup.filter(pl.col("mod_type") == modtype)
-                if bin_pileup_mod_type is None or len(bin_pileup_mod_type) == 0:
-                    log.info(f"Bin {bin_name} modtype {modtype} has no pileup data, skipping")
-                    with lock:
-                        counter.value += 1
-                    continue
-                
-                if bin_name not in self.bin_contig.keys():
-                    log.info(f"Bin {bin_name} not in bin_contig, skipping")
-                    with lock:
-                        counter.value += 1
-                    continue
+            if bin_name not in self.bin_contig.keys():
+                log.info(f"Bin {bin_name} not in bin_contig, skipping")
+                with lock:
+                    counter.value += 1
+                continue
 
-                bin_assembly = self.partitioned_assembly[bin_name]
-
-                yield (
-                    bin_name,
-                    modtype,
-                    bin_assembly,
-                    bin_pileup_mod_type,
-                )
+            bin_assembly = self.partitioned_assembly[bin_name]
+            time.sleep(1)
+            yield (
+                bin_name,
+                bin_assembly
+            )
     def worker_function(self, args):
+        bin_name, assembly = args
         set_seed(seed=self.config.seed)
         process_id = os.getpid()
         if self.config.log_dir is not None:
@@ -189,29 +177,52 @@ class PileupStrategyBgzip:
             configure_logger(log_file, verbose=self.config.verbose)
         log.info(f"Worker {process_id} started")
         
-        bin_name, modtype, assembly, bin_pileup = args
-        log.debug(f"Worker {process_id} processing bin {bin_name} modtype {modtype}")
-        
-        
-        contigs_in_pileup = bin_pileup.get_column("contig").unique().to_list()
-        # Keep only contigs in pileup
-        filtered_bin_contig = {
-            bin_name: [contig for contig in self.bin_contig[bin_name] if contig in contigs_in_pileup]
-        }
-        assembly = nm.seq.Assembly({contig: assembly[contig].sequence for contig in assembly.assembly.keys() if contig in contigs_in_pileup})
+        log.debug(f"Worker {process_id} processing bin {bin_name}")
+        results = []
 
-        return process_subpileup(
-            filtered_bin_contig,
-            modtype,
-            bin_pileup,
-            assembly,
-            self.config.minimum_kl_divergence,
-            self.config.padding,
-            self.config.methylation_threshold_low,
-            self.config.methylation_threshold_high,
-            self.config.score_threshold,
-            output_dir = self.config.output_dir
-        )
+        log.debug(f"Loading pileup for {bin_name}")
+        bin_pileup = nm.dataload.load_contigs_pileup_bgzip(self.pileup_path, self.bin_contig[bin_name])
+        log.debug(f"Filtering pileup for {bin_name}")
+        bin_pileup = nm.dataload.filter_pileup(bin_pileup)
+        bin_pileup = nm.dataload.filter_pileup_minimummod_frequency(bin_pileup)
+        log.debug(f"Loaded pileup for {bin_name}")
+
+        for modtype in MOD_CODE_TO_PRETTY.keys():
+            log.debug(f"Procesing modtype {modtype}")
+            bin_pileup_mod_type = bin_pileup.filter(pl.col("mod_type") == modtype)
+            if bin_pileup_mod_type is None or len(bin_pileup_mod_type) == 0:
+                log.info(f"Bin {bin_name} modtype {modtype} has no pileup data, skipping")
+                continue
+
+            
+            
+            contigs_in_pileup = bin_pileup_mod_type.get_column("contig").unique().to_list()
+            # Keep only contigs in pileup
+            filtered_bin_contig = {
+                bin_name: [contig for contig in self.bin_contig[bin_name] if contig in contigs_in_pileup]
+            }
+            log.debug(f"Contigs in pileup for {bin_name} {modtype}: {contigs_in_pileup}")
+            assembly_modtype = nm.seq.Assembly({contig: assembly[contig].sequence for contig in assembly.assembly.keys() if contig in contigs_in_pileup})
+
+            results.append(process_subpileup(
+                filtered_bin_contig,
+                modtype,
+                bin_pileup_mod_type,
+                assembly_modtype,
+                self.config.minimum_kl_divergence,
+                self.config.padding,
+                self.config.methylation_threshold_low,
+                self.config.methylation_threshold_high,
+                self.config.score_threshold,
+                output_dir = self.config.output_dir
+            ))
+        results = [result for result in results if result is not None]
+        if len(results) == 0:
+            log.info(f"No motifs found for bin {bin_name}")
+            return None
+        motifs = pl.concat(results, rechunk=True, parallel=False)
+        motifs = nm.motif.MotifSearchResult(motifs)
+        return motifs
 
 
 class BinMotifProcessor:
@@ -222,35 +233,41 @@ class BinMotifProcessor:
     ):
         self.task_strategy = task_strategy
         self.config = config
-        self.manager = multiprocessing.Manager()
+        self.ctx = get_context("spawn")
+        self.manager = self.ctx.Manager()
         self.counter = self.manager.Value("i", 0)
         self.lock = self.manager.Lock()
 
 
+
     def run(self):
         # Create a pool of workers
-        pool = get_context("spawn").Pool(processes=self.config.threads, initializer=set_polars_env)
+        pool = self.ctx.Pool(processes=self.config.threads, initializer=set_polars_env)
 
         # Create a process for the progress bar
         log.debug("Counting number of tasks")
         n_bins = len(self.config.bin_contig.get_column("bin").unique())
-        total_tasks = n_bins * len(nm.constants.MOD_CODE_TO_PRETTY.keys())
+        total_tasks = n_bins
 
         log.debug("Starting progress bar")
-        progress_bar_process = multiprocessing.Process(target=update_progress_bar, args=(self.counter, total_tasks, True))
+        progress_bar_process = self.ctx.Process(target=update_progress_bar, args=(self.counter, total_tasks, True))
         progress_bar_process.start()
 
         # Put them workers to work
         log.debug("Starting workers")
         chunksize = max(min(100, total_tasks // self.config.threads), 1)
         results = []
-        for r in pool.imap_unordered(self.task_strategy.worker_function, self.task_strategy.task_generator(self.counter, self.lock), chunksize=chunksize):
+        for r in pool.imap_unordered(
+            self.task_strategy.worker_function, 
+            self.task_strategy.task_generator(self.counter, self.lock), 
+            chunksize=1
+            ):
             with self.lock:
                 self.counter.value += 1
             results.append(r)
         log.debug("Joining results")
         results = [result for result in results if result is not None]
-
+        results = [result for result in results if not result.is_empty()]
         log.debug("Closing pool")
         pool.close()
         pool.join()
@@ -262,6 +279,7 @@ class BinMotifProcessor:
         if len(results) == 0:
             log.debug("No motifs found")
             return None
+
         motifs = pl.concat(results, rechunk=True, parallel=False)
         motifs = nm.motif.MotifSearchResult(motifs)
         log.debug("Returning final dataframe")
@@ -279,6 +297,11 @@ class BinMotifProcessorBuilder:
             if not os.path.exists(pileup_path + ".tbi"):
                 raise FileNotFoundError(f"Tabix index for {pileup_path} not found.")
             partitioned_assembly = self._partition_assembly()
+            # Remove contigs not in tabix index from contig_bin_dict
+            for bin_name, contigs in self.bin_contig_dict.items():
+                with pysam.TabixFile(pileup_path) as tbx:
+                    contigs_present = [c for c in contigs if c in tbx.contigs]
+                self.bin_contig_dict[bin_name] = contigs_present
             strategy = PileupStrategyBgzip(
                 partitioned_assembly=partitioned_assembly,
                 pileup_path=pileup_path,
@@ -405,7 +428,7 @@ def process_subpileup(
     motifs = nm.postprocess.remove_noisy_motifs(motifs)
     if motifs.is_empty():
         log.info("No motifs found")
-        return
+        return None
     motifs_file_name = motifs_file_name +   "-noise"
     motifs.write_motifs(motifs_file_name + ".tsv")
 
@@ -413,7 +436,7 @@ def process_subpileup(
     motifs = nm.find_motifs_bin.merge_motifs_in_df(motifs, bin_pileup, assembly, bin_contig)
     if motifs.is_empty():
         log.info("No motifs found")
-        return
+        return None
     motifs = motifs.unique()
     motifs_file_name = motifs_file_name +   "-merge"
     motifs.write_motifs(motifs_file_name + ".tsv")
@@ -422,7 +445,7 @@ def process_subpileup(
     motifs = nm.postprocess.remove_sub_motifs(motifs)
     if motifs.is_empty():
         log.info("No motifs found")
-        return
+        return None
     motifs_file_name = motifs_file_name +   "-sub"
     motifs.write_motifs(motifs_file_name + ".tsv")
 
@@ -430,7 +453,7 @@ def process_subpileup(
     motifs = nm.postprocess.join_motif_complements(motifs)
     if motifs.is_empty():
         log.info("No motifs found")
-        return
+        return None
     motifs_file_name = motifs_file_name +   "-complement"
     motifs.write_motifs(motifs_file_name + ".tsv")
 
@@ -556,7 +579,7 @@ def find_best_candidates(
             log.debug(f"Parents: {parent_pretty_print}")
             # Find positions to prune
             for parent, data in parent_motif_scores.items():
-                if data["score"] < 0.5:
+                if data["score"] < 0.2:
                     log.debug(f"    Pruning position {data['motif_position']} from {temp_motif}, score: {data['score']}")
                     log.debug(f"    Poor parent motif: {parent}, model: {data['parent_model']}")
                     indices_to_prune.add(data["motif_position"])
@@ -1259,7 +1282,7 @@ def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshol
                     high_meth_threshold=high_meth_threshold
                 )
             merge_score = predictive_evaluation_score(premerge_motif_variants_model, merge_model)
-            if merge_score > merge_threshold:
+            if merge_score < merge_threshold:
                 log.debug(f"Merging motifs {premerge_motifs} to {merged_motif}, merge score: {merge_score}")
                 all_merged_motifs.append(merged_motif)
                 all_premerge_motifs.extend(premerge_motifs)

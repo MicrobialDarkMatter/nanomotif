@@ -3,7 +3,13 @@ import polars as pl
 from .seq import Assembly
 from epymetheus import query_pileup_records
 import sys
+import pysam
 import pyfastx
+import nanomotif as nm
+import logging as log
+import time
+import random
+
 
 PILEUP_SCHEMA = {
     "column_1": pl.Utf8,
@@ -49,17 +55,18 @@ def load_fasta(path, trim_names=False, trim_character=" ") -> dict:
 
 def load_fasta_fastx(path, trim_names=False, trim_character=" ") -> dict:
     """
-    Reads a fasta file using pyfastx and returns a dictionary with the contig names as 
+    Reads a fasta file and returns a dictionary with the contig names as 
     keys and the sequences as values
     """
-    fasta = pyfastx.Fasta(path, build_index=True)
+    fx = pyfastx.Fasta(path, build_index=False)
     data = {}
-    for name in fasta.keys():
-        seq_name = name
+    for name, seq in fx.items():
         if trim_names:
-            seq_name = seq_name.split(trim_character)[0]
-        data[seq_name] = str(fasta[name])
-    return data
+            name = name.split(trim_character)[0]
+        data[name] = seq
+    assembly = nm.seq.Assembly(data)
+    return assembly
+
 
 def load_pileup(path: str):
     """
@@ -93,21 +100,26 @@ def load_pileup(path: str):
 
 def load_contigs_pileup_bgzip(path: str, contigs: list[str]):
     """
-    Load pileup file from path to pileup.bed output of modkit pileup
+    Load pileup file from path to pileup.bed output of modkit pileup.
+    Retries opening the tabix file and reading records if initial attempts fail.
     """
-    pileup_dict = query_pileup_records(path, contigs)
-    pileup = pl.DataFrame(pileup_dict)
+    # Step 2: query pileup from Rust
+    log.debug(f"Querying pileup for {len(contigs)} contigs")
+    pileup = query_pileup_records(path, contigs)
+    log.debug(f"Renaming and removing unnecessary columns")
     pileup = pileup.rename({
-        "contig":"contig",
+        "contig": "contig",
         "start": "position",
         "mod_type": "mod_type",
         "strand": "strand",
         "fraction_modified": "fraction_mod",
-        "n_valid_cov": "Nvalid_cov"
-    }).with_columns(pl.col("fraction_mod") / 100) \
-        .select(["contig", "position", "mod_type", "strand", "fraction_mod", "Nvalid_cov"])
+        "n_valid_cov": "Nvalid_cov",
+    }) \
+    .with_columns(pl.col("fraction_mod") / 100) \
+    .select(["contig", "position", "mod_type", "strand", "fraction_mod", "Nvalid_cov"])
 
     return pileup
+
 
 
 def load_low_coverage_positions(path_pileup: str, contig_mods_to_load: list[str], min_coverage: float = 5):

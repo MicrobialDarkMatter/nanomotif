@@ -62,7 +62,7 @@ def find_motifs_bin(args, pl, min_mods_pr_contig = 50, min_mod_frequency = 10000
         return
 
     log.info("Loading assembly")
-    assembly = nm.fasta.load_fasta(args.assembly)
+    assembly = nm.fasta.load_fasta_fastx(args.assembly)
 
     log.info("Identifying motifs")
     config = nm.find_motifs_bin.ProcessorConfig(
@@ -89,7 +89,7 @@ def find_motifs_bin(args, pl, min_mods_pr_contig = 50, min_mod_frequency = 10000
         log.debug(f"Identified {len(motifs)} motifs in {len(motifs['reference'].unique())} bins")
 
     log.info("Writing motifs")
-    motifs.write_motif_formatted(args.out + "/motifs-bin.tsv")
+    motifs.write_motif_formatted(args.out + "/bin-motifs.tsv")
     log.info("Done finding motifs")
     log.info(f"Identified {len(motifs)} motifs in {len(motifs['reference'].unique())} bins")
     return motifs
@@ -286,8 +286,10 @@ def main():
 
     try: 
         os.environ["POLARS_MAX_THREADS"] = str(args.threads)
+        os.environ.setdefault("RAYON_NUM_THREADS", "1")
     except:
         os.environ["POLARS_MAX_THREADS"] = "1"
+        os.environ.setdefault("RAYON_NUM_THREADS", "1")
     import polars as pl
     if args.command in ["detect_contamination", "include_contigs", "MTase-linker"]:
         args.verbose = False

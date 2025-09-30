@@ -86,12 +86,12 @@ def create_parser():
         )
         
         parser.add_argument(
-            "--minimum_kl_divergence", type=float, default=0.01, 
+            "--minimum_kl_divergence", type=float, default=0.05, 
             help="Minimum KL-divergence for a position to considered for expansion in  motif search. Higher value means less exhaustive, but faster search. Default: %(default)s"
         )
         
         parser.add_argument(
-            "--min_motif_score", type=float, default=0.8, 
+            "--min_motif_score", type=float, default=1.5, 
             help="Minimum score for a motif to be kept after identification. Default: %(default)s"
         )   
 

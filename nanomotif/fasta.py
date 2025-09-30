@@ -6,6 +6,7 @@ from .seq import Assembly
 import sys
 import os
 from nanomotif.seq import DNAsequence
+import pyfastx
 
 def load_fasta(path, trim_names=False, trim_character=" ") -> dict:
     """
@@ -31,7 +32,21 @@ def load_fasta(path, trim_names=False, trim_character=" ") -> dict:
         data[key] = DNAsequence(data[key])
     return data
 
-
+def load_fasta_fastx(path, trim_names=False, trim_character=" ") -> dict:
+    """
+    Reads a fasta file using pyfastx and returns a dictionary with the contig names as 
+    keys and the sequences as values
+    """
+    fasta = pyfastx.Fasta(path, build_index=True)
+    data = {}
+    for name in fasta.keys():
+        seq_name = name
+        if trim_names:
+            seq_name = seq_name.split(trim_character)[0]
+        data[seq_name] = str(fasta[name])
+    for key in data:
+        data[key] = DNAsequence(data[key])
+    return data
 
 # Code copied from https://github.com/lh3/readfq/blob/master/readfq.py
 class FastaReader:

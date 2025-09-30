@@ -5,12 +5,14 @@ from functools import reduce
 from itertools import product
 import networkx as nx
 import logging as log
+from typing import overload, Union, Sequence, Any
 from scipy.stats import entropy
 from nanomotif.constants import *
 from nanomotif.seq import regex_to_iupac, iupac_to_regex, reverse_compliment
 from nanomotif.model import BetaBernoulliModel
 import nanomotif.utils as nm_utils
 import polars as pl
+from collections.abc import Mapping
 class Motif(str):
     def __new__(cls, motif_string, *args, **kwargs):
         return str.__new__(cls, motif_string)
@@ -184,10 +186,11 @@ class Motif(str):
         """
         Return the motif string with single characters surrounded by dots removed.
         """
-        if re.search("[^\.]", self.string) is None:
+        matches =  re.search("[^.]", self.string)
+        if matches is None:
             return self
-        
-        new_position = self.mod_position - re.search("[^\.]", self.string).start()
+
+        new_position = self.mod_position - matches.start()
         new_motif = self.strip(character)
 
         return Motif(new_motif, new_position)
@@ -566,6 +569,16 @@ class MotifSearchResult(pl.DataFrame):
         "mod_position_iupac": pl.Int64
     }
 
+    COMPLEMENTARY_COLUMNS = {
+        "motif_complement": pl.Utf8,
+        "score_complement": pl.Float64,
+        "model_complement": pl.Object,
+        "n_mod_complement": pl.Int64,
+        "n_nomod_complement": pl.Int64,
+        "motif_iupac_complement": pl.Utf8,
+        "mod_position_iupac_complement": pl.Int64
+    }
+
 
     def __init__(self, data=None, *args, **kwargs):
         if isinstance(data, pl.DataFrame):
@@ -574,6 +587,7 @@ class MotifSearchResult(pl.DataFrame):
         else:
             super().__init__(data, *args, **kwargs)
 
+        self._normalize_model_column()
         self._ensure_required()
         self._ensure_derived()
         self._ensure_column_order()
@@ -584,6 +598,9 @@ class MotifSearchResult(pl.DataFrame):
         if name.startswith("__"):
             return object.__getattribute__(self, name)
         attr = object.__getattribute__(self, name)
+
+        if isinstance(getattr(self.__class__, name, None), property):
+            return attr
         if callable(attr):
             def wrapper(*args, **kwargs):
                 out = attr(*args, **kwargs)
@@ -594,7 +611,8 @@ class MotifSearchResult(pl.DataFrame):
                 return out
             return wrapper
         return attr
-    
+
+
     def __getstate__(self):
         """Serialize to a pickle-friendly dict, converting model objects to state dicts."""
         serialized = {}
@@ -606,10 +624,9 @@ class MotifSearchResult(pl.DataFrame):
                 serialized[col] = values
         return {"data": serialized, "schema": self.schema}
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: dict):
         """Restore from pickle-friendly dict, rehydrating model objects."""
         restored = {}
-        object_columns = []
         for col, values in state["data"].items():
             if isinstance(values, list) and values and isinstance(values[0], dict) and "_alpha" in values[0]:
                 # Looks like a BetaBernoulliModel state dict
@@ -617,13 +634,12 @@ class MotifSearchResult(pl.DataFrame):
                     self._restore_model_from_state(v) if v is not None else None
                     for v in values
                 ]
-                object_columns.append(col)
             else:
                 restored[col] = values
+
         df = pl.DataFrame(restored)
-        for col in object_columns:
-            df = df.with_columns(pl.col(col).cast(pl.Object))
-        self._df = df._df  # reinitialize the Polars parent
+        self._df = df._df  # reinitialize Polars parent
+        self._normalize_model_column()  # <-- this rebuilds model column as pl.Object
         self._ensure_column_order()
 
     @staticmethod
@@ -657,14 +673,31 @@ class MotifSearchResult(pl.DataFrame):
     def _ensure_derived(self):
         """Compute missing derived columns if possible."""
         to_add = {}
-        if "n_mod" not in self.columns or "n_nomod" not in self.columns:
-            if "model" not in self.columns:
-                raise ValueError(
-                    "Cannot derive n_mod/n_nomod because 'model' column is missing"
-                )
+        for col in self.columns:
+            if self[col].dtype == pl.Object:
+                values = self[col].to_list()
+                if not values:
+                    continue
+                if not any(isinstance(v, BetaBernoulliModel) for v in values if v is not None):
+                    continue  # skip if no BetaBernoulliModel inside
 
-            to_add["n_mod"] = [m._alpha - m._alpha_prior for m in self["model"]]
-            to_add["n_nomod"] = [m._beta - m._beta_prior for m in self["model"]]
+                # Figure out suffix, e.g. model -> "", model_complement -> "_complement"
+                suffix = col.replace("model", "", 1)
+
+                n_mod_col = f"n_mod{suffix}"
+                n_nomod_col = f"n_nomod{suffix}"
+
+                if n_mod_col not in self.columns or n_nomod_col not in self.columns:
+                    n_mod_vals, n_nomod_vals = [], []
+                    for m in values:
+                        if m is None:
+                            n_mod_vals.append(None)
+                            n_nomod_vals.append(None)
+                        else:
+                            n_mod_vals.append(m._alpha - m._alpha_prior)
+                            n_nomod_vals.append(m._beta - m._beta_prior)
+                    to_add[n_mod_col] = n_mod_vals
+                    to_add[n_nomod_col] = n_nomod_vals
         if "motif_iupac" not in self.columns:
             if "motif" not in self.columns:
                 raise ValueError(
@@ -690,12 +723,58 @@ class MotifSearchResult(pl.DataFrame):
             if c in self.columns and self[c].dtype != dtype:
                 exprs.append(pl.col(c).cast(dtype))
         if exprs:
-            self._df = self.with_columns(exprs)._df
+            coerced = self.with_columns(exprs)
+            self._df = coerced._df  # update internal frame
 
     def _ensure_column_order(self):
-        fixed_order_columns = list(self.REQUIRED_COLUMNS.keys()) + list(self.DERIVED_COLUMNS.keys())
+        if self.COMPLEMENTARY_COLUMNS.keys() & set(self.columns):
+            fixed_order_columns = (
+                list(self.REQUIRED_COLUMNS.keys()) +
+                list(self.DERIVED_COLUMNS.keys()) +
+                list(self.COMPLEMENTARY_COLUMNS.keys())
+            )
+        else:
+            fixed_order_columns = list(self.REQUIRED_COLUMNS.keys()) + list(self.DERIVED_COLUMNS.keys())
         ordered_columns = fixed_order_columns + [col for col in self.columns if col not in fixed_order_columns]
         self._df = self.select(ordered_columns)._df
+
+    def _normalize_model_column(self):
+        """Ensure `model` column is pl.Object with BetaBernoulliModel instances."""
+        model_cols = [c for c in self.columns if c.startswith("model")]
+
+        for col in model_cols:
+            s = self[col]
+            # If already correct (Object dtype with only BetaBernoulliModel or None), skip
+            if s.dtype == pl.Object and all(
+                (v is None or isinstance(v, BetaBernoulliModel)) for v in s.to_list()
+            ):
+                continue
+
+            restored = []
+            for v in s.to_list():
+                if v is None:
+                    restored.append(None)
+                elif isinstance(v, BetaBernoulliModel):
+                    restored.append(v)
+                elif isinstance(v, dict) or hasattr(v, "keys"):
+                    restored.append(self._restore_model_from_state(dict(v)))
+                else:
+                    # Last resort: try attribute access (if v looks like a model-ish object)
+                    try:
+                        restored.append(self._restore_model_from_state({
+                            "_alpha": v._alpha,
+                            "_beta": v._beta,
+                            "_alpha_prior": v._alpha_prior,
+                            "_beta_prior": v._beta_prior,
+                        }))
+                    except Exception:
+                        restored.append(None)
+
+            # Drop and reinsert column to guarantee dtype=pl.Object
+            other_cols = [c for c in self.columns if c != col]
+            df = self.select(other_cols)
+            df = df.with_columns(pl.Series(col, restored, dtype=pl.Object))
+            self._df = df._df
 
     def write_motifs(self, file_path):
         df = pl.DataFrame(self)
@@ -733,6 +812,7 @@ class MotifSearchResult(pl.DataFrame):
 
         df_formatted = df_formatted.sort(["reference", "mod_type", "motif"])
         df_formatted.write_csv(file_path, separator="\t")
+
 
 
 if __name__ == "__main__":

@@ -32,15 +32,15 @@ class BetaBernoulliModel():
         self._beta_prior = state["_beta_prior"]
 
     def get_raw_counts(self):
-        return self._alpha - DEFAULT_PRIOR_ALPHA, self._beta - DEFAULT_PRIOR_BETA
+        return self._alpha - self._alpha_prior, self._beta - self._beta_prior
 
     def update(self, n_positives, n_negatives):
         self._alpha += n_positives
         self._beta += n_negatives
 
     def reset(self):
-        self._alpha = self.alpha
-        self._beta = self.beta
+        self._alpha = self._alpha_prior
+        self._beta = self._beta_prior
 
     def sample(self):
         return np.random.beta(self._alpha, self._beta)
