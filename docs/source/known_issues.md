@@ -6,7 +6,7 @@ Here we list some known issues with Nanomotif and Nanopore methylation calling i
 
 ## False positives around motif of other methylation types
 
-Motifs are sometimes detected around motifs of a different methylation type, for example 5mC motifs detected around 6mA motifs. This is not actual methylation motifs, but systematic false positives in Nanopore methylation calling. An example is the identification of CCWGG derived 6mA motifs around CCWGG 5mC motifs in E. coli. This can be mitigated by filtering motifs that are within a certain distance of known motifs of other methylation types.
+Motifs are sometimes detected around motifs of a different methylation type, for example 5mC motifs detected around 6mA motifs. This is not actual methylation motifs, but systematic false positives in Nanopore methylation calling. An example is the identification of CCWGG derived 6mA motifs around CCWGG 5mC motifs in E. coli.
 
 ## High systematic 5mC noise in high GC% regions
 
