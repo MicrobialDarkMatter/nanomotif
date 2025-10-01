@@ -719,12 +719,23 @@ class MotifSearchResult(pl.DataFrame):
     def _coerce_dtypes(self):
         """Coerce any existing columns to expected dtype if mismatched."""
         exprs = []
-        for c, dtype in {**self.REQUIRED_COLUMNS, **self.DERIVED_COLUMNS}.items():
-            if c in self.columns and self[c].dtype != dtype:
-                exprs.append(pl.col(c).cast(dtype))
+        columns_to_check = {**self.REQUIRED_COLUMNS, **self.DERIVED_COLUMNS, **self.COMPLEMENTARY_COLUMNS}
+        for c in self.columns:
+            expected = columns_to_check.get(c)
+
+            if expected is None:
+                # no explicit expectation, but handle Nulls
+                if self[c].dtype == pl.Null:
+                    # Default fallback: make Nulls Utf8 (safe for metadata) 
+                    exprs.append(pl.col(c).cast(pl.Utf8))
+            else:
+                if self[c].dtype != expected:
+                    # Cast both mismatches and Nulls
+                    exprs.append(pl.col(c).cast(expected))
+
         if exprs:
             coerced = self.with_columns(exprs)
-            self._df = coerced._df  # update internal frame
+            self._df = coerced._df
 
     def _ensure_column_order(self):
         if self.COMPLEMENTARY_COLUMNS.keys() & set(self.columns):

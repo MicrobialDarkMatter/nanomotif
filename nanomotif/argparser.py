@@ -129,7 +129,7 @@ def create_parser():
     )
 
     parser_find_motifs_bin_options.add_argument(
-        "--min_motifs_bin", type=int, default=20, 
+        "--min_motifs_bin", type=int, default=50, 
         help="Minimum number of motif observations in a bin. Default: %(default)s"
     )
 

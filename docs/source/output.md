@@ -10,14 +10,13 @@ In general, nanomotif outputs are provided as tab-separated values (TSV) files. 
 The motif discovery step identifies DNA methylation motifs within bins. It outputs `bin-motifs.tsv` . This files contain information about the discovered motifs, their modification types, and their degree of methylation.
 
 **Files:**  
-- **motifs.tsv**: Contains motifs detected within individual contigs.
-- **bin-motifs.tsv**: Contains motifs aggregated and identified at the bin level, representing a consensus from multiple contigs.
+- **bin-motifs.tsv**: Contains identified motifs
 
 **Columns in bin-motifs.tsv:**
 
 | Column                        | Description                                                                                                                                                                              |
 |-------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **contig \| bin**             | The identifier of the contig or bin in which the motif was discovered. |
+| **reference**             | The identifier of the contig or bin in which the motif was discovered. |
 | **mod_type**                  | The type of base modification associated with the motif. Uses single-letter codes (e.g., `a` for 6mA, `m` for 5mC, `21839` for 4mC).                                                   |
 | **motif**                     | The detected DNA motif sequence. Uses [IUPAC degenerate nucleotide codes](https://www.bioinformatics.org/sms/iupac.html) to represent positions where multiple nucleotides are possible. |
 | **mod_position**              | The zero-based index of the modified base within the motif. For example, if `mod_position` is 0, the modification occurs on the first nucleotide of the motif.                             |
