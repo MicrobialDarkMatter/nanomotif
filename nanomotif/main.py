@@ -88,6 +88,7 @@ def find_motifs_bin(args, pl, min_mods_pr_contig = 50, min_mod_frequency = 10000
     else:
         log.debug(f"Identified {len(motifs)} motifs in {len(motifs['reference'].unique())} bins")
 
+    motifs = motifs.filter(pl.col("n_motif_obs") >= args.min_motifs_bin)
     log.info("Writing motifs")
     motifs.write_motif_formatted(args.out + "/bin-motifs.tsv")
     log.info("Done finding motifs")
