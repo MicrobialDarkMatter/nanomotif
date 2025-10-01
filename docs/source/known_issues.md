@@ -1,4 +1,4 @@
-# Know issues
+# Known issues
 
 Here we list some known issues with Nanomotif and Nanopore methylation calling in general, which can lead to identification of false positive motifs.
 
