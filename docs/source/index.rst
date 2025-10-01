@@ -21,5 +21,5 @@ how to :ref:`installation` the project.
    usage
    output
    examples
-   known nanopore issues
+   known_issues
    troubleshooting
