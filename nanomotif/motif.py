@@ -571,6 +571,7 @@ class MotifSearchResult(pl.DataFrame):
 
     COMPLEMENTARY_COLUMNS = {
         "motif_complement": pl.Utf8,
+        "mod_position_complement": pl.Int64,
         "score_complement": pl.Float64,
         "model_complement": pl.Object,
         "n_mod_complement": pl.Int64,

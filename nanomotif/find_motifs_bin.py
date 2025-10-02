@@ -220,6 +220,7 @@ class PileupStrategyBgzip:
         if len(results) == 0:
             log.info(f"No motifs found for bin {bin_name}")
             return None
+        
         motifs = pl.concat(results, rechunk=True, parallel=False)
         motifs = nm.motif.MotifSearchResult(motifs)
         return motifs
@@ -266,8 +267,7 @@ class BinMotifProcessor:
                 self.counter.value += 1
             results.append(r)
         log.debug("Joining results")
-        results = [result for result in results if result is not None]
-        results = [result for result in results if not result.is_empty()]
+        results = [nm.motif.MotifSearchResult(result) for result in results if result is not None]
         log.debug("Closing pool")
         pool.close()
         pool.join()
@@ -397,8 +397,8 @@ def process_subpileup(
         high_meth_threshold=high_meth_threshold,
         padding=padding,
         min_kl=min_kl_divergence,
-        max_dead_ends=10,
-        max_rounds_since_new_best=15,
+        max_dead_ends=25,
+        max_rounds_since_new_best=30,
         score_threshold=score_threshold
     )
     identified_motifs = nxgraph_to_dataframe(motif_graph) \
@@ -881,7 +881,7 @@ class MotifSearcher:
         priority_queue: list[tuple] = []
         hq.heappush(
             priority_queue,
-            (root_depth, 0,  self.root_motif)
+            (0, root_depth,  self.root_motif)
         )
 
         # Search loop
@@ -895,6 +895,15 @@ class MotifSearcher:
             current_model = current_attrs["model"] 
             current_depth = current_attrs.get("depth", 0)
 
+            current_n_mod, current_n_nomod = current_model.get_raw_counts()
+            if current_n_mod + current_n_nomod < 10:
+                log.debug(
+                    f"{current_motif.string} expansion skipped due to low support ({current_n_mod} mod, {current_n_nomod} non-mod) | Model: {current_model} | "
+                    f"Score: {current_attrs['score']:.2f} | "
+                    f"Queue size: {len(priority_queue)} | "
+                    f"Came from {', '.join(str(node) for node in list(self.motif_graph.predecessors(current_motif)))}"
+                )
+                continue
             # Enforce motif length safely (current_model is defined)
             if len(current_motif.strip()) > self.max_motif_length:
                 log.debug(
@@ -969,7 +978,7 @@ class MotifSearcher:
                     attrs = self.motif_graph.nodes[next_motif]
                     hq.heappush(
                         priority_queue,
-                        (attrs["depth"], -attrs["priority"], next_motif)
+                        (-attrs["priority"], attrs["depth"], next_motif)
                     )
 
                 # Track best
