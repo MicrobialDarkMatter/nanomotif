@@ -105,7 +105,18 @@ def load_contigs_pileup_bgzip(path: str, contigs: list[str]):
     """
     # Step 2: query pileup from Rust
     log.debug(f"Querying pileup for {len(contigs)} contigs")
-    pileup = query_pileup_records(path, contigs)
+    pileup = query_pileup_records(
+        path,
+        contigs,
+        columns = [
+            PileupColumn.Contig,
+            PileupColumn.Start,
+            PileupColumn.ModType,
+            PileupColumn.Strand,
+            PileupColumn.FractionModified,
+            PileupColumn.NValidCov
+        ]
+    )
     log.debug(f"Renaming and removing unnecessary columns")
     pileup = pileup.rename({
         "contig": "contig",
@@ -115,8 +126,7 @@ def load_contigs_pileup_bgzip(path: str, contigs: list[str]):
         "fraction_modified": "fraction_mod",
         "n_valid_cov": "Nvalid_cov",
     }) \
-    .with_columns(pl.col("fraction_mod") / 100) \
-    .select(["contig", "position", "mod_type", "strand", "fraction_mod", "Nvalid_cov"])
+    .with_columns(pl.col("fraction_mod") / 100)
 
     return pileup
 
