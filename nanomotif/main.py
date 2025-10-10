@@ -154,19 +154,27 @@ def binnary(args, pl):
 
     elif not os.path.isfile(os.path.join(args.out, contig_methylation_file)) or args.force:
         log.info(f"Running epymetheus to create {contig_methylation_file}")
-        # Create motifs-scored-read-methylation
-        contig_methylation = methylation_pattern(
-            pileup = args.pileup,
-            assembly = args.assembly,
-            motifs = motifs_in_bin_consensus,
-            threads = args.threads,
-            min_valid_read_coverage = args.min_valid_read_coverage,
-            batch_size=1000,
-            min_valid_cov_to_diff_fraction=0.8,
-            output = os.path.join(args.out,contig_methylation_file),
-            allow_assembly_pileup_mismatch=False,
-            output_type = output_type
-        )
+        try:
+            # Create motifs-scored-read-methylation
+            contig_methylation = methylation_pattern(
+                pileup = args.pileup,
+                assembly = args.assembly,
+                motifs = motifs_in_bin_consensus,
+                threads = args.threads,
+                min_valid_read_coverage = args.min_valid_read_coverage,
+                batch_size=1000,
+                min_valid_cov_to_diff_fraction=0.8,
+                output = os.path.join(args.out,contig_methylation_file),
+                allow_assembly_pileup_mismatch=False,
+                output_type = output_type
+            )
+            if contig_methylation is None or len(contig_methylation) == 0:
+                log.warning("epymetheus returned empty result")
+                sys.exit(1)
+        except Exception as e:
+            log.error(f"Failed to run epymetheus: {e}")
+            sys.exit(1)
+            
 
     log.info("Loading assembly file...")
     assembly = data_processing.read_fasta(args.assembly)
