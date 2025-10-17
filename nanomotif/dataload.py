@@ -1,7 +1,7 @@
 # Data loading functionalities
 import polars as pl
 from .seq import Assembly
-from epymetheus import query_pileup_records
+from epymetheus import query_pileup_records, PileupColumn
 import sys
 import pysam
 import pyfastx
