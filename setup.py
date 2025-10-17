@@ -35,7 +35,7 @@ setup(
         "scikit-learn>=1.5.2",
         "networkx>=3.1",
         "pyarrow>=15.0.2",
-        "epimetheus-py==0.7.4",
+        "epimetheus-py==0.7.5",
         "hdbscan",
         "Bio>=1.6.2",
         "snakemake>=7.32.4",

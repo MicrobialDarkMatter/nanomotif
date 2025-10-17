@@ -38,7 +38,7 @@
             pkgs.glib
 
             # For python package
-            pkgs.python311Full
+            pkgs.python3
           ];
           shellHook = ''
             export LD_LIBRARY_PATH="${pkgs.libGL}/lib/:${pkgs.stdenv.cc.cc.lib}/lib/:${pkgs.glib.out}/lib/:$LD_LIBRARY_PATH"
