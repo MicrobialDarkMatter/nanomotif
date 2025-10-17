@@ -117,6 +117,26 @@ def load_contigs_pileup_bgzip(path: str, contigs: list[str]):
             PileupColumn.NValidCov
         ]
     )
+
+    if pileup.height == 0:
+        log.warning(f"No pileup data found for contigs: {contigs}")
+        return pl.DataFrame({
+            "contig": [],
+            "position": [],
+            "mod_type": [],
+            "strand": [],
+            "fraction_mod": [],
+            "Nvalid_cov": [],
+        }, schema = {
+            "contig": pl.String,
+            "position": pl.Int64,
+            "mod_type": pl.Utf8,
+            "strand": pl.Utf8,
+            "fraction_mod": pl.Float64,
+            "Nvalid_cov": pl.Int64,
+        })
+
+    
     log.debug(f"Renaming and removing unnecessary columns")
     pileup = pileup.rename({
         "contig": "contig",
