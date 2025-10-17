@@ -165,7 +165,7 @@ def binnary(args, pl):
                 batch_size=1000,
                 min_valid_cov_to_diff_fraction=0.8,
                 output = os.path.join(args.out,contig_methylation_file),
-                allow_assembly_pileup_mismatch=False,
+                allow_assembly_pileup_mismatch=True,
                 output_type = output_type
             )
             if contig_methylation is None or len(contig_methylation) == 0:
