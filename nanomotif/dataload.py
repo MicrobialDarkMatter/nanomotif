@@ -193,3 +193,24 @@ def filter_pileup_minimummod_frequency(
     pileup = pileup.filter(pl.col("contig_mod").is_in(contigs_with_mods)) \
         .drop("contig_mod")
     return pileup
+
+def filter_pileup_adjacency_filter(
+        pileup: pl.DataFrame,
+        methylation_threshold: float = 0.7,
+        adjacency_distance: int = 8
+):
+    """
+    Filter pileup to only include positions that are not within adjacency_distance of another modified position
+    """
+    window = adjacency_distance * 2 + 1
+    pileup = pileup.sort("position") \
+        .group_by("contig", "strand") \
+        .map_groups(lambda df: df.with_columns(
+            roll_max = pl.col("fraction_mod")
+                .rolling(index_column="position", period=f"{window}i", offset=f"-{window//2 + 1}i")
+        ) \
+        .filter((pl.col("fraction_mod") == pl.col("roll_max").list.max()) | (pl.col("fraction_mod") < methylation_threshold)) \
+        .drop("roll_max")
+        )
+    
+    return pileup

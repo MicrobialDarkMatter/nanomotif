@@ -3,7 +3,7 @@ Utility functions
 """
 from itertools import product
 import numpy as np
-import re
+import regex as re
 import random
 import nanomotif as nm
 import os
@@ -43,11 +43,28 @@ def generate_kmers(k: int, alphabet = ["A", "T", "C", "G"]):
 
 def subseq_indices(subseq, seq):
     """
-    Find occourance indeces of a subseq in a seq
+    Find all start positions (including overlapping) of a regex motif in a sequence.
+
+    Parameters
+    ----------
+    seq : str
+        The full sequence (e.g. DNA string).
+    subseq : str
+        The motif regex (supports . and [ATGC] etc.).
+
+    Returns
+    -------
+    np.ndarray
+        Array of zero-based start positions of all matches.
     """
-    compiled_subseq = re.compile(f"(?=({subseq}))")
-    index = [match.start() for match in re.finditer(compiled_subseq, seq)]
-    return np.array(index)
+    # Precompile regex pattern for repeated use (important for performance)
+    pattern = re.compile(subseq)
+
+    # Use generator + np.fromiter for memory-efficient conversion
+    return np.fromiter(
+        (m.start() for m in pattern.finditer(seq, overlapped=True)),
+        dtype=np.int64
+    )
 
 def calculate_match_length(regex):
     # Remove non-capturing groups for simplicity

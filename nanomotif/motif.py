@@ -163,7 +163,24 @@ class Motif(str):
             if set(motif_split[index_start:pos] + motif_split[pos+1:index_end]) == set(["N"]):
                 isolated = True
         return isolated
-        
+    
+    def count_isolated_bases(self, isolation_size=2):
+        """
+        Count the number of isolated bases in a motif.
+        """
+        motif_split = self.split()
+        isolated_count = 0
+        for pos in range(len(motif_split)):
+            if motif_split[pos] == ".":
+                continue
+            index_start = max(pos - isolation_size, 0)
+            index_end = min(pos + isolation_size + 1, len(motif_split) - 1)
+            # If all surrounding positions are ".", it is isolated
+            if set(motif_split[index_start:pos] + motif_split[pos+1:index_end]) == set(["."]):
+                isolated_count += 1
+            if set(motif_split[index_start:pos] + motif_split[pos+1:index_end]) == set(["N"]):
+                isolated_count += 1
+        return isolated_count
 
     def length(self) -> int:
         """

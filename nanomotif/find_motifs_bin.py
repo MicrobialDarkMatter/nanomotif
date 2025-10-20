@@ -1,5 +1,6 @@
 import numpy as np
 import polars as pl
+import math
 import os
 from polars import col
 import logging as log
@@ -27,8 +28,30 @@ import time
 from typing import Generator, Optional, List, Tuple
 from dataclasses import dataclass
 import pysam
+import sys
+import subprocess
+import threading
+from pyinstrument import Profiler
 
 
+def start_profiler():
+    """
+    Start profiler if enabled
+    """
+    if os.getenv("PROFILE_WORKERS") == "1":
+        profiler = Profiler(interval = 0.0001)
+        profiler.start()
+        return profiler
+    return None
+
+def stop_profiler(profiler: Profiler, profile_name: str, outdir: str):
+    """
+    Stop profiler and save output
+    """
+    if profiler is not None:
+        os.makedirs(outdir, exist_ok=True)
+        profiler.stop()
+        profiler.write_html(f"{outdir}/{profile_name}.html")
 
 def set_polars_env():
     os.environ["POLARS_MAX_THREADS"] = "1"
@@ -122,13 +145,15 @@ class PileupStrategyPlain:
 
     def worker_function(self, args):
         modtype, assembly, bin_pileup = args
+        bin_name = list(self.bin_contig.keys())[0]
+        profiler = start_profiler()
         set_seed(seed=self.config.seed)
         process_id = os.getpid()
         if self.config.log_dir:
             log_file = f"{self.config.log_dir}/find-motifs.{process_id}.log"
             configure_logger(log_file, verbose=self.config.verbose)
         log.info(f"[Worker {process_id}] started")
-        return process_subpileup(
+        result = process_subpileup(
             self.bin_contig,
             modtype,
             bin_pileup,
@@ -140,6 +165,8 @@ class PileupStrategyPlain:
             self.config.score_threshold,
             output_dir = self.config.output_dir
         )
+        stop_profiler(profiler, f"{bin_name}_worker_{process_id}_{modtype}", f"{self.config.output_dir}/profiles")
+        return result
     
 class PileupStrategyBgzip:
     def __init__(
@@ -170,6 +197,7 @@ class PileupStrategyBgzip:
             )
     def worker_function(self, args):
         bin_name, assembly = args
+        profiler = start_profiler()
         set_seed(seed=self.config.seed)
         process_id = os.getpid()
         if self.config.log_dir is not None:
@@ -184,7 +212,17 @@ class PileupStrategyBgzip:
         bin_pileup = nm.dataload.load_contigs_pileup_bgzip(self.pileup_path, self.bin_contig[bin_name])
         log.debug(f"Filtering pileup for {bin_name}")
         bin_pileup = nm.dataload.filter_pileup(bin_pileup)
+        if bin_pileup is None or len(bin_pileup) == 0:
+            log.info(f"Bin {bin_name} has no pileup data after filtering, skipping")
+            return None
         bin_pileup = nm.dataload.filter_pileup_minimummod_frequency(bin_pileup)
+        if bin_pileup is None or len(bin_pileup) == 0:
+            log.info(f"Bin {bin_name} has no pileup data after filtering by minimum mod frequency, skipping")
+            return None
+        bin_pileup = nm.dataload.filter_pileup_adjacency_filter(bin_pileup)
+        if bin_pileup is None or len(bin_pileup) == 0:
+            log.info(f"Bin {bin_name} has no pileup data after adjacency filtering, skipping")
+            return None
         log.debug(f"Loaded pileup for {bin_name}")
 
         for modtype in MOD_CODE_TO_PRETTY.keys():
@@ -223,6 +261,8 @@ class PileupStrategyBgzip:
         
         motifs = pl.concat(results, rechunk=True, parallel=False)
         motifs = nm.motif.MotifSearchResult(motifs)
+        
+        stop_profiler(profiler, f"{bin_name}_worker_{process_id}", f"{self.config.output_dir}/profiles")
         return motifs
 
 
@@ -311,8 +351,21 @@ class BinMotifProcessorBuilder:
         else:
             log.warning("Pileup is not bgzipped, loading full pileup into memory.")
             pileup = nm.dataload.load_pileup(pileup_path)
+            if pileup is None or len(pileup) == 0:
+                log.info(f"No pileup data after filtering, skipping")
+                return None
             pileup = nm.dataload.filter_pileup(pileup)
+            if pileup is None or len(pileup) == 0:
+                log.info(f"No pileup data after filtering, skipping")
+                return None
             pileup = nm.dataload.filter_pileup_minimummod_frequency(pileup)
+            if pileup is None or len(pileup) == 0:
+                log.info(f"No pileup data after filtering by minimum mod frequency, skipping")
+                return None
+            pileup = nm.dataload.filter_pileup_adjacency_filter(pileup)
+            if pileup is None or len(pileup) == 0:
+                log.info(f"No pileup data after adjacency filtering, skipping")
+                return None
 
             pileup = pileup.join(self.config.bin_contig, left_on="contig", right_on="contig", how="inner")
 
@@ -389,10 +442,12 @@ def process_subpileup(
     bin_sequences = {contig: assembly[contig] for contig in bin_contig[bin_name]}
 
     # Find motifs
-    motif_graph, best_candidates = find_best_candidates(
+    candidates = find_best_candidates(
         bin_pileup, 
         bin_sequences, 
         modtype,
+        bin_name,
+        output_dir=output_dir,
         low_meth_threshold=low_meth_threshold,
         high_meth_threshold=high_meth_threshold,
         padding=padding,
@@ -401,6 +456,10 @@ def process_subpileup(
         max_rounds_since_new_best=30,
         score_threshold=score_threshold
     )
+    if candidates is None:
+        log.info("No motifs found")
+        return None
+    motif_graph, best_candidates = candidates
     identified_motifs = nxgraph_to_dataframe(motif_graph) \
         .filter(col("sequence").is_in(best_candidates))
     
@@ -434,15 +493,16 @@ def process_subpileup(
 
     log.info(" - Merging motifs")
     motifs = nm.find_motifs_bin.merge_motifs_in_df(motifs, bin_pileup, assembly, bin_contig)
+    motifs = motifs.unique()
     if motifs.is_empty():
         log.info("No motifs found")
         return None
-    motifs = motifs.unique()
     motifs_file_name = motifs_file_name +   "-merge"
     motifs.write_motifs(motifs_file_name + ".tsv")
 
     log.info(" - Removing sub motifs")
     motifs = nm.postprocess.remove_sub_motifs(motifs)
+    motifs = motifs.unique()
     if motifs.is_empty():
         log.info("No motifs found")
         return None
@@ -451,6 +511,7 @@ def process_subpileup(
 
     log.info(" - Joining motif complements")
     motifs = nm.postprocess.join_motif_complements(motifs)
+    motifs = motifs.unique()
     if motifs.is_empty():
         log.info("No motifs found")
         return None
@@ -472,6 +533,8 @@ def find_best_candidates(
         bin_pileup: pl.DataFrame, 
         bin_sequences: dict[str, DNAsequence],
         mod_type: str,
+        bin_name: str,
+        output_dir: str,
         low_meth_threshold: float,
         high_meth_threshold: float,
         padding: int,
@@ -479,34 +542,40 @@ def find_best_candidates(
         max_dead_ends: int = 25, 
         max_rounds_since_new_best: int = 30,
         score_threshold: float = 0.2,
-        remaining_sequences_threshold: float = 0.01
-    ) -> tuple[MotifTree, list[Motif]]:
+        remaining_sequences_threshold: float = 0.001,
+        background_sampling_frequency: float = 0.01
+    ) -> tuple[MotifTree, list[Motif]] | None:
     """
     Find the best motif candidates in a sequence.
     """
     subpileup_confident = bin_pileup.filter(pl.col("fraction_mod") >= high_meth_threshold)
     methylation_sequences = None
     background_sequences = None
+    os.makedirs(f"{output_dir}/temp/{bin_name}", exist_ok=True)
     for contig in bin_pileup.get_column("contig").unique():
         subpileup_confident_contig = subpileup_confident.filter(pl.col("contig") == contig)
         contig_sequence = bin_sequences[contig]
         contig_length = len(contig_sequence)
-        n_samples = int(max(contig_length/400, 100))
+        n_samples = int(max(math.ceil(contig_length * background_sampling_frequency), 50))
         # Extract the sequences for confidently methylated positions
         index_plus = subpileup_confident_contig.filter(pl.col("strand") == "+").get_column("position").to_list()
         index_minus = subpileup_confident_contig.filter(pl.col("strand") == "-").get_column("position").to_list()
         
         # Sample sequences in bin to get background for KL-divergence
         log.debug(f"Sampling {n_samples} sequences from {contig}")
-        contig_sequences_sample = contig_sequence.sample_n_subsequences(
-            padding * 2 + 1, n_samples
+        contig_sequences_sample = contig_sequence.sample_n_subsequences_unique(
+            padding * 2 + 1, n_samples, base=MOD_TYPE_TO_CANONICAL[mod_type]
         )
+        with open (f"{output_dir}/temp/{bin_name}/background_sequences.fasta", "w") as f:
+            for i, seq in enumerate(contig_sequences_sample.sequences):
+                f.write(f">{contig}_background_seq_{i}\n{seq.sequence}\n")
+
         if background_sequences is None:
             background_sequences = contig_sequences_sample
         else:
             background_sequences = background_sequences + contig_sequences_sample.sequences
 
-        log.debug(f"Sampling methylation sequences from {contig}")
+        log.debug(f"Extracting methylation sequences from {contig}")
         methylation_sequences_string = []
         if len(index_plus) >= 1:
             methylation_sequences_string += contig_sequence.sample_at_indices(index_plus, padding).sequences
@@ -516,13 +585,27 @@ def find_best_candidates(
             log.info("No methylation sequences found")
             return None
         methylation_sequences_contig = EqualLengthDNASet(methylation_sequences_string)
+        with open (f"{output_dir}/temp/{bin_name}/methylation_sequences_{mod_type}.fasta", "w") as f:
+            for i, seq in enumerate(methylation_sequences_contig.sequences):
+                f.write(f">{contig}_methylation_seq_{i}\n{seq.sequence}\n")
         if methylation_sequences is None:
             methylation_sequences = methylation_sequences_contig
         else:
             methylation_sequences = methylation_sequences + methylation_sequences_contig
+    # Convert methylation sequences to DNAarray
+    if methylation_sequences is None or len(methylation_sequences.sequences) == 0:
+        log.info("No methylation sequences found")
+        return None
     methylation_sequences = methylation_sequences.convert_to_DNAarray()
     total_seqs = methylation_sequences.shape[0]
+
+    # Convert background sequences to DNAarray
+    if background_sequences is None or len(background_sequences.sequences) == 0:
+        log.info("No background sequences found")
+        return None
+
     bin_pssm = background_sequences.pssm()
+    np.savetxt(f"{output_dir}/temp/{bin_name}/background_pssm.txt", bin_pssm, fmt="%.4f")
 
     root_motif = Motif("." * padding + MOD_TYPE_TO_CANONICAL[mod_type] + "." * padding, padding)
     methylation_sequences_clone = methylation_sequences.copy()
@@ -560,8 +643,8 @@ def find_best_candidates(
         # Prune the motif for low scoring positions
         pruning = True
         pruning_round = 1
-        indices_to_prune = set()
         temp_motif = naive_guess
+        indices_to_prune = set()
         pruned_to_single_base = False
         while pruning:
             log.debug(f"Pruning round {pruning_round} for motif {temp_motif}")
@@ -579,7 +662,7 @@ def find_best_candidates(
             log.debug(f"Parents: {parent_pretty_print}")
             # Find positions to prune
             for parent, data in parent_motif_scores.items():
-                if data["score"] < 0.2:
+                if data["score"] < 0.4:
                     log.debug(f"    Pruning position {data['motif_position']} from {temp_motif}, score: {data['score']}")
                     log.debug(f"    Poor parent motif: {parent}, model: {data['parent_model']}")
                     indices_to_prune.add(data["motif_position"])
@@ -732,7 +815,7 @@ class MotifSearcher:
         """
         # score = self._scoring_function(next_model, root_model)
         # return -score
-        odds_ratio = (next_model._alpha * root_model._beta) / (next_model._beta * root_model._alpha)
+        # odds_ratio = (next_model._alpha * root_model._beta) / (next_model._beta * root_model._alpha)
         try:
             d_alpha = 1 - (next_model._alpha / root_model._alpha)
         except ZeroDivisionError:
@@ -742,7 +825,7 @@ class MotifSearcher:
         except ZeroDivisionError:
             d_beta = 1
         priority = d_alpha * d_beta
-        return odds_ratio
+        return priority
 
     def _scoring_function(self, next_model, current_model) -> float:
         """
@@ -867,15 +950,16 @@ class MotifSearcher:
         visited_nodes: set[Motif] = set()
 
         root_depth = 0
-        self.motif_graph.add_node(
-            self.root_motif,
-            model=root_model,
-            motif=self.root_motif,
-            visited=False,
-            score=best_score,
-            priority=0,
-            depth=root_depth
-        )
+        if not self.motif_graph.has_node(self.root_motif):
+            self.motif_graph.add_node(
+                self.root_motif,
+                model=root_model,
+                motif=self.root_motif,
+                visited=False,
+                score=best_score,
+                priority=0,
+                depth=root_depth
+            )
 
         # Initialize priority queue 
         priority_queue: list[tuple] = []
@@ -944,18 +1028,25 @@ class MotifSearcher:
                 next_depth = current_depth + 1
 
                 # Build model for the next motif
-                next_model = motif_model_bin(
-                    pileup=self.bin_pileup,
-                    contigs=self.bin_sequence,
-                    motif=next_motif,
-                    model=BetaBernoulliModel(),
-                    low_meth_threshold=self.low_meth_threshold,
-                    high_meth_threshold=self.high_meth_threshold,
-                )
+                if next_motif not in self.motif_graph.nodes:
+                    next_model = motif_model_bin(
+                        pileup=self.bin_pileup,
+                        contigs=self.bin_sequence,
+                        motif=next_motif,
+                        model=BetaBernoulliModel(),
+                        low_meth_threshold=self.low_meth_threshold,
+                        high_meth_threshold=self.high_meth_threshold,
+                    )
+                else:
+                    next_model = self.motif_graph.nodes[next_motif]["model"]
 
                 # Score relative to current
                 score = self._scoring_function_predictive_evaluation(next_model, current_model)
+
+                n_isolated = next_motif.count_isolated_bases(isolation_size=1)
                 priority = self._priority_function(next_model, root_model)
+                if n_isolated > 0:
+                    priority *= pow(10, n_isolated)  # Deprioritize motifs with isolated bases
 
                 if next_motif in self.motif_graph.nodes:
                     # Update existing node if new score is better
@@ -971,14 +1062,15 @@ class MotifSearcher:
                         priority=priority,
                         depth=next_depth
                     )
-                self.motif_graph.add_edge(current_motif, next_motif)
+                if not self.motif_graph.has_edge(current_motif, next_motif):
+                    self.motif_graph.add_edge(current_motif, next_motif)
 
                 # Add neighbor to priority queue if not visited
                 if next_motif not in visited_nodes:
                     attrs = self.motif_graph.nodes[next_motif]
                     hq.heappush(
                         priority_queue,
-                        (-attrs["priority"], attrs["depth"], next_motif)
+                        (attrs["priority"], attrs["depth"], next_motif)
                     )
 
                 # Track best
@@ -1067,10 +1159,10 @@ def methylated_motif_occourances(
     motif_index = subseq_indices(motif.string, sequence) + motif.mod_position
 
     # Methylated motif positions
-    meth_occurences = np.intersect1d(methylated_positions, motif_index)
+    meth_occurences = methylated_positions[np.isin(methylated_positions, motif_index, assume_unique=True)]
 
     # Non-methylated motif positions
-    nonmeth_occurences =  np.intersect1d(non_methylated_positions, motif_index)
+    nonmeth_occurences =  non_methylated_positions[np.isin(non_methylated_positions, motif_index, assume_unique=True)]
 
     return meth_occurences, nonmeth_occurences
 
