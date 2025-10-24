@@ -575,12 +575,16 @@ def find_best_candidates(
         else:
             background_sequences = background_sequences + contig_sequences_sample.sequences
 
-        log.debug(f"Extracting methylation sequences from {contig}")
+        log.debug(f"Extracting {len(index_plus)} + strand and {len(index_minus)} - strand methylation sequences from {contig}")
         methylation_sequences_string = []
         if len(index_plus) >= 1:
-            methylation_sequences_string += contig_sequence.sample_at_indices(index_plus, padding).sequences
+            methylation_sequences_temp = contig_sequence.sample_at_indices(index_plus, padding)
+            if methylation_sequences_temp is not None:
+                methylation_sequences_string += methylation_sequences_temp.sequences
         if len(index_minus) >= 1:
-            methylation_sequences_string += contig_sequence.sample_at_indices(index_minus, padding).reverse_compliment().sequences
+            methylation_sequences_temp = contig_sequence.sample_at_indices(index_minus, padding)
+            if methylation_sequences_temp is not None:
+                methylation_sequences_string += methylation_sequences_temp.reverse_compliment().sequences
         if len(methylation_sequences_string) == 0:
             log.info("No methylation sequences found")
             return None
@@ -694,6 +698,11 @@ def find_best_candidates(
             log.debug("Updating score based on parents")
             mean_parent_score = np.mean([d["score"] for d in parent_motif_scores.values()])
             motif_graph.nodes[naive_guess]["score"] = mean_parent_score
+        elif mean_parent_score < score_threshold:
+            log.debug(f"Pruned motif {temp_motif} has low score {mean_parent_score}, discarding")
+            mean_parent_score = np.mean([d["score"] for d in parent_motif_scores.values()])
+            motif_graph.nodes[naive_guess]["score"] = mean_parent_score
+
         elif temp_motif != naive_guess:
             log.debug(f"Pruned motif from {naive_guess} to {temp_motif}")
             
@@ -739,8 +748,21 @@ def find_best_candidates(
             log.debug("Stopping search, too few sequences remaining")
             break
         log.debug("Continuing search")
-    return motif_graph, best_candidates
+    if motif_graph is None or len(motif_graph.nodes) == 0:
+        log.info("No motifs found")
+        return None
+    # Check if any high scoring candidates were found, best were not high scoring
+    missed_candidates = motif_graph.get_missed_candidates(best_candidates, score_threshold)
+    missed_candidates = [c for c in missed_candidates if not c.sub_motif_of_any(best_candidates) or not any(candidate.sub_motif_of(c)  for candidate in best_candidates)]
+    log.debug(f"Found {len(missed_candidates)} missed candidates")
+    for candidate in missed_candidates:
+        best_candidates.append(candidate)
+        log.info(f"Adding missed candidate {candidate} with score {motif_graph.nodes[candidate]['score']}")
+    # Save graph to file
+    motif_graph_file = f"{output_dir}/temp/{bin_name}/motif_graph_{mod_type}.gml"
+    motif_graph.export_graph_gml(motif_graph_file)
 
+    return motif_graph, best_candidates
 
 
 
@@ -761,7 +783,7 @@ class MotifSearcher:
         low_meth_threshold: float,
         motif_graph: Optional[MotifTree] = None,
         min_kl: float = 0.1,
-        freq_threshold: float = 0.25,
+        freq_threshold: float = 0.15,
         max_rounds_since_new_best: int = 30,
         max_motif_length: int = 25
     ):
@@ -893,7 +915,7 @@ class MotifSearcher:
         pos = int(np.argmax(kl_divergence_masked))
 
         # Methylation frequency must be above bin frequency
-        index_meth_freq_higher = meth_pssm[:, pos] > bin_pssm[:, pos] * 0.8
+        index_meth_freq_higher = meth_pssm[:, pos] > bin_pssm[:, pos] * 0.5
 
         # Methylation frequency must be above a threshold
         index_meth_freq_above_thresh = meth_pssm[:, pos] > self.freq_threshold

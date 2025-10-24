@@ -184,6 +184,8 @@ class DNAsequence:
             Sequences of length 2 * padding + 1
         """
         indices_checked = [index for index in indices if (index > padding) and (index < (len(self) - padding))]
+        if len(indices_checked) == 0:
+            return None
         return EqualLengthDNASet([self.sample_at_index(index, padding) for index in indices_checked])
 
     def sample_subsequence(self, length):

@@ -12,6 +12,7 @@ import numpy as np
 import random
 import warnings
 import subprocess
+import multiprocessing as mp
 
 
 def shared_setup(args, working_dir):
@@ -93,6 +94,9 @@ def find_motifs_bin(args, pl, min_mods_pr_contig = 50, min_mod_frequency = 10000
         log.debug(f"Identified {len(motifs)} motifs in {len(motifs['reference'].unique())} bins")
 
     motifs = motifs.filter(pl.col("n_mod") + pl.col("n_nomod") >= args.min_motifs_bin)
+    if len(motifs) == 0:
+        log.info("Motif frequency of all motifs too low")
+        return None
     log.info("Writing motifs")
     motifs.write_motif_formatted(args.out + "/bin-motifs.tsv")
     log.info("Done finding motifs")
@@ -336,4 +340,5 @@ def main():
         parser.print_help()
         exit()
 if __name__ == "__main__":
+    mp.set_start_method("spawn", force=True)
     main()
