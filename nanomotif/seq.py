@@ -5,7 +5,7 @@ import re
 import random
 random.seed(2403)
 import nanomotif.utils as utils
-from nanomotif.constants import *
+from nanomotif.constants import COMPLEMENT
 
 
 class Assembly():
@@ -184,6 +184,8 @@ class DNAsequence:
             Sequences of length 2 * padding + 1
         """
         indices_checked = [index for index in indices if (index > padding) and (index < (len(self) - padding))]
+        if len(indices_checked) == 0:
+            return None
         return EqualLengthDNASet([self.sample_at_index(index, padding) for index in indices_checked])
 
     def sample_subsequence(self, length):
@@ -197,6 +199,30 @@ class DNAsequence:
         """Randomly sample n sequences of a given length"""
         return EqualLengthDNASet([self.sample_subsequence(length=length) for _ in range(n)])
 
+    def sample_n_subsequences_unique(self, length: int, n: int, base: str):
+        seq_len = len(self)
+        max_start = seq_len - length + 1
+        if n > max_start:
+            raise ValueError("Too many samples requested for unique subsequences")
+
+        # Determine the offset of the middle position in each subsequence
+        mid_offset = length // 2
+
+        # Collect valid start positions where the middle base is 'C'
+        valid_starts = [
+            s for s in range(max_start)
+            if self.sequence[s + mid_offset] == base
+        ]
+
+        if len(valid_starts) < n:
+            raise ValueError(f"Not enough subsequences with 'C' in the middle (found {len(valid_starts)}, need {n})")
+
+        # Sample only from valid starts
+        starts = random.sample(valid_starts, n)
+
+        return EqualLengthDNASet([
+            DNAsequence(self.sequence[s:s + length]) for s in starts
+        ])
     def find_subsequence(self, subsequence: str):
         """
         Find all occourances of subseqeunce in DNAsequence

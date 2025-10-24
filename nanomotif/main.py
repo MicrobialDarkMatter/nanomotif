@@ -12,6 +12,7 @@ import numpy as np
 import random
 import warnings
 import subprocess
+import multiprocessing as mp
 
 
 def shared_setup(args, working_dir):
@@ -80,7 +81,11 @@ def find_motifs_bin(args, pl, min_mods_pr_contig = 50, min_mod_frequency = 10000
         seed = args.seed,
         output_dir = args.out
     )
-    motif_discovery_parralel = nm.find_motifs_bin.BinMotifProcessorBuilder(config).build()
+    motif_discovery_parralel = nm.find_motifs_bin.BinMotifProcessorBuilder(config)
+    if not motif_discovery_parralel:
+        log.error("No motifs were identified")
+        return None
+    motif_discovery_parralel = motif_discovery_parralel.build()
     motifs = motif_discovery_parralel.run()
     if motifs is None or len(motifs) == 0:
         log.info("No motifs were identified")
@@ -89,6 +94,9 @@ def find_motifs_bin(args, pl, min_mods_pr_contig = 50, min_mod_frequency = 10000
         log.debug(f"Identified {len(motifs)} motifs in {len(motifs['reference'].unique())} bins")
 
     motifs = motifs.filter(pl.col("n_mod") + pl.col("n_nomod") >= args.min_motifs_bin)
+    if len(motifs) == 0:
+        log.info("Motif frequency of all motifs too low")
+        return None
     log.info("Writing motifs")
     motifs.write_motif_formatted(args.out + "/bin-motifs.tsv")
     log.info("Done finding motifs")
@@ -305,7 +313,12 @@ def main():
     
     if args.command == "motif_discovery":
         shared_setup(args, args.out)
-        find_motifs_bin(args, pl)
+        result = find_motifs_bin(args, pl)
+        if result is None:
+            # Write empty motif file
+            empty_motif_path = os.path.join(args.out, "bin-motifs.tsv")
+            with open(empty_motif_path, 'w') as f:
+                f.write("reference\tmotif\tmod_position\tmod_type\tn_mod\tn_nomod\tmotif_type\tmotif_complement\tmod_position_complement\tn_mod_complement\tn_nomod_complement\n")
 
     elif args.command in ["detect_contamination", "include_contigs"]:
         shared_setup(args, args.out)
@@ -334,4 +347,5 @@ def main():
         parser.print_help()
         exit()
 if __name__ == "__main__":
+    mp.set_start_method("spawn", force=True)
     main()
