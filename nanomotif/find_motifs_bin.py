@@ -116,7 +116,7 @@ class TaskStrategy:
 class PileupStrategyPlain:
     def __init__(
             self, 
-            partitioned_assembly: dict[str, nm.seq.Assembly],
+            partitioned_assembly,
             partitioned_pileup: dict[Tuple[str, str], pl.DataFrame],
             bin_contig: dict[str, list[str]],
             config: ProcessorConfig
@@ -171,7 +171,7 @@ class PileupStrategyPlain:
 class PileupStrategyBgzip:
     def __init__(
             self, 
-            partitioned_assembly: dict[str, nm.seq.Assembly],
+            partitioned_assembly,
             pileup_path: str, 
             bin_contig: dict[str, list[str]], 
             config: ProcessorConfig
