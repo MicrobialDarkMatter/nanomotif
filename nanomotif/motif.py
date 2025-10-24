@@ -7,7 +7,7 @@ import networkx as nx
 import logging as log
 from typing import overload, Union, Sequence, Any
 from scipy.stats import entropy
-from nanomotif.constants import *
+from nanomotif.constants import BASE_TO_ONE_HOT, COMPLEMENT
 from nanomotif.seq import regex_to_iupac, iupac_to_regex, reverse_compliment
 from nanomotif.model import BetaBernoulliModel
 import nanomotif.utils as nm_utils

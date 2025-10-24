@@ -1,6 +1,6 @@
 # Data loading functionalities
 import polars as pl
-from .seq import Assembly
+from nanomotif.seq import Assembly
 from epymetheus import query_pileup_records
 import sys
 import pysam
