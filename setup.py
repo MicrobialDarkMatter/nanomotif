@@ -42,6 +42,8 @@ setup(
         "progressbar2>=3.53.1",
         "pyfastx>=0.2.10",
         "pysam>=0.22.0",
+        "regex>=2025.10.23",
+        "pyinstrument>=5.1.1"
     ],
     entry_points={
             'console_scripts': [

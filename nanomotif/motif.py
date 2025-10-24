@@ -7,12 +7,14 @@ import networkx as nx
 import logging as log
 from typing import overload, Union, Sequence, Any
 from scipy.stats import entropy
-from nanomotif.constants import *
+from nanomotif.constants import BASE_TO_ONE_HOT, COMPLEMENT
 from nanomotif.seq import regex_to_iupac, iupac_to_regex, reverse_compliment
 from nanomotif.model import BetaBernoulliModel
 import nanomotif.utils as nm_utils
 import polars as pl
 from collections.abc import Mapping
+from networkx.readwrite import json_graph
+import json
 class Motif(str):
     def __new__(cls, motif_string, *args, **kwargs):
         return str.__new__(cls, motif_string)
@@ -83,6 +85,15 @@ class Motif(str):
             except IndexError:
                 return True
         return True
+    
+    def sub_motif_of_any(self, other_motifs):
+        """
+        Check if a motif is in any of a list of motifs.
+        """
+        for other_motif in other_motifs:
+            if self.sub_motif_of(other_motif):
+                return True
+        return False
 
     def sub_string_of(self, other_motif):
         """
@@ -163,7 +174,24 @@ class Motif(str):
             if set(motif_split[index_start:pos] + motif_split[pos+1:index_end]) == set(["N"]):
                 isolated = True
         return isolated
-        
+    
+    def count_isolated_bases(self, isolation_size=2):
+        """
+        Count the number of isolated bases in a motif.
+        """
+        motif_split = self.split()
+        isolated_count = 0
+        for pos in range(len(motif_split)):
+            if motif_split[pos] == ".":
+                continue
+            index_start = max(pos - isolation_size, 0)
+            index_end = min(pos + isolation_size + 1, len(motif_split) - 1)
+            # If all surrounding positions are ".", it is isolated
+            if set(motif_split[index_start:pos] + motif_split[pos+1:index_end]) == set(["."]):
+                isolated_count += 1
+            if set(motif_split[index_start:pos] + motif_split[pos+1:index_end]) == set(["N"]):
+                isolated_count += 1
+        return isolated_count
 
     def length(self) -> int:
         """
@@ -550,6 +578,78 @@ class MotifTree(nx.DiGraph):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+    def get_top_highscore_nodes(self, threshold: float = 3):
+        # First, find all nodes with score > threshold
+        high_nodes = {n for n, d in self.nodes(data=True) if d["score"] > threshold}
+
+        top_nodes = set()
+        for node in high_nodes:
+            # Check if *any* ancestor of this node also has high score
+            ancestors = nx.ancestors(self, node)
+            if not any(a in high_nodes for a in ancestors):
+                top_nodes.add(node)
+
+        return top_nodes
+
+    def get_missed_candidates(self, best_candidates: Sequence[Motif], threshold: float = 3):
+        # First, find all nodes with score > threshold
+        high_nodes = {n for n, d in self.nodes(data=True) if d["score"] > threshold}
+
+        top_nodes = set()
+        for node in high_nodes:
+            # Check if *any* ancestor of this node also has high score
+            ancestors = nx.ancestors(self, node)
+            descendants = nx.descendants(self, node)
+            if not any(a in high_nodes for a in ancestors) and not any(d in best_candidates for d in descendants):
+                if node not in best_candidates:
+                    top_nodes.add(node)
+
+        return top_nodes
+
+    def export_graph_json(self, path: str):
+        def is_jsonable(v):
+            try:
+                json.dumps(v)
+                return True
+            except (TypeError, OverflowError):
+                return False
+
+        # Deep copy the graph to avoid mutating original
+        H = nx.DiGraph()
+        for n, d in self.nodes(data=True):
+            clean_data = {k: v for k, v in d.items() if is_jsonable(v)}
+            H.add_node(n, **clean_data)
+        for u, v, d in self.edges(data=True):
+            clean_data = {k: v for k, v in d.items() if is_jsonable(v)}
+            H.add_edge(u, v, **clean_data)
+
+        data = json_graph.node_link_data(H)
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2)
+
+    def export_graph_gml(self, path: str):
+        def is_jsonable(v):
+            try:
+                json.dumps(v)
+                return True
+            except (TypeError, OverflowError):
+                return False
+
+        # Deep copy the graph to avoid mutating original
+        H = nx.DiGraph()
+        for n, d in self.nodes(data=True):
+            clean_data = {k: v for k, v in d.items() if is_jsonable(v) and k != "motif"}
+            clean_data["score"] = float(d.get("score", "NA"))
+
+            H.add_node(n, **clean_data)
+            # l and r Strip dots from motif for label
+            label = d.get("motif", str(n)).string.lstrip(".").rstrip(".")
+            H.nodes[n]["label"] = label
+        for u, v, d in self.edges(data=True):
+            clean_data = {k: v for k, v in d.items() if is_jsonable(v)}
+            H.add_edge(u, v, **clean_data)
+
+        nx.write_gml(H, path)
 
 class MotifSearchResult(pl.DataFrame):
 
