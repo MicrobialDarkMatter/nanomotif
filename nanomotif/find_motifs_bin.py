@@ -544,7 +544,7 @@ def find_best_candidates(
         score_threshold: float = 0.2,
         remaining_sequences_threshold: float = 0.001,
         background_sampling_frequency: float = 0.01
-    ) -> tuple[MotifTree, list[Motif]] | None:
+    ) -> tuple[MotifTree, list[Motif]]:
     """
     Find the best motif candidates in a sequence.
     """
