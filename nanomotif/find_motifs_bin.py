@@ -13,7 +13,7 @@ import multiprocessing
 from multiprocessing import get_context
 import progressbar
 import nanomotif as nm
-from nanomotif.constants import MOD_TYPE_TO_CANONICAL, MOD_CODE_TO_PRETTY
+from nanomotif.constants import MOD_TYPE_TO_CANONICAL, MOD_CODE_TO_PRETTY, BASES
 from nanomotif.model import BetaBernoulliModel
 from nanomotif.utils import subseq_indices, calculate_match_length
 from nanomotif.seq import EqualLengthDNASet, DNAsequence, DNAarray
