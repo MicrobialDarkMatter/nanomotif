@@ -141,8 +141,11 @@ def binnary(args, pl):
 
     if args.methylation_output_type == "median":
         output_type = MethylationOutput.Median
-    else:
+    elif args.methylation_output_type == "weighted-mean":
         output_type = MethylationOutput.WeightedMean
+    else:
+        log.error(f"Output type must be either median or weighted mean, got: {args.methylation_output_type}")
+        exit()
 
     contig_methylation_file = f"motifs-scored-read-methylation_{args.methylation_output_type}.tsv"
     if not args.force:
@@ -150,37 +153,41 @@ def binnary(args, pl):
 
     if os.path.isfile(os.path.join(args.out,contig_methylation_file)) and not args.force:
         log.info("motifs-scored-read-methylation.tsv exists. Using existing file! Use --force to override this.")
+        # Load motifs-scored-read-methylation.tsv
+        contig_methylation = pl.read_csv(
+            os.path.join(args.out, contig_methylation_file), separator="\t", has_header = True, schema = {
+                'contig': pl.String(), 'motif': pl.String(), 'mod_type': pl.String(), 'mod_position': pl.Int8(), 'methylation_value': pl.Float64(),  'mean_read_cov': pl.Float64(), 'n_motif_obs': pl.Int32(),
+            }
+        )
 
     elif not os.path.isfile(os.path.join(args.out, contig_methylation_file)) or args.force:
         log.info(f"Running epymetheus to create {contig_methylation_file}")
-        # Create motifs-scored-read-methylation
-        return_code = methylation_pattern(
-            pileup = args.pileup,
-            assembly = args.assembly,
-            motifs = motifs_in_bin_consensus,
-            threads = args.threads,
-            min_valid_read_coverage = args.min_valid_read_coverage,
-            batch_size=1000,
-            min_valid_cov_to_diff_fraction=0.8,
-            output = os.path.join(args.out,contig_methylation_file),
-            allow_assembly_pileup_mismatch=False,
-            output_type = output_type
-        )
-
-        if return_code != 0:
-            log.error("Error running epymetheus")
-
+        try:
+            # Create motifs-scored-read-methylation
+            contig_methylation = methylation_pattern(
+                pileup = args.pileup,
+                assembly = args.assembly,
+                motifs = motifs_in_bin_consensus,
+                threads = args.threads,
+                min_valid_read_coverage = args.min_valid_read_coverage,
+                batch_size=1000,
+                min_valid_cov_to_diff_fraction=0.8,
+                output = os.path.join(args.out,contig_methylation_file),
+                allow_assembly_pileup_mismatch=True,
+                output_type = output_type
+            )
+            if contig_methylation is None or len(contig_methylation) == 0:
+                log.warning("epymetheus returned empty result")
+                sys.exit(1)
+        except Exception as e:
+            log.error(f"Failed to run epymetheus: {e}")
+            sys.exit(1)
+            
 
     log.info("Loading assembly file...")
     assembly = data_processing.read_fasta(args.assembly)
     contig_lengths = data_processing.find_contig_lengths(assembly) 
 
-    # Load motifs-scored-read-methylation.tsv
-    contig_methylation = pl.read_csv(
-        os.path.join(args.out, contig_methylation_file), separator="\t", has_header = True, schema = {
-            'contig': pl.String(), 'motif': pl.String(), 'mod_type': pl.String(), 'mod_position': pl.Int8(), 'methylation_value': pl.Float64(),  'mean_read_cov': pl.Float64(), 'n_motif_obs': pl.Int32(),
-        }
-    )
 
     contig_methylation = contig_methylation\
         .filter((pl.col("n_motif_obs").cast(pl.Float64) * pl.col("mean_read_cov")) >= args.methylation_threshold)

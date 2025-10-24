@@ -1,7 +1,8 @@
 # Data loading functionalities
 import polars as pl
+
 from nanomotif.seq import Assembly
-from epymetheus import query_pileup_records
+from epymetheus import query_pileup_records, PileupColumn
 import sys
 import pysam
 import pyfastx
@@ -105,7 +106,38 @@ def load_contigs_pileup_bgzip(path: str, contigs: list[str]):
     """
     # Step 2: query pileup from Rust
     log.debug(f"Querying pileup for {len(contigs)} contigs")
-    pileup = query_pileup_records(path, contigs)
+    pileup = query_pileup_records(
+        path,
+        contigs,
+        columns = [
+            PileupColumn.Contig,
+            PileupColumn.Start,
+            PileupColumn.ModType,
+            PileupColumn.Strand,
+            PileupColumn.FractionModified,
+            PileupColumn.NValidCov
+        ]
+    )
+
+    if pileup.height == 0:
+        log.warning(f"No pileup data found for contigs: {contigs}")
+        return pl.DataFrame({
+            "contig": [],
+            "position": [],
+            "mod_type": [],
+            "strand": [],
+            "fraction_mod": [],
+            "Nvalid_cov": [],
+        }, schema = {
+            "contig": pl.String,
+            "position": pl.Int64,
+            "mod_type": pl.Utf8,
+            "strand": pl.Utf8,
+            "fraction_mod": pl.Float64,
+            "Nvalid_cov": pl.Int64,
+        })
+
+    
     log.debug(f"Renaming and removing unnecessary columns")
     pileup = pileup.rename({
         "contig": "contig",
@@ -115,8 +147,7 @@ def load_contigs_pileup_bgzip(path: str, contigs: list[str]):
         "fraction_modified": "fraction_mod",
         "n_valid_cov": "Nvalid_cov",
     }) \
-    .with_columns(pl.col("fraction_mod") / 100) \
-    .select(["contig", "position", "mod_type", "strand", "fraction_mod", "Nvalid_cov"])
+    .with_columns(pl.col("fraction_mod") / 100)
 
     return pileup
 
