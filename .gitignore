@@ -187,3 +187,7 @@ datasets/mtase_linker_testdata
 msr_complement.pkl
 .gitignore
 pyrightconfigt.json
+
+# pixi environments
+.pixi
+*.egg-info
