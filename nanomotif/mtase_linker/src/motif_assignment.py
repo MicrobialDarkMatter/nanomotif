@@ -36,7 +36,7 @@ nanomotif_table = pd.read_csv(nanomotif_table_path, sep = "\t", header = 0)
 nanomotif_table['assign_mod_type'] = nanomotif_table['mod_type'].apply(recode_mod_type)
 
 #Set motif acceptance threshold as >=0.5 mean_methylation and remove ambiguous motifs in nanomotif_table
-mean_methylation = nanomotif_table['n_mod_bin'] / (nanomotif_table['n_mod_bin'] + nanomotif_table['n_nomod_bin'])
+mean_methylation = nanomotif_table['n_mod'] / (nanomotif_table['n_mod'] + nanomotif_table['n_nomod'])
 nanomotif_table_mm50 = nanomotif_table[mean_methylation >= snakemake.params['MINIMUM_METHYLATION']]
 
 
@@ -44,13 +44,13 @@ nanomotif_table_mm50 = nanomotif_table[mean_methylation >= snakemake.params['MIN
 #%% Importing bin_contig table from mmlong2 
 contig_bin_tsv_path = snakemake.input['contig_bin']
 contig_bin_df = pd.read_csv(contig_bin_tsv_path , sep = "\t", header = None)
-contig_bin_df.columns = ['contig', 'bin name']
+contig_bin_df.columns = ['contig', 'reference']
 
 
 #%% Merging dataframes
 # Merging bin origin information into DefenseFinder based on contig number.
-bin_DF_blastp_df = DefenseFinder_blastp_df.merge(contig_bin_df[['bin name', 'contig']], on = 'contig', how = 'left')
-bin_DF_blastp_df_filtered = bin_DF_blastp_df.dropna(subset=['bin name'])
+bin_DF_blastp_df = DefenseFinder_blastp_df.merge(contig_bin_df[['reference', 'contig']], on = 'contig', how = 'left')
+bin_DF_blastp_df_filtered = bin_DF_blastp_df.dropna(subset=['reference'])
 
 # Merging modtype table into Defensefinder table
 MTase_table = bin_DF_blastp_df_filtered.merge(gene_mod_df[['gene_id', 'mod_type']], on = 'gene_id', how = 'left')
@@ -101,17 +101,17 @@ MTase_table_assigned = MTase_table_assigned.copy()
 MTase_table_assigned.loc[:,'linked'] = False
 
 
-#Group by 'bin name' and 'mod type'
-Cgrouped_MTase = combined_MTase_df.groupby(['bin name', 'mod_type'], dropna=True)
-grouped_nanomotif = nanomotif_table_mm50.groupby(['bin', 'assign_mod_type'])
+#Group by 'reference' and 'mod type'
+Cgrouped_MTase = combined_MTase_df.groupby(['reference', 'mod_type'], dropna=True)
+grouped_nanomotif = nanomotif_table_mm50.groupby(['reference', 'assign_mod_type'])
 
 
 #%% Assigment rule system
 
 # Step 1: Priority 1 Assignment based on similarity to motif guess
-for (bin_name, assign_mod_type), nanomotif_group in grouped_nanomotif:
-    if (bin_name, assign_mod_type) in Cgrouped_MTase.groups:
-        mtase_group = Cgrouped_MTase.get_group((bin_name, assign_mod_type))
+for (reference, assign_mod_type), nanomotif_group in grouped_nanomotif:
+    if (reference, assign_mod_type) in Cgrouped_MTase.groups:
+        mtase_group = Cgrouped_MTase.get_group((reference, assign_mod_type))
         for idx, row in nanomotif_group.iterrows():
             # Calculate reverse complement of the motif
             rev_comp_motif = reverse_complement(row['motif'])
@@ -158,17 +158,17 @@ for (bin_name, assign_mod_type), nanomotif_group in grouped_nanomotif:
 MTase_table_assigned['detected_motif'] = MTase_table_assigned['detected_motif'].replace('nan', np.nan)
 #%%
 #%% Re-group to exclude assigned entries
-grouped_nanomotif = nanomotif_table_mm50[nanomotif_table_mm50['linked'] != True].groupby(['bin', 'assign_mod_type'])
+grouped_nanomotif = nanomotif_table_mm50[nanomotif_table_mm50['linked'] != True].groupby(['reference', 'assign_mod_type'])
 idx_MTase_table_assigned = MTase_table_assigned[MTase_table_assigned['linked'] != True].index #Extract indicies of non assigned entries 
 #%%
 combined_MTase_df = combined_MTase_df.loc[idx_MTase_table_assigned] #FIlter combined_MTase based on extracted indicies
-Cgrouped_MTase = combined_MTase_df.groupby(['bin name', 'mod_type'], dropna=True)
+Cgrouped_MTase = combined_MTase_df.groupby(['reference', 'mod_type'], dropna=True)
 #%%
 
 # Step 2: Priority 2 Assignment: based single subtypes in group
-for (bin_name, assign_mod_type), nanomotif_group in grouped_nanomotif:
-    if (bin_name, assign_mod_type) in Cgrouped_MTase.groups:
-        mtase_group = Cgrouped_MTase.get_group((bin_name, assign_mod_type))
+for (reference, assign_mod_type), nanomotif_group in grouped_nanomotif:
+    if (reference, assign_mod_type) in Cgrouped_MTase.groups:
+        mtase_group = Cgrouped_MTase.get_group((reference, assign_mod_type))
 
         # Count unique motif types in nanomotif and MTase table
         for idx, row in nanomotif_group.iterrows():
@@ -209,15 +209,15 @@ for (bin_name, assign_mod_type), nanomotif_group in grouped_nanomotif:
 MTase_table_assigned['detected_motif'] = MTase_table_assigned['detected_motif'].replace('nan', np.nan)
 
 #%% Re-group to exclude assigned entries
-grouped_nanomotif = nanomotif_table_mm50[nanomotif_table_mm50['linked'] != True].groupby(['bin', 'assign_mod_type'])
+grouped_nanomotif = nanomotif_table_mm50[nanomotif_table_mm50['linked'] != True].groupby(['reference', 'assign_mod_type'])
 idx_MTase_table_assigned = MTase_table_assigned[MTase_table_assigned['linked'] != True].index #Extract indicies of non assigned entries
 combined_MTase_df = combined_MTase_df.loc[idx_MTase_table_assigned] #Filter combined_MTase based on extracted indicies
-Cgrouped_MTase = combined_MTase_df.groupby(['bin name', 'mod_type'], dropna=True)
+Cgrouped_MTase = combined_MTase_df.groupby(['reference', 'mod_type'], dropna=True)
 
 #%% Step 3: Assign candidate genes
-for (bin_name, assign_mod_type), nanomotif_group in grouped_nanomotif:
-    if (bin_name, assign_mod_type) in Cgrouped_MTase.groups:
-        mtase_group = Cgrouped_MTase.get_group((bin_name, assign_mod_type))
+for (reference, assign_mod_type), nanomotif_group in grouped_nanomotif:
+    if (reference, assign_mod_type) in Cgrouped_MTase.groups:
+        mtase_group = Cgrouped_MTase.get_group((reference, assign_mod_type))
 
         # Count unique motif types in nanomotif and MTase table
         for idx, row in nanomotif_group.iterrows():
@@ -264,11 +264,11 @@ for (bin_name, assign_mod_type), nanomotif_group in grouped_nanomotif:
 
 
 # %%
-MTase_table_assigned = MTase_table_assigned[['bin name', 'gene_id', 'contig', 'mod_type', 'sub_type', 'RM_system', 'sys_id', 'motif_type', 'REbase_ID', 'motif_guess', 'linked', 'detected_motif']]
-MTase_table_assigned.columns = ['bin', 'gene_id', 'contig', 'mod_type_pred', 'sub_type_pred', 'RM_system', 'DF_system_ID', 'motif_type_pred', 'REbase_ID', 'motif_pred', 'linked', 'detected_motif']
-MTase_table_assigned_cl = MTase_table_assigned.dropna(subset=['bin'])
+MTase_table_assigned = MTase_table_assigned[['reference', 'gene_id', 'contig', 'mod_type', 'sub_type', 'RM_system', 'sys_id', 'motif_type', 'REbase_ID', 'motif_guess', 'linked', 'detected_motif']]
+MTase_table_assigned.columns = ['reference', 'gene_id', 'contig', 'mod_type_pred', 'sub_type_pred', 'RM_system', 'DF_system_ID', 'motif_type_pred', 'REbase_ID', 'motif_pred', 'linked', 'detected_motif']
+MTase_table_assigned_cl = MTase_table_assigned.dropna(subset=['reference'])
 
-nanomotif_table_mm50 = nanomotif_table_mm50[['bin', 'mod_type', 'motif', 'mod_position', 'n_mod_bin', 'n_nomod_bin', 'motif_type', 'motif_complement', 'mod_position_complement', 'n_mod_complement', 'n_nomod_complement', 'linked', 'candidate_genes']]
+nanomotif_table_mm50 = nanomotif_table_mm50[['reference', 'motif', 'mod_position', 'mod_type', 'n_mod', 'n_nomod', 'motif_type', 'motif_complement', 'mod_position_complement', 'n_mod_complement', 'n_nomod_complement', 'linked', 'candidate_genes']]
 #%%
 MTase_table_assigned_cl.to_csv(snakemake.output['MTase_assignment_table'] , sep='\t', index=False)
 nanomotif_table_mm50.to_csv(snakemake.output['nanomotif_assignment_table'] , sep='\t', index=False)
