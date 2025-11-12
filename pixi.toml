@@ -1,5 +1,5 @@
 [workspace]
-authors = ["Ben Woodcroft <donttrustben@gmail.com>"]
+authors = ["Søren Heidelbach <shei@bio.aau.dk>"]
 channels = ["conda-forge","bioconda"]
 name = "nanomotif"
 platforms = ["linux-64"]
