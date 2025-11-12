@@ -1,4 +1,4 @@
-bin	mod_type	motif	mod_position	n_mod_bin	n_nomod_bin	motif_type	motif_complement	mod_position_complement	n_mod_complement	n_nomod_complement
-e_coli_k12	a	GATC	1	38207	42	palindrome	GATC	1	38207	42
-e_coli_k12	a	GCACNNNNNNGTT	2	591	5	bipartite	AACNNNNNNGTGC	1	586	10
-e_coli_k12	m	CCWGG	1	23336	759	palindrome	CCWGG	1	23336	759
+reference	motif	mod_position	mod_type	n_mod	n_nomod	motif_type	motif_complement	mod_position_complement	n_mod_complement	n_nomod_complement
+e_coli_k12	GATC	1	a	38207	42	palindrome	GATC	1	38207	42
+e_coli_k12	GCACNNNNNNGTT	2	a	591	5	bipartite	AACNNNNNNGTGC	1	586	10
+e_coli_k12	CCWGG	1	m	23336	759	palindrome	CCWGG	1	23336	759
