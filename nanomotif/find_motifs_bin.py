@@ -81,6 +81,28 @@ class ProcessorConfig:
 
         if self.bin_contig is None or self.bin_contig.is_empty():
             raise ValueError("bin_contig cannot be None or empty")
+        if "contig" not in self.bin_contig.columns or "bin" not in self.bin_contig.columns:
+            raise ValueError("bin_contig must contain 'contig' and 'bin' columns")
+        assembly_contigs = (
+            set(self.assembly.assembly.keys())
+            if hasattr(self.assembly, "assembly")
+            else set(self.assembly.keys())
+        )
+        contigs_in_bin_file = set(self.bin_contig.get_column("contig").to_list())
+        missing_contigs = sorted(contigs_in_bin_file - assembly_contigs)
+        if missing_contigs:
+            preview = ", ".join(missing_contigs[:5])
+            suffix = "..." if len(missing_contigs) > 5 else ""
+            log.warning(
+                "Removing %d contig-bin assignments because the contigs are "
+                "absent from the assembly: %s%s",
+                len(missing_contigs),
+                preview,
+                suffix,
+            )
+            self.bin_contig = self.bin_contig.filter(pl.col("contig").is_in(list(assembly_contigs)))
+        if self.bin_contig.is_empty():
+            raise ValueError("No contigs remain in bin_contig after filtering against the assembly")
         
         if self.threads <= 0:
             raise ValueError("threads must be greater than 0")
@@ -141,11 +163,10 @@ class PileupStrategyPlain:
                     continue
                 bin_pileup = self.partitioned_pileup[(bin_name, modtype)]
                 bin_assembly = self.partitioned_assembly[bin_name]
-                yield (modtype, bin_assembly, bin_pileup)
+                yield (bin_name, modtype, bin_assembly, bin_pileup)
 
     def worker_function(self, args):
-        modtype, assembly, bin_pileup = args
-        bin_name = list(self.bin_contig.keys())[0]
+        bin_name, modtype, assembly, bin_pileup = args
         profiler = start_profiler()
         set_seed(seed=self.config.seed)
         process_id = os.getpid()
@@ -154,7 +175,7 @@ class PileupStrategyPlain:
             configure_logger(log_file, verbose=self.config.verbose)
         log.info(f"[Worker {process_id}] started")
         result = process_subpileup(
-            self.bin_contig,
+            {bin_name: self.bin_contig[bin_name]},
             modtype,
             bin_pileup,
             assembly,
@@ -235,12 +256,37 @@ class PileupStrategyBgzip:
             
             
             contigs_in_pileup = bin_pileup_mod_type.get_column("contig").unique().to_list()
-            # Keep only contigs in pileup
-            filtered_bin_contig = {
-                bin_name: [contig for contig in self.bin_contig[bin_name] if contig in contigs_in_pileup]
-            }
-            log.debug(f"Contigs in pileup for {bin_name} {modtype}: {contigs_in_pileup}")
-            assembly_modtype = nm.seq.Assembly({contig: assembly[contig].sequence for contig in assembly.assembly.keys() if contig in contigs_in_pileup})
+            contigs_in_assembly = set(assembly.assembly.keys())
+            contigs_to_use = [
+                contig for contig in self.bin_contig[bin_name]
+                if contig in contigs_in_pileup and contig in contigs_in_assembly
+            ]
+            dropped_from_assembly = [
+                contig for contig in self.bin_contig[bin_name]
+                if contig in contigs_in_pileup and contig not in contigs_in_assembly
+            ]
+            if dropped_from_assembly:
+                log.warning(
+                    "Skipping %d contigs from bin %s for modtype %s because they are "
+                    "missing in the assembly partition: %s%s",
+                    len(dropped_from_assembly),
+                    bin_name,
+                    modtype,
+                    ", ".join(dropped_from_assembly[:5]),
+                    "..." if len(dropped_from_assembly) > 5 else "",
+                )
+            if len(contigs_to_use) == 0:
+                log.warning(
+                    "Bin %s modtype %s has no contigs present in both pileup and assembly, skipping",
+                    bin_name,
+                    modtype,
+                )
+                continue
+            filtered_bin_contig = {bin_name: contigs_to_use}
+            log.debug(f"Contigs in pileup for {bin_name} {modtype}: {contigs_to_use}")
+            assembly_modtype = nm.seq.Assembly(
+                {contig: assembly[contig].sequence for contig in contigs_to_use}
+            )
 
             results.append(process_subpileup(
                 filtered_bin_contig,
@@ -439,7 +485,35 @@ def process_subpileup(
     assert bin_pileup.get_column("mod_type").unique().to_list() == [modtype], "subpileup modtype does not match modtype"
 
     log.debug(f"Subpileup for {bin_name} {modtype}: {bin_pileup}")
-    bin_sequences = {contig: assembly[contig] for contig in bin_contig[bin_name]}
+    assembly_store = assembly.assembly if hasattr(assembly, "assembly") else assembly
+    available_contigs = set(assembly_store.keys())
+    requested_contigs = bin_contig.get(bin_name, [])
+    missing_contigs = [contig for contig in requested_contigs if contig not in available_contigs]
+    if missing_contigs:
+        log.warning(
+            "Skipping %d contigs in bin %s because they are missing from the assembly: %s%s",
+            len(missing_contigs),
+            bin_name,
+            ", ".join(missing_contigs[:5]),
+            "..." if len(missing_contigs) > 5 else "",
+        )
+    contigs_to_use = [contig for contig in requested_contigs if contig in available_contigs]
+    if len(contigs_to_use) == 0:
+        log.warning(f"Bin {bin_name} {modtype} has no contigs present in the assembly, skipping")
+        return None
+    bin_sequences = {}
+    for contig in contigs_to_use:
+        try:
+            bin_sequences[contig] = assembly[contig]
+        except KeyError:
+            log.warning(
+                "Encountered missing contig %s in bin %s despite earlier filtering, skipping",
+                contig,
+                bin_name,
+            )
+    if len(bin_sequences) == 0:
+        log.warning(f"Bin {bin_name} {modtype} has no contigs with sequences after filtering, skipping")
+        return None
 
     # Find motifs
     candidates = find_best_candidates(
