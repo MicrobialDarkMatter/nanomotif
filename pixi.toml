@@ -29,3 +29,11 @@ pyinstrument = ">=5.1.1"
 
 [pypi-dependencies]
 nanomotif = {path = ".", editable = true}
+
+[environments]
+test = ["test"]
+
+[feature.test.dependencies]
+pytest = ">=7.4.0"
+hypothesis = ">=6.148.2"
+pluggy = ">=1.6.0"
