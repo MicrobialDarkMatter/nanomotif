@@ -7,8 +7,6 @@ import sys
 import shutil
 from pathlib import Path
 import json
-import time
-import numpy as np
 import random
 import warnings
 import subprocess
@@ -200,11 +198,12 @@ def binnary(args, pl):
             contig_bins
         )
 
-        contamination = detect_contamination.detect_contamination(
-            contig_methylation_cont, contig_lengths, args.num_consensus, args.threads
+        results = detect_contamination.detect_contamination(
+            contig_methylation_cont, contig_lengths, min_motif_var=0.1, min_threshold=0.5, mad_multiplier=3
         )
-
-
+        data_processing.generate_output(results.to_pandas(), args.out, "bin_centroid_distances.tsv")
+        
+        contamination = results.filter(pl.col("prediction") == -1)
         data_processing.generate_output(contamination.to_pandas(), args.out, "bin_contamination.tsv")
 
     if args.command == "detect_contamination":
