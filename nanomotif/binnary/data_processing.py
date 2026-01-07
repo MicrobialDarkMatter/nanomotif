@@ -1,6 +1,7 @@
 import polars as pl
 import pandas as pd
 import numpy as np
+from numpy.typing import NDArray
 np.random.seed(1)
 
 from Bio import SeqIO
@@ -267,6 +268,12 @@ def create_matrix(contig_methylation):
     contig_names = matrix_df.get_column("contig")
     matrix = matrix_df.drop("contig").to_numpy()
     return contig_names, matrix
+
+def filter_motifs(matrix: NDArray[np.float64],  min_var: float) -> NDArray[np.float64]:
+    m = matrix.std(axis=0)
+
+    return matrix[:, m > min_var]
+
 
     
 def load_contamination_file(contamination_file):
