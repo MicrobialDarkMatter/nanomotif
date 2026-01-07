@@ -1,4 +1,3 @@
-# import hdbscan
 from sklearn.ensemble import IsolationForest
 import polars as pl
 from nanomotif.binnary import data_processing as dp
@@ -67,11 +66,20 @@ def detect_contamination(contig_methylation, contig_lengths, min_motif_var=0.1, 
 
         threshold = max(weighted_median + mad_multiplier * weighted_MAD, min_threshold)
 
+        contam_fraction = weights[distances_to_centroid > threshold].sum()
+        # If > 30% is contamination we set a warning
+        warning = ""
+        if contam_fraction > 0.3:
+            logger.warning(f"Bin {bin}: Large contamination fraction ({contam_fraction:.1%}). "
+                           f"Consider bin splitting.")
+            warning = f"contam_fraction > {contam_fraction:.1%}, consider splitting"
+
         bin_result = pl.DataFrame({
             "bin": bin,
             "contig": contig_names,
             "centroid_dist": distances_to_centroid,
             "weight": weights,
+            "warning": warning,
             }).join(contig_lengths, on = "contig", how="left")\
             .with_columns(
                 pl.when(pl.col("centroid_dist") > threshold).then(-1).otherwise(0).alias("prediction")
