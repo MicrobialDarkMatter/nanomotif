@@ -39,6 +39,12 @@
 
             # For python package
             pkgs.python3
+            pkgs.python3Packages.python-lsp-server
+            pkgs.python3Packages.flake8
+            pkgs.python3Packages.pylint
+            pkgs.python3Packages.pyflakes
+
+            pkgs.pixi
           ];
           shellHook = ''
             export LD_LIBRARY_PATH="${pkgs.libGL}/lib/:${pkgs.stdenv.cc.cc.lib}/lib/:${pkgs.glib.out}/lib/:$LD_LIBRARY_PATH"
