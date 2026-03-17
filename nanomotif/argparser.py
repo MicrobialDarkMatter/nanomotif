@@ -191,7 +191,7 @@ def create_parser():
         "--methylation_output_type",
         default="median",
         help="Specify whether to use the median of mean methylated motif positions or the weighted mean. [default: median]",
-        choices = ["median", "weighted_mean"]
+        choices = ["median", "weighted-mean"]
     )
     
     parser_binnary_shared_mandatory.add_argument("--out", type=str, help="Path to output directory", required=True, default="nanomotif")

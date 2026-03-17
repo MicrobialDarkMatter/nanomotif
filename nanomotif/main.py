@@ -142,7 +142,7 @@ def binnary(args, pl):
     elif args.methylation_output_type == "weighted-mean":
         output_type = MethylationOutput.WeightedMean
     else:
-        log.error(f"Output type must be either median or weighted mean, got: {args.methylation_output_type}")
+        log.error(f"Output type must be either median or weighted-mean, got: {args.methylation_output_type}")
         exit()
 
     contig_methylation_file = f"motifs-scored-read-methylation_{args.methylation_output_type}.tsv"
