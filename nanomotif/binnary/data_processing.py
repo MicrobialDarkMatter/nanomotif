@@ -266,13 +266,18 @@ def create_matrix(contig_methylation):
         .fill_null(0)
 
     contig_names = matrix_df.get_column("contig")
+    motif_mods = matrix_df.columns
     matrix = matrix_df.drop("contig").to_numpy()
-    return contig_names, matrix
+    return contig_names, motif_mods, matrix
 
-def filter_motifs(matrix: NDArray[np.float64],  min_var: float) -> NDArray[np.float64]:
+def filter_motifs(matrix: NDArray[np.float64], motif_mods: list,  min_var: float) -> NDArray[np.float64]:
     m = matrix.std(axis=0)
+    mask = m > min_var
 
-    return matrix[:, m > min_var]
+    matrix = matrix[:, mask] 
+    motif_mods_filtered = [motif for motif, keep in zip(motif_mods, mask) if keep]
+
+    return  matrix, motif_mods_filtered
 
 
     
