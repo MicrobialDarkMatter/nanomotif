@@ -33,7 +33,7 @@ def test_detect_contamination():
                                       "length": [100000, 60000, 20000, 80000, 100000, 60000, 20000, 80000, 100000, 60000, 20000, 80000],
                                   })
 
-    contamination = detect_contamination(contig_methylation, contig_lengths, min_bin_size=3)
+    contamination = detect_contamination(contig_methylation, contig_lengths, min_motif_var=0.1, min_threshold=0.5, mad_multiplier=3)
     print(contamination)
 
     # assert contamination.shape[0] == 4
