@@ -31,11 +31,13 @@ INT_TO_BASE = {i: n for n, i in BASE_TO_INT.items()}
 MOD_TYPE_TO_CANONICAL = {
     "m":"C",
     "a":"A",
-    "21839":"C"
+    "21839":"C",
+    "f": "C"
 }
 MOD_CODE_TO_PRETTY = {
     "m":"5mC",
     "a":"6mA",
-    "21839":"4mC"
+    "21839":"4mC",
+    "f": "5hmC",
 }
 MOD_PRETTY_TO_CODE = {v: k for k, v in MOD_CODE_TO_PRETTY.items()}
