@@ -1273,6 +1273,21 @@ def methylated_motif_occourances(
 
     return meth_occurences, nonmeth_occurences
 
+def _pack_bits(mask: np.ndarray) -> np.ndarray:
+    """Boolean array -> bitset as uint64 words (padding bits are 0)."""
+    packed = np.packbits(mask)
+    return np.concatenate([packed, np.zeros(-len(packed) % 8, np.uint8)]).view(np.uint64)
+
+
+_POPCOUNT_8 = np.array([bin(i).count("1") for i in range(256)], dtype=np.uint8)
+
+
+def _popcount(words: np.ndarray) -> int:
+    if hasattr(np, "bitwise_count"):  # numpy >= 2.0
+        return int(np.bitwise_count(words).sum())
+    return int(_POPCOUNT_8[words.view(np.uint8)].sum())
+
+
 class MotifSiteIndex:
     """
     Sequence windows around the confidently methylated and unmethylated positions of a bin,
@@ -1311,25 +1326,35 @@ class MotifSiteIndex:
                         & (contig_sites.get_column("methylated").to_numpy() == meth)
                     windows[(strand, meth)].append(padded[positions[keep, None] + half_width + offsets])
         width = 2 * half_width + 1
-        self.windows = {
-            key: np.concatenate(w) if w else np.empty((0, width), np.uint8) for key, w in windows.items()
-        }
+        # One bitset over the sites per (window column, base): a motif's count is then the popcount of
+        # the AND over its fixed positions of the OR over each position's allowed bases.
+        self.n_sites = {}
+        self.bits = {}
+        for key, w in windows.items():
+            w = np.concatenate(w) if w else np.empty((0, width), np.uint8)
+            self.n_sites[key] = len(w)
+            self.bits[key] = {}
+            for column in range(width):
+                values = np.ascontiguousarray(w[:, column])
+                for code in np.flatnonzero(np.bincount(values, minlength=256)[1:]) + 1:
+                    self.bits[key][(column, int(code))] = _pack_bits(values == code)
 
-    def _count(self, windows: np.ndarray, motif: Motif) -> int:
-        """Number of windows in which the (stripped) motif occurs with its modified base at the centre."""
-        candidates = None
+    def _count(self, key: tuple, motif: Motif) -> int:
+        """Number of indexed sites at which the (stripped) motif occurs with its modified base at the site."""
+        match = None
         for i, token in enumerate(motif.split()):
             if token == ".":
                 continue
-            allowed = np.zeros(256, dtype=bool)
-            allowed[[ord(c) for c in token.strip("[]")]] = True
-            column = windows[:, self.half_width - motif.mod_position + i] if candidates is None \
-                else windows[candidates, self.half_width - motif.mod_position + i]
-            hit = allowed[column]
-            candidates = np.flatnonzero(hit) if candidates is None else candidates[hit]
-            if len(candidates) == 0:
+            column = self.half_width - motif.mod_position + i
+            allowed = None
+            for base in token.strip("[]"):
+                bits = self.bits[key].get((column, ord(base)))
+                if bits is not None:
+                    allowed = bits if allowed is None else allowed | bits
+            if allowed is None:
                 return 0
-        return int(len(candidates)) if candidates is not None else len(windows)
+            match = allowed if match is None else match & allowed
+        return self.n_sites[key] if match is None else _popcount(match)
 
     def counts(self, motif: Motif) -> tuple:
         """(methylated, unmethylated) occurrences of the motif at the indexed positions."""
@@ -1344,8 +1369,8 @@ class MotifSiteIndex:
                     low_meth_threshold=self.low_meth_threshold, high_meth_threshold=self.high_meth_threshold
                 )
             return model._alpha, model._beta
-        n_meth = self._count(self.windows[("+", True)], stripped) + self._count(self.windows[("-", True)], reverse)
-        n_nonmeth = self._count(self.windows[("+", False)], stripped) + self._count(self.windows[("-", False)], reverse)
+        n_meth = self._count(("+", True), stripped) + self._count(("-", True), reverse)
+        n_nonmeth = self._count(("+", False), stripped) + self._count(("-", False), reverse)
         return n_meth, n_nonmeth
 
     def model(self, motif: Motif, model=None):

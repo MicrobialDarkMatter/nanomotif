@@ -178,3 +178,10 @@ def test_motif_site_index_matches_regex_counts():
         expected = nm.find_motifs_bin.motif_model_bin(pileup, sequences, motif, BetaBernoulliModel(), 0.3, 0.7)
         got = index.model(motif)
         assert (got._alpha, got._beta) == (expected._alpha, expected._beta), motif
+
+
+def test_popcount_fallback():
+    words = np.array([0, 1, 2**63 + 5, 2**64 - 1], dtype=np.uint64)
+    expected = sum(bin(int(w)).count("1") for w in words)
+    assert nm.find_motifs_bin._popcount(words) == expected
+    assert int(nm.find_motifs_bin._POPCOUNT_8[words.view(np.uint8)].sum()) == expected
