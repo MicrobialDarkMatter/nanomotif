@@ -115,3 +115,13 @@ def test_ambiguity_codes_convert_to_DNAarray():
     assert arr.tolist() == [[[1, 0, 0, 0], [1, 0, 1, 0], [0, 1, 0, 1], [1, 1, 1, 1]]]
     for code, bases in DNAsequence.iupac_dict.items():
         assert DNAsequence.base_to_vector[code] == [int(b in bases) for b in DNAsequence.bases]
+
+
+def test_sample_at_indices_bounds():
+    from nanomotif.seq import DNAsequence
+    seq = DNAsequence("ACGTACGTAC")  # length 10
+    # windows of 2 * 2 + 1 = 5 fit for indices 2..7
+    sampled = seq.sample_at_indices(list(range(10)), 2)
+    assert [s.sequence for s in sampled.sequences] == [seq.sequence[i - 2:i + 3] for i in range(2, 8)]
+    with pytest.raises(ValueError):
+        seq.sample_at_index(8, 2)

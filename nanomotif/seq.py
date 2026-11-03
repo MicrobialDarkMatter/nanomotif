@@ -174,7 +174,7 @@ class DNAsequence:
         """
         if index < padding:
             raise ValueError(f"Index {index} is too small for padding {padding}")
-        if index > len(self) - padding:
+        if index >= len(self) - padding:
             raise ValueError(f"Index {index} is too large for padding {padding}")
         return DNAsequence(self.sequence[(index - padding):(index + padding + 1)])
 
@@ -194,7 +194,7 @@ class DNAsequence:
         sequences : EqualLengthDNASet
             Sequences of length 2 * padding + 1
         """
-        indices_checked = [index for index in indices if (index > padding) and (index < (len(self) - padding))]
+        indices_checked = [index for index in indices if (index >= padding) and (index < (len(self) - padding))]
         if len(indices_checked) == 0:
             return None
         return EqualLengthDNASet([self.sample_at_index(index, padding) for index in indices_checked])
