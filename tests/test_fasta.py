@@ -107,3 +107,11 @@ def test_subseq_indices():
         print(f"Expected indices: {expected}")
         print(f"Function output: {result.tolist()}")
         assert result.tolist() == expected, f"Mismatch for pattern {pattern}"
+
+
+def test_ambiguity_codes_convert_to_DNAarray():
+    from nanomotif.seq import DNAsequence, EqualLengthDNASet
+    arr = EqualLengthDNASet([DNAsequence("ARYN")]).convert_to_DNAarray()
+    assert arr.tolist() == [[[1, 0, 0, 0], [1, 0, 1, 0], [0, 1, 0, 1], [1, 1, 1, 1]]]
+    for code, bases in DNAsequence.iupac_dict.items():
+        assert DNAsequence.base_to_vector[code] == [int(b in bases) for b in DNAsequence.bases]
