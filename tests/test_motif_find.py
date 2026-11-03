@@ -145,6 +145,7 @@ def test_plain_strategy_task_count_matches_generator():
     """The progress bar total must equal the number of tasks the generator accounts for
     (yielded or skipped), otherwise it reports completion too early."""
     import threading
+    import types
 
     class Counter:
         value = 0
@@ -154,7 +155,7 @@ def test_plain_strategy_task_count_matches_generator():
         partitioned_assembly={"bin1": sequences, "bin2": sequences},
         partitioned_pileup={("bin1", "a"): pileup},
         bin_contig={"bin1": list(sequences), "bin2": list(sequences)},
-        config=None,
+        config=types.SimpleNamespace(assembly_path=None),
     )
     counter = Counter()
     n_yielded = len(list(strategy.task_generator(counter, threading.Lock())))

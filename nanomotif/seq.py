@@ -482,6 +482,43 @@ class EqualLengthDNASet:
             .reshape(len(self.sequences), self.sequence_length)
         return DNAarray(lookup[codes])
 
+class PackedDNAarray:
+    """
+    Equal-length sequences as one byte per position: a 4-bit mask of the bases the position can be
+    (A=1, T=2, G=4, C=8, ambiguity codes and N the union). Same filtering and PSSM as DNAarray's one-hot
+    encoding, in 1/32 of the memory.
+    """
+    def __init__(self, masks: np.ndarray):
+        self.masks = masks
+
+    @classmethod
+    def from_sequences(cls, sequences: "EqualLengthDNASet"):
+        lookup = np.zeros(256, dtype=np.uint8)
+        for base, vector in DNAsequence.base_to_vector.items():
+            lookup[ord(base)] = sum(bit << i for i, bit in enumerate(vector))
+        codes = np.frombuffer("".join(seq.sequence for seq in sequences.sequences).encode("ascii"), dtype=np.uint8) \
+            .reshape(len(sequences.sequences), sequences.sequence_length)
+        return cls(lookup[codes])
+
+    @property
+    def shape(self):
+        return (self.masks.shape[0], self.masks.shape[1], 4)
+
+    def filter_sequence_matches(self, sequence, keep_matches=True):
+        """Like DNAarray.filter_sequence_matches; sequence is a motif's one-hot array (length x 4)."""
+        motif_mask = (np.asarray(sequence) > 0).astype(np.uint8) @ (1 << np.arange(4, dtype=np.uint8))
+        match = ~np.any(self.masks & ~motif_mask.astype(np.uint8), axis=1)
+        result = self.masks[match if keep_matches else ~match]
+        if result.shape[0] == 0:
+            warnings.warn("No sequences left after filtering")
+            return None
+        return PackedDNAarray(result)
+
+    def pssm(self):
+        """Same as DNAarray.pssm: per position, the share of sequences that allow each base."""
+        return np.stack([((self.masks >> i) & 1).sum(axis=0) for i in range(4)]) / self.masks.shape[0]
+
+
 class DNAarray(np.ndarray):
     """
     A numpy array of DNA sequences

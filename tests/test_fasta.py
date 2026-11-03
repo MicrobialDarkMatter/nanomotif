@@ -148,3 +148,22 @@ def test_sample_n_subsequences_unique_centres_on_base():
     sample = seq.sample_n_subsequences_unique(41, 30, base="A")
     assert all(s.sequence[20] == "A" for s in sample.sequences)
     assert len({s.sequence for s in sample.sequences}) == 30
+
+
+def test_packed_dna_array_matches_one_hot():
+    import random
+    import numpy as np
+    from nanomotif.seq import DNAsequence, EqualLengthDNASet, PackedDNAarray
+    from nanomotif.motif import Motif
+    random.seed(6)
+    seqs = EqualLengthDNASet([DNAsequence("".join(random.choice("ACGTACGTNR") for _ in range(9))) for _ in range(300)])
+    one_hot, packed = seqs.convert_to_DNAarray(), PackedDNAarray.from_sequences(seqs)
+    np.testing.assert_array_equal(one_hot.pssm(), packed.pssm())
+    for motif in ["....A....", "..GA.C...", "...[AG]A.T..", "TTTTTTTTT"]:
+        for keep in (True, False):
+            a = one_hot.filter_sequence_matches(Motif(motif, 4).one_hot(), keep_matches=keep)
+            b = packed.filter_sequence_matches(Motif(motif, 4).one_hot(), keep_matches=keep)
+            assert (a is None) == (b is None)
+            if a is not None:
+                assert a.shape == b.shape
+                np.testing.assert_array_equal(a.pssm(), b.pssm())

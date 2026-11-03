@@ -29,6 +29,8 @@ import time
 from typing import Generator, Optional, List, Tuple
 from dataclasses import dataclass
 import pysam
+import pyfastx
+import shutil
 import sys
 import subprocess
 import threading
@@ -54,6 +56,12 @@ def stop_profiler(profiler: Profiler, profile_name: str, outdir: str):
         profiler.stop()
         profiler.write_html(f"{outdir}/{profile_name}.html")
 
+def load_bin_assembly(assembly_path: str, contigs: list):
+    """The bin's contigs from the indexed FASTA (pyfastx), as an Assembly."""
+    fasta = pyfastx.Fasta(assembly_path, build_index=True)
+    return nm.seq.Assembly({contig: str(fasta[contig]) for contig in contigs if contig in fasta})
+
+
 def set_polars_env():
     os.environ["POLARS_MAX_THREADS"] = "1"
 
@@ -73,6 +81,8 @@ class ProcessorConfig:
     output_dir: str
     verbose: bool = False
     min_valid_coverage: int = 5
+    # FASTA the assembly was read from; workers then fetch their bin's contigs from its index
+    assembly_path: Optional[str] = None
 
     def __post_init__(self):
         if self.assembly is None:
@@ -149,6 +159,8 @@ class TaskStrategy:
 
     def n_tasks(self):
         raise NotImplementedError
+    def cleanup(self):
+        pass
     def task_generator(self):
         raise NotImplementedError
     def worker_function(self, args):
@@ -170,6 +182,11 @@ class PileupStrategyPlain(TaskStrategy):
     def n_tasks(self):
         return len(self.partitioned_assembly) * len(nm.constants.MOD_CODE_TO_PRETTY)
 
+    def cleanup(self):
+        for path in self.partitioned_pileup.values():
+            if isinstance(path, str) and os.path.exists(path):
+                os.remove(path)
+
     def task_generator(self, counter, lock):
         for bin_name in self.partitioned_assembly.keys():
             for modtype in nm.constants.MOD_CODE_TO_PRETTY.keys():
@@ -184,11 +201,16 @@ class PileupStrategyPlain(TaskStrategy):
                         counter.value += 1
                     continue
                 bin_pileup = self.partitioned_pileup[(bin_name, modtype)]
-                bin_assembly = self.partitioned_assembly[bin_name]
+                bin_assembly = None if self.config.assembly_path else self.partitioned_assembly[bin_name]
                 yield (bin_name, modtype, bin_assembly, bin_pileup)
 
     def worker_function(self, args):
         bin_name, modtype, assembly, bin_pileup = args
+        if isinstance(bin_pileup, str):
+            # Arrow IPC file written by the builder, memory-mapped instead of sent through the pool
+            bin_pileup = pl.read_ipc(bin_pileup, memory_map=True)
+        if assembly is None:
+            assembly = load_bin_assembly(self.config.assembly_path, self.bin_contig[bin_name])
         profiler = start_profiler()
         set_seed(seed=self.config.seed)
         process_id = os.getpid()
@@ -235,13 +257,15 @@ class PileupStrategyBgzip(TaskStrategy):
                     counter.value += 1
                 continue
 
-            bin_assembly = self.partitioned_assembly[bin_name]
+            bin_assembly = None if self.config.assembly_path else self.partitioned_assembly[bin_name]
             yield (
                 bin_name,
                 bin_assembly
             )
     def worker_function(self, args):
         bin_name, assembly = args
+        if assembly is None:
+            assembly = load_bin_assembly(self.config.assembly_path, self.bin_contig[bin_name])
         profiler = start_profiler()
         set_seed(seed=self.config.seed)
         process_id = os.getpid()
@@ -379,6 +403,7 @@ class BinMotifProcessor:
         log.debug("Closing pool")
         pool.close()
         pool.join()
+        self.task_strategy.cleanup()
 
         log.debug("Joining progress bar")
         progress_bar_process.join()
@@ -437,7 +462,15 @@ class BinMotifProcessorBuilder:
 
             pileup = pileup.join(self.config.bin_contig, left_on="contig", right_on="contig", how="inner")
 
-            partitioned_pileup = pileup.partition_by(["bin", "mod_type"], as_dict=True)
+            # One Arrow IPC file per bin and mod type, read by the workers (memory-mapped)
+            partition_dir = os.path.join(self.config.output_dir, "temp", "pileup_partitions")
+            os.makedirs(partition_dir, exist_ok=True)
+            partitioned_pileup = {}
+            for i, ((bin_name, mod_type), part) in enumerate(pileup.partition_by(["bin", "mod_type"], as_dict=True).items()):
+                path = os.path.join(partition_dir, f"{i}.arrow")
+                part.write_ipc(path, compression="uncompressed")
+                partitioned_pileup[(bin_name, mod_type)] = path
+            del pileup
             partitioned_assembly = self._partition_assembly()
             strategy = PileupStrategyPlain(
                 partitioned_assembly=partitioned_assembly,
@@ -449,6 +482,9 @@ class BinMotifProcessorBuilder:
         return BinMotifProcessor(task_strategy=strategy, config=self.config)
 
     def _partition_assembly(self):
+        if self.config.assembly_path:
+            # workers read their contigs from the FASTA index
+            return {bin_name: None for bin_name in self.bin_contig_dict}
         return {
             bin_name: nm.seq.Assembly(
                 {contig: self.config.assembly[contig].sequence for contig in contigs if contig in self.config.assembly}
@@ -705,7 +741,7 @@ def find_best_candidates(
         with open(f"{output_dir}/temp/{bin_name}/background_sequences_{mod_type}.fasta", "w") as f:
             for i, seq in enumerate(background_sequences.sequences):
                 f.write(f">background_seq_{i}\n{seq.sequence}\n")
-    methylation_sequences = methylation_sequences.convert_to_DNAarray()
+    methylation_sequences = nm.seq.PackedDNAarray.from_sequences(methylation_sequences)
     total_seqs = methylation_sequences.shape[0]
 
     # Convert background sequences to DNAarray
@@ -717,7 +753,7 @@ def find_best_candidates(
     np.savetxt(f"{output_dir}/temp/{bin_name}/background_pssm_{mod_type}.txt", bin_pssm, fmt="%.4f")
 
     root_motif = Motif("." * padding + MOD_TYPE_TO_CANONICAL[mod_type] + "." * padding, padding)
-    methylation_sequences_clone = methylation_sequences.copy()
+    methylation_sequences_clone = methylation_sequences
     best_candidates = []
     continue_search = True
     dead_ends = 0
@@ -1136,7 +1172,7 @@ class MotifSearcher:
             rounds_since_new_best += 1
 
             # Filter sequences for this motif
-            active_methylation_sequences = self.methylation_sequences.copy().filter_sequence_matches(
+            active_methylation_sequences = self.methylation_sequences.filter_sequence_matches(
                 current_motif.one_hot(), keep_matches=True
             )
             if active_methylation_sequences is None:
