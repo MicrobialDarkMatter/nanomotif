@@ -95,3 +95,36 @@ def test_filter_pileup_minimummod_frequency_uses_threshold():
     })
     assert len(nm.dataload.filter_pileup_minimummod_frequency(pileup, methylation_threshold=0.75)) == 60
     assert len(nm.dataload.filter_pileup_minimummod_frequency(pileup, methylation_threshold=0.8)) == 0
+
+
+def test_load_pileup_filters_while_reading():
+    path = nm.datasets.geobacillus_plasmids_pileup_path()
+    full = nm.dataload.load_pileup(path)
+    expected = nm.dataload.filter_pileup(full, min_coverage=8).filter(pl.col("contig") == "contig_2")
+    got = nm.dataload.load_pileup(path, min_coverage=8, contigs=["contig_2"])
+    polars.testing.assert_frame_equal(got, expected)
+
+
+def test_filter_pileup_adjacency_filter_matches_naive():
+    import numpy as np
+    rng = np.random.default_rng(5)
+    n = 400
+    pileup = pl.DataFrame({
+        "contig": rng.choice(["c1", "c2"], n),
+        "position": rng.integers(0, 150, n),
+        "mod_type": rng.choice(["a", "m"], n),
+        "strand": rng.choice(["+", "-"], n),
+        "fraction_mod": rng.choice([0.1, 0.5, 0.7, 0.8, 0.9, 1.0], n),
+        "Nvalid_cov": [10] * n,
+    })
+    rows = pileup.rows(named=True)
+    expected = [
+        r for r in rows
+        if r["fraction_mod"] < 0.7 or r["fraction_mod"] == max(
+            o["fraction_mod"] for o in rows
+            if o["contig"] == r["contig"] and o["strand"] == r["strand"] and abs(o["position"] - r["position"]) <= 3
+        )
+    ]
+    got = nm.dataload.filter_pileup_adjacency_filter(pileup, methylation_threshold=0.7, adjacency_distance=3)
+    key = lambda r: (r["contig"], r["strand"], r["position"], r["mod_type"], r["fraction_mod"])
+    assert sorted(got.rows(named=True), key=key) == sorted(expected, key=key)

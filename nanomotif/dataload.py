@@ -1,3 +1,4 @@
+import numpy as np
 # Data loading functionalities
 import polars as pl
 
@@ -69,9 +70,12 @@ def load_fasta_fastx(path, trim_names=False, trim_character=" ") -> dict:
     return assembly
 
 
-def load_pileup(path: str):
+def load_pileup(path: str, min_coverage: int = None, contigs: list = None):
     """
     Load pileup file from path to pileup.bed output of modkit pileup
+
+    min_coverage and contigs (optional) are applied while reading, so rows that would be
+    filtered out later are never held in memory.
     """
     pileup = (
         pl.scan_csv(
@@ -82,11 +86,14 @@ def load_pileup(path: str):
             null_values=["NA", "null"]
         )
         .select(["column_1", "column_2","column_4", "column_6", "column_11", "column_10"])
-        .with_columns(pl.col("column_11") / 100)
-        .collect()
     )
+    if min_coverage is not None:
+        pileup = pileup.filter(pl.col("column_10") >= min_coverage)
+    if contigs is not None:
+        pileup = pileup.filter(pl.col("column_1").is_in(pl.Series(list(contigs), dtype=pl.Utf8).implode()))
+    pileup = pileup.with_columns(pl.col("column_11") / 100).collect()
 
-    if pileup.is_empty():
+    if pileup.is_empty() and min_coverage is None and contigs is None:
         print("Pileup is empty after initial load")
         sys.exit(1)
     pileup = pileup.rename({
@@ -207,22 +214,17 @@ def filter_pileup_minimummod_frequency(
     """
     Filter pileup to only include contig_mods with sufficient modification frequency and number of modified positions
     """
-    pileup = pileup.with_columns([
-        (pl.col("contig") + "_" + pl.col("mod_type")).alias("contig_mod")
-    ])
     contigs_with_mods = pileup \
-        .group_by("contig_mod") \
+        .group_by("contig", "mod_type") \
         .agg(
-            n_positions=pl.count().alias("n_positions"),
+            n_positions=pl.len(),
             n_mod_positions=(pl.col("fraction_mod") >= methylation_threshold).sum()
         ) \
         .filter((pl.col("n_mod_positions") / pl.col("n_positions")) > min_mod_frequency) \
         .filter(pl.col("n_mod_positions") > min_mods_pr_contig) \
-        .get_column("contig_mod").unique().to_list()
+        .select("contig", "mod_type")
 
-    pileup = pileup.filter(pl.col("contig_mod").is_in(contigs_with_mods)) \
-        .drop("contig_mod")
-    return pileup
+    return pileup.join(contigs_with_mods, on=["contig", "mod_type"], how="semi", maintain_order="left")
 
 def filter_pileup_adjacency_filter(
         pileup: pl.DataFrame,
@@ -232,15 +234,26 @@ def filter_pileup_adjacency_filter(
     """
     Filter pileup to only include positions that are not within adjacency_distance of another modified position
     """
-    window = adjacency_distance * 2 + 1
-    pileup = pileup.sort("position") \
-        .group_by("contig", "strand") \
-        .map_groups(lambda df: df.with_columns(
-            roll_max = pl.col("fraction_mod")
-                .rolling(index_column="position", period=f"{window}i", offset=f"-{window//2 + 1}i")
-        ) \
-        .filter((pl.col("fraction_mod") == pl.col("roll_max").list.max()) | (pl.col("fraction_mod") < methylation_threshold)) \
-        .drop("roll_max")
-        )
-    
+    # Rows below the threshold are always kept, and a row at or above it can only be removed by a
+    # higher neighbour, which is then above it too: only the high rows need comparing. A high row is
+    # kept when no other high row of its contig and strand within adjacency_distance is higher. With
+    # them sorted by position, compare every row with its k-th neighbour for k = 1, 2, ... until no
+    # k-th neighbour is within the distance.
+    high = pileup.with_row_index("_row") \
+        .filter(pl.col("fraction_mod") >= methylation_threshold) \
+        .sort(["contig", "strand", "position"])
+    group = high.select(pl.struct("contig", "strand").rle_id()).to_series().to_numpy()
+    position = high.get_column("position").cast(pl.Int64).to_numpy()
+    fraction = high.get_column("fraction_mod").to_numpy()
+    is_max = np.ones(len(high), dtype=bool)
+    k = 1
+    while k < len(high):
+        near = (group[k:] == group[:-k]) & (position[k:] - position[:-k] <= adjacency_distance)
+        if not near.any():
+            break
+        is_max[:-k] &= ~(near & (fraction[k:] > fraction[:-k]))
+        is_max[k:] &= ~(near & (fraction[:-k] > fraction[k:]))
+        k += 1
+    removed = high.get_column("_row").filter(pl.Series(~is_max))
+    pileup = pileup.with_row_index("_row").filter(~pl.col("_row").is_in(removed.implode())).drop("_row")
     return pileup

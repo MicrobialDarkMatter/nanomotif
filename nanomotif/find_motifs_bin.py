@@ -223,7 +223,6 @@ class PileupStrategyBgzip:
                 continue
 
             bin_assembly = self.partitioned_assembly[bin_name]
-            time.sleep(1)
             yield (
                 bin_name,
                 bin_assembly
@@ -394,10 +393,10 @@ class BinMotifProcessorBuilder:
                 raise FileNotFoundError(f"Tabix index for {pileup_path} not found.")
             partitioned_assembly = self._partition_assembly()
             # Remove contigs not in tabix index from contig_bin_dict
+            with pysam.TabixFile(pileup_path) as tbx:
+                indexed_contigs = set(tbx.contigs)
             for bin_name, contigs in self.bin_contig_dict.items():
-                with pysam.TabixFile(pileup_path) as tbx:
-                    contigs_present = [c for c in contigs if c in tbx.contigs]
-                self.bin_contig_dict[bin_name] = contigs_present
+                self.bin_contig_dict[bin_name] = [c for c in contigs if c in indexed_contigs]
             strategy = PileupStrategyBgzip(
                 partitioned_assembly=partitioned_assembly,
                 pileup_path=pileup_path,
@@ -406,11 +405,11 @@ class BinMotifProcessorBuilder:
             )
         else:
             log.warning("Pileup is not bgzipped, loading full pileup into memory.")
-            pileup = nm.dataload.load_pileup(pileup_path)
-            if pileup is None or len(pileup) == 0:
-                log.info(f"No pileup data after filtering, skipping")
-                return None
-            pileup = nm.dataload.filter_pileup(pileup, min_coverage=self.config.min_valid_coverage)
+            pileup = nm.dataload.load_pileup(
+                pileup_path,
+                min_coverage=self.config.min_valid_coverage,
+                contigs=self.config.bin_contig.get_column("contig").to_list()
+            )
             if pileup is None or len(pileup) == 0:
                 log.info(f"No pileup data after filtering, skipping")
                 return None
