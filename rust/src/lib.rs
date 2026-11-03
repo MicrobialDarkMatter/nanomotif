@@ -61,7 +61,7 @@ fn partition_pileup(
     py: Python<'_>, path: &str, contig_bin: HashMap<String, String>, out_dir: &str, min_coverage: i64, threshold: f64,
     min_mods: usize, min_mod_frequency: f64, adjacency_distance: i64, threads: usize, flush_rows: usize,
 ) -> PyResult<HashMap<(String, String), Vec<String>>> {
-    let settings = pileup::Settings { min_coverage, threshold, min_mods, min_mod_frequency, adjacency_distance, flush_rows };
+    let settings = pileup::Settings { min_coverage, threshold, min_mods, min_mod_frequency, adjacency_distance, flush_rows, max_buffered: 8 * flush_rows };
     py.allow_threads(|| pileup::partition(path, &contig_bin, &settings, out_dir, threads.max(1)))
         .map_err(pyo3::exceptions::PyValueError::new_err)
 }

@@ -27,6 +27,7 @@ pub struct Settings {
     pub min_mod_frequency: f64,
     pub adjacency_distance: i64,
     pub flush_rows: usize,
+    pub max_buffered: usize,
 }
 
 struct Row {
@@ -151,6 +152,8 @@ fn process_range(
     let mut seen: HashSet<Vec<u8>> = HashSet::new();
 
     let flush = |sinks: &mut HashMap<(String, u16), Sink>, mod_types: &Vec<String>, force: bool| -> Result<(), String> {
+        // bounded memory: flush everything once the thread holds max_buffered rows in total
+        let force = force || sinks.values().map(|x| x.position.len()).sum::<usize>() >= s.max_buffered;
         for ((bin, m), sink) in sinks.iter_mut() {
             if sink.position.is_empty() || (!force && sink.position.len() < s.flush_rows) {
                 continue;
