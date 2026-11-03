@@ -8,7 +8,7 @@ def create_parser():
     parser = argparse.ArgumentParser(description="Motif identification and utilisation commands", formatter_class=formatter)
     parser.add_argument("--version", action="version", version="%(prog)s {}".format(__version__))
     subparsers = parser.add_subparsers(help="-- Command descriptions --", dest="command", title = "commands",
-                                       metavar='{motif_discovery, detect_contamination, include_contigs, MTase-linker, check_installation}')
+                                       metavar='{motif_discovery, MTase-linker, check_installation}')
 
     def add_general_arguments(parser):
         """
@@ -136,104 +136,6 @@ def create_parser():
     add_general_arguments(parser_find_motifs_bin)
 
 
-    ###########################################################################
-    # Bin contamination and inclusion   
-    parser_binnary_shared = argparse.ArgumentParser(description="Contamination DNA Methylation Pattern", add_help=False)
-    """Function to add common arguments to a subparser."""
-    
-    parser_binnary_shared_mandatory = parser_binnary_shared.add_argument_group("Mandatory Arguments")
-    
-    
-    parser_binnary_shared_mandatory.add_argument(
-        "--pileup", type=str, help="Path to pileup.bed", required=True
-    )
-    parser_binnary_shared_mandatory.add_argument(
-        "--assembly", type=str, help="Path to assembly file [fasta format required]", required=True
-    )
-    parser_binnary_shared_mandatory.add_argument("--bin_motifs", type=str, help="Path to bin-motifs.tsv file", required=True)
-    parser_binnary_shared_mandatory.add_argument(
-        "--contig_bins", type=str, help="Path to bins.tsv file for contig bins", required=True
-    )
-    parser_binnary_shared.add_argument("-t", "--threads", type=int, default=1, help="Number of threads to use for multiprocessing")
-
-    parser_binnary_shared.add_argument(
-        "--min_valid_read_coverage",
-        type=int,
-        default=3,
-        help="Minimum read coverage for calculating methylation [used with methylation_util executable]",
-    )
-    parser_binnary_shared.add_argument(
-        "--methylation_threshold",
-        type=int,
-        default=24,
-        help="Filtering criteria for trusting contig methylation. It is the product of mean_read_coverage and N_motif_observation. Higher value means stricter criteria. [default: 24]",
-    )
-    
-    parser_binnary_shared.add_argument(
-        "--num_consensus",
-        type=int,
-        default=4,
-        help="Number of models that has to agree for classifying as contaminant",
-    )
-    parser_binnary_shared.add_argument(
-        "--force",
-        action='store_true',
-        help="Force override of motifs-scored-read-methylation.tsv. If not set existing file will be used.",
-    )
-    
-    parser_binnary_shared.add_argument(
-        "--write_bins",
-        action='store_true',
-        help="If specified, new bins will be written to a bins folder. Requires --assembly_file to be specified.",
-    )
-
-    parser_binnary_shared.add_argument(
-        "--methylation_output_type",
-        default="median",
-        help="Specify whether to use the median of mean methylated motif positions or the weighted mean. [default: median]",
-        choices = ["median", "weighted_mean"]
-    )
-    
-    parser_binnary_shared_mandatory.add_argument("--out", type=str, help="Path to output directory", required=True, default="nanomotif")
-    
-    # Binnary contamination
-    parser_contamination = subparsers.add_parser(
-        'detect_contamination', 
-        help="Detect contamination in bins",
-        parents=[parser_binnary_shared]
-    )  
-    
-    parser_contamination.add_argument(
-        '--contamination_file',
-        type=str,
-        help="Path to an existing contamination file if bins should be outputtet as a post-processing step"
-    )
-    
-    # Binnary inclusion
-    parser_inclusion = subparsers.add_parser(
-        'include_contigs', 
-        help="Include contigs in bins",
-        parents=[parser_binnary_shared]
-    )
-    parser_inclusion.add_argument(
-        "--mean_model_confidence",
-        type = float,
-        help = "Mean probability between models for including contig. Contigs above this value will be included. [default: 0.8]",
-        default = 0.8
-    )
-    
-    group = parser_inclusion.add_mutually_exclusive_group(required=False)
-    group.add_argument(
-        "--contamination_file",
-        type=str,
-        help="Path to an existing contamination file to include in the analysis"
-    )
-    group.add_argument(
-        "--run_detect_contamination",
-        action='store_true',
-        help="Indicate that the detect_contamination workflow should be run first"
-    )
-    
     ###########################################################################
     # MTase-linker
     parser_mtase_linker = subparsers.add_parser(
