@@ -134,6 +134,8 @@ class ProcessorConfig:
         return self.search_frame_size // 2
 
 class TaskStrategy:
+    def n_tasks(self):
+        raise NotImplementedError
     def task_generator(self):
         raise NotImplementedError
     def worker_function(self, args):
@@ -151,6 +153,9 @@ class PileupStrategyPlain:
         self.partitioned_pileup = partitioned_pileup
         self.bin_contig = bin_contig
         self.config = config
+
+    def n_tasks(self):
+        return len(self.partitioned_assembly) * len(nm.constants.MOD_CODE_TO_PRETTY)
 
     def task_generator(self, counter, lock):
         for bin_name in self.partitioned_assembly.keys():
@@ -205,6 +210,9 @@ class PileupStrategyBgzip:
         self.pileup_path = pileup_path
         self.bin_contig = bin_contig
         self.config = config
+
+    def n_tasks(self):
+        return len(self.partitioned_assembly)
 
     def task_generator(self, counter, lock):
         for bin_name in self.partitioned_assembly.keys():
@@ -337,8 +345,7 @@ class BinMotifProcessor:
 
         # Create a process for the progress bar
         log.debug("Counting number of tasks")
-        n_bins = len(self.config.bin_contig.get_column("bin").unique())
-        total_tasks = n_bins
+        total_tasks = self.task_strategy.n_tasks()
 
         log.debug("Starting progress bar")
         progress_bar_process = self.ctx.Process(target=update_progress_bar, args=(self.counter, total_tasks, True))
@@ -346,7 +353,6 @@ class BinMotifProcessor:
 
         # Put them workers to work
         log.debug("Starting workers")
-        chunksize = max(min(100, total_tasks // self.config.threads), 1)
         results = []
         for r in pool.imap_unordered(
             self.task_strategy.worker_function, 

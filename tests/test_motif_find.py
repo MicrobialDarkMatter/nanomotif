@@ -139,3 +139,23 @@ def test_process_subpileup_passes_thresholds_to_merge(tmp_path, monkeypatch):
     )
     assert seen.get("low_meth_threshold") == 0.2
     assert seen.get("high_meth_threshold") == 0.8
+
+
+def test_plain_strategy_task_count_matches_generator():
+    """The progress bar total must equal the number of tasks the generator accounts for
+    (yielded or skipped), otherwise it reports completion too early."""
+    import threading
+
+    class Counter:
+        value = 0
+
+    pileup, sequences = _bin1_a_inputs()
+    strategy = nm.find_motifs_bin.PileupStrategyPlain(
+        partitioned_assembly={"bin1": sequences, "bin2": sequences},
+        partitioned_pileup={("bin1", "a"): pileup},
+        bin_contig={"bin1": list(sequences), "bin2": list(sequences)},
+        config=None,
+    )
+    counter = Counter()
+    n_yielded = len(list(strategy.task_generator(counter, threading.Lock())))
+    assert n_yielded + counter.value == strategy.n_tasks()
