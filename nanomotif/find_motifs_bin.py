@@ -639,7 +639,8 @@ def find_best_candidates(
     methylation_sequences = None
     background_sequences = None
     os.makedirs(f"{output_dir}/temp/{bin_name}", exist_ok=True)
-    for contig in bin_pileup.get_column("contig").unique():
+    # sorted, so contigs draw their random background windows in the same order every run
+    for contig in bin_pileup.get_column("contig").unique().sort():
         subpileup_confident_contig = subpileup_confident.filter(pl.col("contig") == contig)
         contig_sequence = bin_sequences[contig]
         contig_length = len(contig_sequence)
@@ -842,6 +843,7 @@ def find_best_candidates(
     # Check if any high scoring candidates were found, best were not high scoring
     missed_candidates = motif_graph.get_missed_candidates(best_candidates, score_threshold)
     missed_candidates = [c for c in missed_candidates if not c.sub_motif_of_any(best_candidates) or not any(candidate.sub_motif_of(c)  for candidate in best_candidates)]
+    missed_candidates = sorted(missed_candidates, key=lambda c: (-motif_graph.nodes[c]["score"], c.string))
     log.debug(f"Found {len(missed_candidates)} missed candidates")
     for candidate in missed_candidates:
         best_candidates.append(candidate)

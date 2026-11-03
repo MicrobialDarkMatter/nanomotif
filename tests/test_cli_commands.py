@@ -114,3 +114,16 @@ def test_threshold_valid_coverage_is_used(tmp_path):
     # no position in the test pileup has this coverage, so nothing can be found
     motifs = _run_motif_discovery(tmp_path / "out", extra=["--threshold_valid_coverage", "100000"])
     assert len(motifs) == 0
+
+
+def test_motif_discovery_is_reproducible(tmp_path):
+    """Same seed, same intermediate results: the background sample depends on contig order."""
+    outputs = []
+    for i in range(3):
+        outdir = tmp_path / f"out{i}"
+        _run_motif_discovery(outdir, extra=["-t", "2"])
+        outputs.append(sorted(
+            (p.relative_to(outdir).as_posix(), p.read_text())
+            for p in outdir.rglob("*") if p.suffix in (".txt", ".tsv") and "logs" not in p.parts
+        ))
+    assert outputs[0] == outputs[1] == outputs[2]
