@@ -207,8 +207,8 @@ class PileupStrategyPlain(TaskStrategy):
     def worker_function(self, args):
         bin_name, modtype, assembly, bin_pileup = args
         if isinstance(bin_pileup, str):
-            # Arrow IPC file written by the builder, memory-mapped instead of sent through the pool
-            bin_pileup = pl.read_ipc(bin_pileup, memory_map=True)
+            # Arrow IPC file written by the builder, read instead of sent through the pool
+            bin_pileup = pl.read_ipc(bin_pileup)
         if assembly is None:
             assembly = load_bin_assembly(self.config.assembly_path, self.bin_contig[bin_name])
         profiler = start_profiler()
@@ -462,13 +462,13 @@ class BinMotifProcessorBuilder:
 
             pileup = pileup.join(self.config.bin_contig, left_on="contig", right_on="contig", how="inner")
 
-            # One Arrow IPC file per bin and mod type, read by the workers (memory-mapped)
+            # One Arrow IPC file per bin and mod type, read by the workers (lz4: the write is disk-bound)
             partition_dir = os.path.join(self.config.output_dir, "temp", "pileup_partitions")
             os.makedirs(partition_dir, exist_ok=True)
             partitioned_pileup = {}
             for i, ((bin_name, mod_type), part) in enumerate(pileup.partition_by(["bin", "mod_type"], as_dict=True).items()):
                 path = os.path.join(partition_dir, f"{i}.arrow")
-                part.write_ipc(path, compression="uncompressed")
+                part.write_ipc(path, compression="lz4")
                 partitioned_pileup[(bin_name, mod_type)] = path
             del pileup
             partitioned_assembly = self._partition_assembly()
