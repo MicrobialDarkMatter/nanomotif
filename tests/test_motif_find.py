@@ -186,3 +186,11 @@ def test_popcount_fallback():
     expected = sum(bin(int(w)).count("1") for w in words)
     assert nm.find_motifs_bin._popcount(words) == expected
     assert int(nm.find_motifs_bin._POPCOUNT_8[words.view(np.uint8)].sum()) == expected
+
+
+def test_kl_divergence_columns_matches_scipy():
+    from scipy.stats import entropy
+    rng = np.random.default_rng(7)
+    p = rng.random((4, 41)); q = rng.random((4, 41))
+    p[1, 3] = 0; q[2, 5] = 0
+    np.testing.assert_allclose(nm.find_motifs_bin.kl_divergence_columns(p, q), entropy(p, q), rtol=1e-12)

@@ -5,6 +5,10 @@ import re
 import random
 random.seed(2403)
 import nanomotif.utils as utils
+try:
+    import nanomotif_rs as _native
+except ImportError:
+    _native = None
 from nanomotif.constants import COMPLEMENT
 
 
@@ -517,6 +521,17 @@ class PackedDNAarray:
     def pssm(self):
         """Same as DNAarray.pssm: per position, the share of sequences that allow each base."""
         return np.stack([((self.masks >> i) & 1).sum(axis=0) for i in range(4)]) / self.masks.shape[0]
+
+    def filter_and_pssm(self, sequence, keep_matches=True):
+        """filter_sequence_matches and the PSSM of the result, in one pass with nanomotif_rs if installed."""
+        if _native is None:
+            result = self.filter_sequence_matches(sequence, keep_matches)
+            return result, None if result is None else result.pssm()
+        motif_mask = ((np.asarray(sequence) > 0).astype(np.uint8) @ (1 << np.arange(4, dtype=np.uint8))).astype(np.uint8)
+        masks, pssm = _native.filter_and_pssm(np.ascontiguousarray(self.masks), motif_mask, keep_matches)
+        if masks.shape[0] == 0:
+            return None, None
+        return PackedDNAarray(masks), pssm
 
 
 class DNAarray(np.ndarray):

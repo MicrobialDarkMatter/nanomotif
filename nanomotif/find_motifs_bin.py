@@ -1057,7 +1057,7 @@ class MotifSearcher:
         Yields:
             Motif: The next motif in the search.
         """
-        kl_divergence = entropy(meth_pssm, bin_pssm)
+        kl_divergence = kl_divergence_columns(meth_pssm, bin_pssm)
         split_motif = motif.split()
 
         # Positions to evaluate (positions with '.')
@@ -1184,7 +1184,7 @@ class MotifSearcher:
             rounds_since_new_best += 1
 
             # Filter sequences for this motif
-            active_methylation_sequences = self.methylation_sequences.filter_sequence_matches(
+            active_methylation_sequences, active_pssm = self.methylation_sequences.filter_and_pssm(
                 current_motif.one_hot(), keep_matches=True
             )
             if active_methylation_sequences is None:
@@ -1194,7 +1194,7 @@ class MotifSearcher:
             # Generate and evaluate neighbor motifs
             neighbors = list(self._motif_child_nodes_kl_dist_max(
                 current_motif,
-                active_methylation_sequences.pssm(),
+                active_pssm,
                 self.bin_pssm
             ))
 
@@ -1255,6 +1255,15 @@ class MotifSearcher:
 
 
 
+
+
+def kl_divergence_columns(pk: np.ndarray, qk: np.ndarray) -> np.ndarray:
+    """scipy.stats.entropy(pk, qk) along axis 0 (columns normalised to 1), without its per-call overhead."""
+    pk = pk / pk.sum(axis=0, keepdims=True)
+    qk = qk / qk.sum(axis=0, keepdims=True)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        terms = np.where(pk > 0, np.where(qk > 0, pk * np.log(pk / qk), np.inf), np.where(qk >= 0, 0.0, np.inf))
+    return terms.sum(axis=0)
 
 
 def count_periods_at_start(string: str) -> int:
