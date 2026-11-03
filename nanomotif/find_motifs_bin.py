@@ -71,6 +71,7 @@ class ProcessorConfig:
     seed: int
     output_dir: str
     verbose: bool = False
+    min_valid_coverage: int = 5
 
     def __post_init__(self):
         if self.assembly is None:
@@ -106,6 +107,9 @@ class ProcessorConfig:
         
         if self.threads <= 0:
             raise ValueError("threads must be greater than 0")
+
+        if self.min_valid_coverage < 0:
+            raise ValueError("min_valid_coverage must be >= 0")
 
         if self.search_frame_size <= 1:
             raise ValueError("search_frame_size must be greater than 1")
@@ -232,7 +236,7 @@ class PileupStrategyBgzip:
         log.debug(f"Loading pileup for {bin_name}")
         bin_pileup = nm.dataload.load_contigs_pileup_bgzip(self.pileup_path, self.bin_contig[bin_name])
         log.debug(f"Filtering pileup for {bin_name}")
-        bin_pileup = nm.dataload.filter_pileup(bin_pileup)
+        bin_pileup = nm.dataload.filter_pileup(bin_pileup, min_coverage=self.config.min_valid_coverage)
         if bin_pileup is None or len(bin_pileup) == 0:
             log.info(f"Bin {bin_name} has no pileup data after filtering, skipping")
             return None
@@ -400,7 +404,7 @@ class BinMotifProcessorBuilder:
             if pileup is None or len(pileup) == 0:
                 log.info(f"No pileup data after filtering, skipping")
                 return None
-            pileup = nm.dataload.filter_pileup(pileup)
+            pileup = nm.dataload.filter_pileup(pileup, min_coverage=self.config.min_valid_coverage)
             if pileup is None or len(pileup) == 0:
                 log.info(f"No pileup data after filtering, skipping")
                 return None

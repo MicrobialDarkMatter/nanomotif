@@ -79,13 +79,13 @@ def find_motifs_bin(args, pl, min_mods_pr_contig = 50, min_mod_frequency = 10000
         verbose = args.verbose,
         log_dir = args.out + "/logs",
         seed = args.seed,
-        output_dir = args.out
+        output_dir = args.out,
+        min_valid_coverage = args.threshold_valid_coverage
     )
-    motif_discovery_parralel = nm.find_motifs_bin.BinMotifProcessorBuilder(config)
-    if not motif_discovery_parralel:
-        log.error("No motifs were identified")
+    motif_discovery_parralel = nm.find_motifs_bin.BinMotifProcessorBuilder(config).build()
+    if motif_discovery_parralel is None:
+        log.info("No motifs were identified")
         return None
-    motif_discovery_parralel = motif_discovery_parralel.build()
     motifs = motif_discovery_parralel.run()
     if motifs is None or len(motifs) == 0:
         log.info("No motifs were identified")

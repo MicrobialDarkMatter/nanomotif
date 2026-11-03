@@ -68,3 +68,16 @@ def test_filter_pileup_adjacency_filter_more_groups():
     expected_positions_contig2 = [0,2,3,4]
     assert filtered.filter(pl.col("contig") == "contig1")["position"].to_list() == expected_positions_contig1
     assert filtered.filter(pl.col("contig") == "contig2")["position"].to_list() == expected_positions_contig2
+
+def test_filter_pileup_min_coverage_is_inclusive():
+    pileup = pl.DataFrame({
+        "contig": ["contig1"] * 4,
+        "position": [0, 1, 2, 3],
+        "mod_type": ["a"] * 4,
+        "strand": ["+"] * 4,
+        "fraction_mod": [0.9] * 4,
+        "Nvalid_cov": [4, 5, 6, 20]
+    })
+    assert nm.dataload.filter_pileup(pileup, min_coverage=5)["position"].to_list() == [1, 2, 3]
+    assert nm.dataload.filter_pileup(pileup, min_coverage=6)["position"].to_list() == [2, 3]
+

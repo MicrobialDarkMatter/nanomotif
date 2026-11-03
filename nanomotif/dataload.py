@@ -190,13 +190,12 @@ def load_assembly(path: str):
 
 def filter_pileup(
         pileup: pl.DataFrame,
-        min_modtype_fraction: float = 0.3,
         min_coverage: int = 5,
 ): 
     """
-    Filter pileup to only include positions with sufficient modification fraction and coverage
+    Filter pileup to only include positions with at least min_coverage valid reads (Nvalid_cov)
     """
-    pileup = pileup.filter(pl.col("Nvalid_cov") > min_coverage)
+    pileup = pileup.filter(pl.col("Nvalid_cov") >= min_coverage)
     return pileup
 
 def filter_pileup_minimummod_frequency(
