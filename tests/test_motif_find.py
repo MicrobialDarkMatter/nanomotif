@@ -119,3 +119,23 @@ def test_contig_without_usable_windows_does_not_discard_bin(tmp_path):
     assert result is not None
     _, best_candidates = result
     assert len(best_candidates) > 0
+
+
+def test_process_subpileup_passes_thresholds_to_merge(tmp_path, monkeypatch):
+    pileup, sequences = _bin1_a_inputs()
+    seen = {}
+    real_merge = nm.find_motifs_bin.merge_motifs_in_df
+
+    def spy(*args, **kwargs):
+        seen.update(kwargs)
+        return real_merge(*args, **kwargs)
+
+    monkeypatch.setattr(nm.find_motifs_bin, "merge_motifs_in_df", spy)
+    nm.find_motifs_bin.process_subpileup(
+        {"bin1": list(sequences)}, "a", pileup, sequences,
+        min_kl_divergence=0.05, padding=20,
+        low_meth_threshold=0.2, high_meth_threshold=0.8, score_threshold=1.5,
+        output_dir=str(tmp_path)
+    )
+    assert seen.get("low_meth_threshold") == 0.2
+    assert seen.get("high_meth_threshold") == 0.8

@@ -240,11 +240,11 @@ class PileupStrategyBgzip:
         if bin_pileup is None or len(bin_pileup) == 0:
             log.info(f"Bin {bin_name} has no pileup data after filtering, skipping")
             return None
-        bin_pileup = nm.dataload.filter_pileup_minimummod_frequency(bin_pileup)
+        bin_pileup = nm.dataload.filter_pileup_minimummod_frequency(bin_pileup, methylation_threshold=self.config.methylation_threshold_high)
         if bin_pileup is None or len(bin_pileup) == 0:
             log.info(f"Bin {bin_name} has no pileup data after filtering by minimum mod frequency, skipping")
             return None
-        bin_pileup = nm.dataload.filter_pileup_adjacency_filter(bin_pileup)
+        bin_pileup = nm.dataload.filter_pileup_adjacency_filter(bin_pileup, methylation_threshold=self.config.methylation_threshold_high)
         if bin_pileup is None or len(bin_pileup) == 0:
             log.info(f"Bin {bin_name} has no pileup data after adjacency filtering, skipping")
             return None
@@ -408,11 +408,11 @@ class BinMotifProcessorBuilder:
             if pileup is None or len(pileup) == 0:
                 log.info(f"No pileup data after filtering, skipping")
                 return None
-            pileup = nm.dataload.filter_pileup_minimummod_frequency(pileup)
+            pileup = nm.dataload.filter_pileup_minimummod_frequency(pileup, methylation_threshold=self.config.methylation_threshold_high)
             if pileup is None or len(pileup) == 0:
                 log.info(f"No pileup data after filtering by minimum mod frequency, skipping")
                 return None
-            pileup = nm.dataload.filter_pileup_adjacency_filter(pileup)
+            pileup = nm.dataload.filter_pileup_adjacency_filter(pileup, methylation_threshold=self.config.methylation_threshold_high)
             if pileup is None or len(pileup) == 0:
                 log.info(f"No pileup data after adjacency filtering, skipping")
                 return None
@@ -570,7 +570,10 @@ def process_subpileup(
     motifs.write_motifs(motifs_file_name + ".tsv")
 
     log.info(" - Merging motifs")
-    motifs = nm.find_motifs_bin.merge_motifs_in_df(motifs, bin_pileup, assembly, bin_contig)
+    motifs = nm.find_motifs_bin.merge_motifs_in_df(
+        motifs, bin_pileup, assembly, bin_contig,
+        low_meth_threshold=low_meth_threshold, high_meth_threshold=high_meth_threshold
+    )
     motifs = motifs.unique()
     if motifs.is_empty():
         log.info("No motifs found")

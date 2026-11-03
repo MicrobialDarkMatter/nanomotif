@@ -214,7 +214,7 @@ def filter_pileup_minimummod_frequency(
         .group_by("contig_mod") \
         .agg(
             n_positions=pl.count().alias("n_positions"),
-            n_mod_positions=(pl.col("fraction_mod") > methylation_threshold).sum()
+            n_mod_positions=(pl.col("fraction_mod") >= methylation_threshold).sum()
         ) \
         .filter((pl.col("n_mod_positions") / pl.col("n_positions")) > min_mod_frequency) \
         .filter(pl.col("n_mod_positions") > min_mods_pr_contig) \

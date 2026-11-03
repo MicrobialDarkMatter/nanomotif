@@ -81,3 +81,17 @@ def test_filter_pileup_min_coverage_is_inclusive():
     assert nm.dataload.filter_pileup(pileup, min_coverage=5)["position"].to_list() == [1, 2, 3]
     assert nm.dataload.filter_pileup(pileup, min_coverage=6)["position"].to_list() == [2, 3]
 
+
+
+def test_filter_pileup_minimummod_frequency_uses_threshold():
+    # 60 positions at 0.75: methylated at threshold 0.7 (inclusive), not at 0.8
+    pileup = pl.DataFrame({
+        "contig": ["contig1"] * 60,
+        "position": list(range(60)),
+        "mod_type": ["a"] * 60,
+        "strand": ["+"] * 60,
+        "fraction_mod": [0.75] * 60,
+        "Nvalid_cov": [10] * 60
+    })
+    assert len(nm.dataload.filter_pileup_minimummod_frequency(pileup, methylation_threshold=0.75)) == 60
+    assert len(nm.dataload.filter_pileup_minimummod_frequency(pileup, methylation_threshold=0.8)) == 0
