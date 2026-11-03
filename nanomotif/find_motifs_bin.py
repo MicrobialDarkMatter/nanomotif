@@ -526,12 +526,14 @@ def process_subpileup(
         return None
 
     # Find motifs
+    site_index = MotifSiteIndex(bin_pileup, bin_sequences, low_meth_threshold, high_meth_threshold, half_width=padding)
     candidates = find_best_candidates(
         bin_pileup, 
         bin_sequences, 
         modtype,
         bin_name,
         output_dir=output_dir,
+        site_index=site_index,
         low_meth_threshold=low_meth_threshold,
         high_meth_threshold=high_meth_threshold,
         padding=padding,
@@ -578,7 +580,8 @@ def process_subpileup(
     log.info(" - Merging motifs")
     motifs = nm.find_motifs_bin.merge_motifs_in_df(
         motifs, bin_pileup, assembly, bin_contig,
-        low_meth_threshold=low_meth_threshold, high_meth_threshold=high_meth_threshold
+        low_meth_threshold=low_meth_threshold, high_meth_threshold=high_meth_threshold,
+        site_index=site_index
     )
     motifs = motifs.unique()
     if motifs.is_empty():
@@ -630,11 +633,14 @@ def find_best_candidates(
         max_rounds_since_new_best: int = 30,
         score_threshold: float = 0.2,
         remaining_sequences_threshold: float = 0.001,
-        background_sampling_frequency: float = 0.01
+        background_sampling_frequency: float = 0.01,
+        site_index: Optional["MotifSiteIndex"] = None
     ) -> tuple[MotifTree, list[Motif]]:
     """
     Find the best motif candidates in a sequence.
     """
+    if site_index is None:
+        site_index = MotifSiteIndex(bin_pileup, bin_sequences, low_meth_threshold, high_meth_threshold, half_width=padding)
     subpileup_confident = bin_pileup.filter(pl.col("fraction_mod") >= high_meth_threshold)
     methylation_sequences = None
     background_sequences = None
@@ -724,7 +730,8 @@ def find_best_candidates(
             low_meth_threshold,
             motif_graph = motif_graph,
             min_kl = min_kl,
-            max_rounds_since_new_best = max_rounds_since_new_best
+            max_rounds_since_new_best = max_rounds_since_new_best,
+            site_index = site_index
         )
         motif_graph, naive_guess = searcher.run()
 
@@ -746,7 +753,8 @@ def find_best_candidates(
                 bin_pileup,
                 bin_sequences,
                 low_meth_threshold,
-                high_meth_threshold 
+                high_meth_threshold,
+                site_index=site_index
             )
             parent_scores = [d["score"] for d in parent_motif_scores.values()]
             mean_parent_score = np.mean(parent_scores)
@@ -875,7 +883,8 @@ class MotifSearcher:
         min_kl: float = 0.1,
         freq_threshold: float = 0.15,
         max_rounds_since_new_best: int = 30,
-        max_motif_length: int = 25
+        max_motif_length: int = 25,
+        site_index: Optional["MotifSiteIndex"] = None
     ):
         """
         Initialize the MotifSearcher class.
@@ -913,6 +922,9 @@ class MotifSearcher:
         self.max_motif_length = max_motif_length
         self.low_meth_threshold = low_meth_threshold
         self.high_meth_threshold = high_meth_threshold
+        self.site_index = site_index or MotifSiteIndex(
+            bin_pileup, bin_sequence, low_meth_threshold, high_meth_threshold, half_width=padding
+        )
 
     def _priority_function(self, next_model, root_model) -> float:
         """
@@ -1048,14 +1060,7 @@ class MotifSearcher:
         """
         # Initialize variables
         best_guess = self.root_motif
-        root_model = motif_model_bin(
-            pileup=self.bin_pileup,
-            contigs=self.bin_sequence,
-            motif=self.root_motif,
-            model=BetaBernoulliModel(),
-            low_meth_threshold=self.low_meth_threshold,
-            high_meth_threshold=self.high_meth_threshold,
-        )
+        root_model = self.site_index.model(self.root_motif)
 
         best_score = self._scoring_function_predictive_evaluation(root_model, root_model)
         rounds_since_new_best = 0
@@ -1141,14 +1146,7 @@ class MotifSearcher:
 
                 # Build model for the next motif
                 if next_motif not in self.motif_graph.nodes:
-                    next_model = motif_model_bin(
-                        pileup=self.bin_pileup,
-                        contigs=self.bin_sequence,
-                        motif=next_motif,
-                        model=BetaBernoulliModel(),
-                        low_meth_threshold=self.low_meth_threshold,
-                        high_meth_threshold=self.high_meth_threshold,
-                    )
+                    next_model = self.site_index.model(next_motif)
                 else:
                     next_model = self.motif_graph.nodes[next_motif]["model"]
 
@@ -1278,6 +1276,87 @@ def methylated_motif_occourances(
 
     return meth_occurences, nonmeth_occurences
 
+class MotifSiteIndex:
+    """
+    Sequence windows around the confidently methylated and unmethylated positions of a bin,
+    for counting a motif's methylated and unmethylated occurrences without scanning the contigs.
+
+    motif_model_contig finds all occurrences of a motif with a regex over the whole contig and then
+    intersects them with the methylated and unmethylated positions. Here the motif is instead tested at
+    those positions only, against the +-half_width bases around each (one array gather per fixed motif
+    position). The counts are the same; a motif that does not fit in the window is counted with
+    motif_model_contig.
+    """
+    def __init__(self, pileup: pl.DataFrame, contigs: dict, low_meth_threshold: float, high_meth_threshold: float,
+                 half_width: int = 20):
+        self.pileup = pileup
+        self.contigs = contigs
+        self.low_meth_threshold = low_meth_threshold
+        self.high_meth_threshold = high_meth_threshold
+        self.half_width = half_width
+        offsets = np.arange(-half_width, half_width + 1)
+        windows = {(strand, meth): [] for strand in "+-" for meth in (True, False)}
+        sites = pileup.filter(
+            (pl.col("fraction_mod") >= high_meth_threshold) | (pl.col("fraction_mod") <= low_meth_threshold)
+        ).select("contig", "position", "strand", (pl.col("fraction_mod") >= high_meth_threshold).alias("methylated"))
+        for (contig,), contig_sites in sites.partition_by("contig", as_dict=True).items():
+            if contig not in contigs:
+                continue
+            sequence = np.frombuffer(contigs[contig].sequence.encode("ascii"), dtype=np.uint8)
+            # 0 marks positions outside the contig; it matches no motif base, not even "."
+            padded = np.concatenate([np.zeros(half_width, np.uint8), sequence, np.zeros(half_width, np.uint8)])
+            positions = contig_sites.get_column("position").to_numpy()
+            on_contig = (positions >= 0) & (positions < len(sequence))
+            for strand in "+-":
+                for meth in (True, False):
+                    keep = on_contig \
+                        & (contig_sites.get_column("strand").to_numpy() == strand) \
+                        & (contig_sites.get_column("methylated").to_numpy() == meth)
+                    windows[(strand, meth)].append(padded[positions[keep, None] + half_width + offsets])
+        width = 2 * half_width + 1
+        self.windows = {
+            key: np.concatenate(w) if w else np.empty((0, width), np.uint8) for key, w in windows.items()
+        }
+
+    def _count(self, windows: np.ndarray, motif: Motif) -> int:
+        """Number of windows in which the (stripped) motif occurs with its modified base at the centre."""
+        candidates = None
+        for i, token in enumerate(motif.split()):
+            if token == ".":
+                continue
+            allowed = np.zeros(256, dtype=bool)
+            allowed[[ord(c) for c in token.strip("[]")]] = True
+            column = windows[:, self.half_width - motif.mod_position + i] if candidates is None \
+                else windows[candidates, self.half_width - motif.mod_position + i]
+            hit = allowed[column]
+            candidates = np.flatnonzero(hit) if candidates is None else candidates[hit]
+            if len(candidates) == 0:
+                return 0
+        return int(len(candidates)) if candidates is not None else len(windows)
+
+    def counts(self, motif: Motif) -> tuple:
+        """(methylated, unmethylated) occurrences of the motif at the indexed positions."""
+        stripped = motif.new_stripped_motif()
+        reverse = stripped.reverse_compliment()
+        length = stripped.length()
+        if max(stripped.mod_position, length - 1 - stripped.mod_position) > self.half_width:
+            model = BetaBernoulliModel(0, 0)
+            for contig, contig_sequence in self.contigs.items():
+                model = motif_model_contig(
+                    self.pileup.filter(pl.col("contig") == contig), contig_sequence.sequence, model, motif,
+                    low_meth_threshold=self.low_meth_threshold, high_meth_threshold=self.high_meth_threshold
+                )
+            return model._alpha, model._beta
+        n_meth = self._count(self.windows[("+", True)], stripped) + self._count(self.windows[("-", True)], reverse)
+        n_nonmeth = self._count(self.windows[("+", False)], stripped) + self._count(self.windows[("-", False)], reverse)
+        return n_meth, n_nonmeth
+
+    def model(self, motif: Motif, model=None):
+        """Same result as motif_model_bin(pileup, contigs, motif, model, low, high)."""
+        model = BetaBernoulliModel() if model is None else model
+        model.update(*self.counts(motif))
+        return model
+
 def motif_model_bin(
         pileup,
         contigs: dict[str, DNAsequence],
@@ -1401,6 +1480,7 @@ def get_parent_scores(
         contigs: dict[str, DNAsequence],
         low_meth_threshold: float,
         high_meth_threshold: float,
+        site_index: Optional["MotifSiteIndex"] = None,
     ):
     """
     Get the scores for all parent motifs of a motif.
@@ -1413,14 +1493,9 @@ def get_parent_scores(
     Returns:
     - dict: A dictionary of parent motifs and their scores.
     """
-    motif_model = motif_model_bin(
-        pileup=pileup,
-        contigs=contigs,
-        motif=motif,
-        model=BetaBernoulliModel(),
-        low_meth_threshold=low_meth_threshold,
-        high_meth_threshold=high_meth_threshold,
-    )
+    if site_index is None:
+        site_index = MotifSiteIndex(pileup, contigs, low_meth_threshold, high_meth_threshold)
+    motif_model = site_index.model(motif)
     motif_split = motif.split()
 
     parent_motifs = {}
@@ -1431,14 +1506,7 @@ def get_parent_scores(
             new_motif = motif_split.copy()
             new_motif[i] = "."
             parent_motif = Motif("".join(new_motif), motif.mod_position)
-            parent_model = motif_model_bin(
-                pileup=pileup,
-                contigs=contigs,
-                motif=parent_motif,
-                model=BetaBernoulliModel(),
-                low_meth_threshold=low_meth_threshold,
-                high_meth_threshold=high_meth_threshold,
-            )
+            parent_model = site_index.model(parent_motif)
             score = predictive_evaluation_score(motif_model, parent_model)
             parent_motifs[parent_motif] = dict(
                 motif_position=i,
@@ -1449,14 +1517,27 @@ def get_parent_scores(
     return parent_motifs
     
 
-def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshold=0.3, high_meth_threshold=0.7, merge_threshold = 0.5):
+def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshold=0.3, high_meth_threshold=0.7, merge_threshold = 0.5,
+                       site_index=None):
+    """
+    site_index: MotifSiteIndex of the bin's pileup, used when motif_df holds a single bin and mod type
+    """
     new_df = []
-    for (bin_name, mod_type), df in motif_df.group_by("reference", "mod_type"):
+    groups = motif_df.group_by("reference", "mod_type")
+    single_group = motif_df.select("reference", "mod_type").n_unique() == 1
+    for (bin_name, mod_type), df in groups:
         contigs = contig_bin[bin_name]
         log.debug(f"Merging motifs of bin: {bin_name}, modtype: {mod_type}")
         
         # Create dictionary of bin contigs to sequence
         bin_sequences = {contig: assembly[contig] for contig in contigs}
+        if site_index is not None and single_group:
+            group_index = site_index
+        else:
+            group_index = MotifSiteIndex(
+                pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)),
+                bin_sequences, low_meth_threshold, high_meth_threshold
+            )
 
           
         # Get list of motifs
@@ -1475,25 +1556,11 @@ def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshol
                 all_merged_motifs.append(merged_motif)
                 all_premerge_motifs.extend(premerge_motifs)
                 continue
-            merge_model = motif_model_bin(
-                pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)), 
-                bin_sequences,
-                merged_motif,
-                BetaBernoulliModel(),
-                low_meth_threshold=low_meth_threshold,
-                high_meth_threshold=high_meth_threshold
-            )
+            merge_model = group_index.model(merged_motif)
 
             premerge_motif_variants_model = BetaBernoulliModel()
             for premerge_motif_variant in premerge_motif_variants:
-                premerge_motif_variants_model = motif_model_bin(
-                    pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)),
-                    bin_sequences,
-                    premerge_motif_variant,
-                    premerge_motif_variants_model,
-                    low_meth_threshold=low_meth_threshold,
-                    high_meth_threshold=high_meth_threshold
-                )
+                premerge_motif_variants_model = group_index.model(premerge_motif_variant, premerge_motif_variants_model)
             merge_score = predictive_evaluation_score(premerge_motif_variants_model, merge_model)
             if merge_score < merge_threshold:
                 log.debug(f"Merging motifs {premerge_motifs} to {merged_motif}, merge score: {merge_score}")
@@ -1516,20 +1583,14 @@ def merge_motifs_in_df(motif_df, pileup, assembly, contig_bin, low_meth_threshol
         new_df.append(single_df)
         merged_df = []
         for motif in all_merged_motifs:
-            merged_model = motif_model_bin(
-                pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)), 
-                bin_sequences,
-                motif,
-                BetaBernoulliModel(),
-                low_meth_threshold=low_meth_threshold,
-                high_meth_threshold=high_meth_threshold
-            )
+            merged_model = group_index.model(motif)
             merged_model_parents = get_parent_scores(
                 motif,
                 pileup.filter((col("contig").is_in(contigs)) & (col("mod_type") == mod_type)),
                 bin_sequences,
                 low_meth_threshold,
-                high_meth_threshold
+                high_meth_threshold,
+                site_index=group_index
             )
             if len(merged_model_parents) > 0:   
                 merged_score = np.mean([d["score"] for d in merged_model_parents.values()])

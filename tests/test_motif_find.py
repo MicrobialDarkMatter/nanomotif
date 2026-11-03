@@ -159,3 +159,22 @@ def test_plain_strategy_task_count_matches_generator():
     counter = Counter()
     n_yielded = len(list(strategy.task_generator(counter, threading.Lock())))
     assert n_yielded + counter.value == strategy.n_tasks()
+
+
+def test_motif_site_index_matches_regex_counts():
+    """MotifSiteIndex must give the counts of motif_model_bin (regex over the contigs)."""
+    import random
+    from nanomotif.model import BetaBernoulliModel
+    pileup, sequences = _bin1_a_inputs()
+    index = nm.find_motifs_bin.MotifSiteIndex(pileup, sequences, 0.3, 0.7, half_width=20)
+    random.seed(0)
+    motifs = [Motif("GATC", 1), Motif("..GAATTC..", 4), Motif("A", 0), Motif("[AG]GATC[CT]", 2),
+              Motif("A" + "." * 25 + "GATC", 0)]  # the last does not fit in the window
+    for _ in range(40):
+        left = "".join(random.choice(["A", "C", "G", "T", ".", "[AG]", "N"]) for _ in range(random.randint(0, 5)))
+        right = "".join(random.choice(["A", "C", "G", "T", ".", "[CT]"]) for _ in range(random.randint(0, 5)))
+        motifs.append(Motif("." * 20 + left + "A" + right + "." * 20, 20 + len(Motif(left, 0).split())))
+    for motif in motifs:
+        expected = nm.find_motifs_bin.motif_model_bin(pileup, sequences, motif, BetaBernoulliModel(), 0.3, 0.7)
+        got = index.model(motif)
+        assert (got._alpha, got._beta) == (expected._alpha, expected._beta), motif
