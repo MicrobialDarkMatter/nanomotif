@@ -641,13 +641,16 @@ def find_best_candidates(
     """
     if site_index is None:
         site_index = MotifSiteIndex(bin_pileup, bin_sequences, low_meth_threshold, high_meth_threshold, half_width=padding)
-    subpileup_confident = bin_pileup.filter(pl.col("fraction_mod") >= high_meth_threshold)
-    methylation_sequences = None
-    background_sequences = None
+    subpileup_confident = bin_pileup.filter(pl.col("fraction_mod") >= high_meth_threshold) \
+        .partition_by("contig", as_dict=True)
+    no_sites = bin_pileup.clear()
+    # collected as lists and turned into sets once: adding EqualLengthDNASets re-validates everything so far
+    methylation_sequences = []
+    background_sequences = []
     os.makedirs(f"{output_dir}/temp/{bin_name}", exist_ok=True)
     # sorted, so contigs draw their random background windows in the same order every run
     for contig in bin_pileup.get_column("contig").unique().sort():
-        subpileup_confident_contig = subpileup_confident.filter(pl.col("contig") == contig)
+        subpileup_confident_contig = subpileup_confident.get((contig,), no_sites)
         contig_sequence = bin_sequences[contig]
         contig_length = len(contig_sequence)
         n_samples = int(max(math.ceil(contig_length * background_sampling_frequency), 50))
@@ -661,10 +664,7 @@ def find_best_candidates(
             padding * 2 + 1, n_samples, base=MOD_TYPE_TO_CANONICAL[mod_type]
         )
 
-        if background_sequences is None:
-            background_sequences = contig_sequences_sample
-        else:
-            background_sequences = background_sequences + contig_sequences_sample.sequences
+        background_sequences += contig_sequences_sample.sequences
 
         log.debug(f"Extracting {len(index_plus)} + strand and {len(index_minus)} - strand methylation sequences from {contig}")
         methylation_sequences_string = []
@@ -679,15 +679,13 @@ def find_best_candidates(
         if len(methylation_sequences_string) == 0:
             log.debug(f"No methylation sequences found in {contig}")
             continue
-        methylation_sequences_contig = EqualLengthDNASet(methylation_sequences_string)
-        if methylation_sequences is None:
-            methylation_sequences = methylation_sequences_contig
-        else:
-            methylation_sequences = methylation_sequences + methylation_sequences_contig
+        methylation_sequences += methylation_sequences_string
     # Convert methylation sequences to DNAarray
-    if methylation_sequences is None or len(methylation_sequences.sequences) == 0:
+    if len(methylation_sequences) == 0:
         log.info("No methylation sequences found")
         return None
+    methylation_sequences = EqualLengthDNASet(methylation_sequences)
+    background_sequences = EqualLengthDNASet(background_sequences) if background_sequences else None
     with open(f"{output_dir}/temp/{bin_name}/methylation_sequences_{mod_type}.fasta", "w") as f:
         for i, seq in enumerate(methylation_sequences.sequences):
             f.write(f">methylation_seq_{i}\n{seq.sequence}\n")

@@ -220,10 +220,8 @@ class DNAsequence:
         mid_offset = length // 2
 
         # Collect valid start positions where the middle base is 'C'
-        valid_starts = [
-            s for s in range(max_start)
-            if self.sequence[s + mid_offset] == base
-        ]
+        codes = np.frombuffer(self.sequence.encode("ascii"), dtype=np.uint8)
+        valid_starts = np.flatnonzero(codes[mid_offset:mid_offset + max_start] == ord(base)).tolist()
 
         if len(valid_starts) < n:
             raise ValueError(f"Not enough subsequences with 'C' in the middle (found {len(valid_starts)}, need {n})")
@@ -419,18 +417,9 @@ class EqualLengthDNASet:
             bases = self.sequences[0].iupac
 
         n = len(self.sequences)
-
-        pssm = []
-        for nuc in bases:
-            pssm_nuc = []
-            for i in range(self.sequence_length):
-                count = 0
-                for seq in self.sequences:
-                    if seq[i] == nuc:
-                        count += 1
-                pssm_nuc.append((count + pseudocount)/n)
-            pssm.append(pssm_nuc)
-        return np.array(pssm)
+        codes = np.frombuffer("".join(seq.sequence for seq in self.sequences).encode("ascii"), dtype=np.uint8) \
+            .reshape(n, self.sequence_length)
+        return np.array([((codes == ord(nuc)).sum(axis=0) + pseudocount) / n for nuc in bases])
 
     def kl_divergence(self, pssm):
         """
@@ -486,7 +475,12 @@ class EqualLengthDNASet:
         """
         Convert EqualLengthDNASet to DNAarray
         """
-        return DNAarray([[DNAsequence.base_to_vector[base] for base in sequence] for sequence in self.sequences])
+        lookup = np.zeros((256, 4), dtype=int)
+        for base, vector in DNAsequence.base_to_vector.items():
+            lookup[ord(base)] = vector
+        codes = np.frombuffer("".join(seq.sequence for seq in self.sequences).encode("ascii"), dtype=np.uint8) \
+            .reshape(len(self.sequences), self.sequence_length)
+        return DNAarray(lookup[codes])
 
 class DNAarray(np.ndarray):
     """

@@ -125,3 +125,26 @@ def test_sample_at_indices_bounds():
     assert [s.sequence for s in sampled.sequences] == [seq.sequence[i - 2:i + 3] for i in range(2, 8)]
     with pytest.raises(ValueError):
         seq.sample_at_index(8, 2)
+
+
+def test_pssm_and_array_match_per_base_counts():
+    import random
+    from nanomotif.seq import DNAsequence, EqualLengthDNASet
+    random.seed(3)
+    seqs = EqualLengthDNASet([DNAsequence("".join(random.choice("ACGTNR") for _ in range(9))) for _ in range(50)])
+    pssm = seqs.pssm()
+    for b, base in enumerate(DNAsequence.bases):
+        for i in range(9):
+            assert pssm[b, i] == sum(s.sequence[i] == base for s in seqs.sequences) / 50
+    arr = seqs.convert_to_DNAarray()
+    assert arr.tolist() == [[DNAsequence.base_to_vector[c] for c in s.sequence] for s in seqs.sequences]
+
+
+def test_sample_n_subsequences_unique_centres_on_base():
+    import random
+    from nanomotif.seq import DNAsequence
+    random.seed(4)
+    seq = DNAsequence("".join(random.choice("ACGT") for _ in range(500)))
+    sample = seq.sample_n_subsequences_unique(41, 30, base="A")
+    assert all(s.sequence[20] == "A" for s in sample.sequences)
+    assert len({s.sequence for s in sample.sequences}) == 30
