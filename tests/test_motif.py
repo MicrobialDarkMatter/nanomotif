@@ -345,3 +345,22 @@ def test_column_order_is_enforced_complementary():
     assert all(col in msr.columns for col in required_order)
     # Check that required columns come first
     assert msr.columns[:len(required_order)] == required_order
+
+
+def test_isolated_bases_see_last_position():
+    # A's only neighbour is the final base C, so A is not isolated
+    assert not Motif("..AC", 2).have_isolated_bases(isolation_size=1)
+    assert Motif("G.AC", 3).count_isolated_bases(isolation_size=1) == 1
+    assert Motif("A..C", 0).count_isolated_bases(isolation_size=1) == 2
+
+
+def test_remove_noisy_motifs_when_all_are_noisy():
+    motifs = nm.motif.MotifSearchResult(pl.DataFrame({
+        "motif": ["A.....C", "G.....T"],
+        "mod_position": [0, 0],
+        "reference": ["bin1", "bin1"],
+        "mod_type": ["a", "a"],
+        "model": [BetaBernoulliModel(), BetaBernoulliModel()],
+        "score": [2.0, 2.0],
+    }))
+    assert nm.postprocess.remove_noisy_motifs(motifs).is_empty()
