@@ -5,6 +5,7 @@ import os
 from polars import col
 import logging as log
 import itertools
+import copy
 from itertools import count
 from itertools import takewhile
 from scipy.stats import entropy
@@ -134,6 +135,18 @@ class ProcessorConfig:
         return self.search_frame_size // 2
 
 class TaskStrategy:
+    # The pool pickles worker_function, and with it the strategy, for every task. Workers get their
+    # bin's data in the task itself, so the partitions and the full assembly are left out.
+    _not_sent_to_workers = ("partitioned_assembly", "partitioned_pileup")
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        for name in self._not_sent_to_workers:
+            state[name] = None
+        state["config"] = copy.copy(self.config)
+        state["config"].assembly = None
+        return state
+
     def n_tasks(self):
         raise NotImplementedError
     def task_generator(self):
@@ -141,7 +154,7 @@ class TaskStrategy:
     def worker_function(self, args):
         raise NotImplementedError
 
-class PileupStrategyPlain:
+class PileupStrategyPlain(TaskStrategy):
     def __init__(
             self, 
             partitioned_assembly,
@@ -198,7 +211,7 @@ class PileupStrategyPlain:
         stop_profiler(profiler, f"{bin_name}_worker_{process_id}_{modtype}", f"{self.config.output_dir}/profiles")
         return result
     
-class PileupStrategyBgzip:
+class PileupStrategyBgzip(TaskStrategy):
     def __init__(
             self, 
             partitioned_assembly,
