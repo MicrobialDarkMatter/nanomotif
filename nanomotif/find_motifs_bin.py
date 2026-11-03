@@ -30,6 +30,10 @@ from typing import Generator, Optional, List, Tuple
 from dataclasses import dataclass
 import pysam
 import pyfastx
+try:
+    import nanomotif_rs
+except ImportError:
+    nanomotif_rs = None
 import shutil
 import sys
 import subprocess
@@ -170,7 +174,7 @@ class PileupStrategyPlain(TaskStrategy):
     def __init__(
             self, 
             partitioned_assembly,
-            partitioned_pileup: dict[Tuple[str, str], pl.DataFrame],
+            partitioned_pileup: dict,
             bin_contig: dict[str, list[str]],
             config: ProcessorConfig
         ):
@@ -183,9 +187,10 @@ class PileupStrategyPlain(TaskStrategy):
         return len(self.partitioned_assembly) * len(nm.constants.MOD_CODE_TO_PRETTY)
 
     def cleanup(self):
-        for path in self.partitioned_pileup.values():
-            if isinstance(path, str) and os.path.exists(path):
-                os.remove(path)
+        for paths in self.partitioned_pileup.values():
+            for path in paths if isinstance(paths, list) else []:
+                if os.path.exists(path):
+                    os.remove(path)
 
     def task_generator(self, counter, lock):
         for bin_name in self.partitioned_assembly.keys():
@@ -206,9 +211,9 @@ class PileupStrategyPlain(TaskStrategy):
 
     def worker_function(self, args):
         bin_name, modtype, assembly, bin_pileup = args
-        if isinstance(bin_pileup, str):
-            # Arrow IPC file written by the builder, read instead of sent through the pool
-            bin_pileup = pl.read_ipc(bin_pileup)
+        if isinstance(bin_pileup, list):
+            # Arrow IPC files written by the builder, read instead of sent through the pool
+            bin_pileup = pl.concat([pl.read_ipc(path, memory_map=False) for path in bin_pileup])
         if assembly is None:
             assembly = load_bin_assembly(self.config.assembly_path, self.bin_contig[bin_name])
         profiler = start_profiler()
@@ -442,35 +447,24 @@ class BinMotifProcessorBuilder:
                 config=self.config,
             )
         else:
-            log.warning("Pileup is not bgzipped, loading full pileup into memory.")
-            pileup = nm.dataload.load_pileup(
-                pileup_path,
-                min_coverage=self.config.min_valid_coverage,
-                contigs=self.config.bin_contig.get_column("contig").to_list()
-            )
-            if pileup is None or len(pileup) == 0:
-                log.info(f"No pileup data after filtering, skipping")
-                return None
-            pileup = nm.dataload.filter_pileup_minimummod_frequency(pileup, methylation_threshold=self.config.methylation_threshold_high)
-            if pileup is None or len(pileup) == 0:
-                log.info(f"No pileup data after filtering by minimum mod frequency, skipping")
-                return None
-            pileup = nm.dataload.filter_pileup_adjacency_filter(pileup, methylation_threshold=self.config.methylation_threshold_high)
-            if pileup is None or len(pileup) == 0:
-                log.info(f"No pileup data after adjacency filtering, skipping")
-                return None
-
-            pileup = pileup.join(self.config.bin_contig, left_on="contig", right_on="contig", how="inner")
-
-            # One Arrow IPC file per bin and mod type, read by the workers (lz4: the write is disk-bound)
+            # One lz4 Arrow IPC file (or several) per bin and mod type, read by the workers
             partition_dir = os.path.join(self.config.output_dir, "temp", "pileup_partitions")
             os.makedirs(partition_dir, exist_ok=True)
-            partitioned_pileup = {}
-            for i, ((bin_name, mod_type), part) in enumerate(pileup.partition_by(["bin", "mod_type"], as_dict=True).items()):
-                path = os.path.join(partition_dir, f"{i}.arrow")
-                part.write_ipc(path, compression="lz4")
-                partitioned_pileup[(bin_name, mod_type)] = path
-            del pileup
+            if nanomotif_rs is not None:
+                log.info("Partitioning the pileup (streaming, nanomotif_rs)")
+                partitioned_pileup = nanomotif_rs.partition_pileup(
+                    pileup_path,
+                    dict(self.config.bin_contig.select("contig", "bin").iter_rows()),
+                    partition_dir,
+                    min_coverage=self.config.min_valid_coverage,
+                    threshold=self.config.methylation_threshold_high,
+                    threads=self.config.threads,
+                )
+            else:
+                partitioned_pileup = self._partition_plain_python(pileup_path, partition_dir)
+            if not partitioned_pileup:
+                log.info(f"No pileup data after filtering, skipping")
+                return None
             partitioned_assembly = self._partition_assembly()
             strategy = PileupStrategyPlain(
                 partitioned_assembly=partitioned_assembly,
@@ -480,6 +474,24 @@ class BinMotifProcessorBuilder:
             )
 
         return BinMotifProcessor(task_strategy=strategy, config=self.config)
+
+    def _partition_plain_python(self, pileup_path, partition_dir):
+        """Pure-Python version of nanomotif_rs.partition_pileup: load the whole pileup, filter, split."""
+        log.warning("Pileup is not bgzipped and nanomotif_rs is not installed, loading full pileup into memory.")
+        pileup = nm.dataload.load_pileup(
+            pileup_path,
+            min_coverage=self.config.min_valid_coverage,
+            contigs=self.config.bin_contig.get_column("contig").to_list()
+        )
+        pileup = nm.dataload.filter_pileup_minimummod_frequency(pileup, methylation_threshold=self.config.methylation_threshold_high)
+        pileup = nm.dataload.filter_pileup_adjacency_filter(pileup, methylation_threshold=self.config.methylation_threshold_high)
+        pileup = pileup.join(self.config.bin_contig, left_on="contig", right_on="contig", how="inner")
+        partitioned_pileup = {}
+        for i, ((bin_name, mod_type), part) in enumerate(pileup.partition_by(["bin", "mod_type"], as_dict=True).items()):
+            path = os.path.join(partition_dir, f"{i}.arrow")
+            part.write_ipc(path, compression="lz4")
+            partitioned_pileup[(bin_name, mod_type)] = [path]
+        return partitioned_pileup
 
     def _partition_assembly(self):
         if self.config.assembly_path:

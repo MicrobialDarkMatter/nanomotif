@@ -197,3 +197,7 @@ pyrightconfigt.json
 nanomotif/datasets/*.duplicated.*
 nanomotif/datasets/*.tmp.tsv
 tests/cli_test_*/
+
+# Rust build output
+rust/target/
+rust/Cargo.lock
