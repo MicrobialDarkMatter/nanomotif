@@ -82,3 +82,40 @@ def test_get_motif_parental_relationships():
     ])
     relationships = set(nm.postprocess.get_motif_parental_relationship(motifs))
     assert relationships == expected_relationships
+
+def _bin1_a_inputs():
+    pileup = nm.datasets.geobacillus_plasmids_pileup()
+    pileup = nm.dataload.filter_pileup(pileup)
+    pileup = nm.dataload.filter_pileup_minimummod_frequency(pileup)
+    pileup = nm.dataload.filter_pileup_adjacency_filter(pileup)
+    pileup = pileup.filter(pl.col("mod_type") == "a")
+    assembly = nm.datasets.geobacillus_plasmids_assembly()
+    sequences = {c: assembly[c] for c in pileup.get_column("contig").unique().to_list()}
+    return pileup, sequences
+
+
+def test_contig_without_usable_windows_does_not_discard_bin(tmp_path):
+    """A contig whose methylated positions are all too close to its ends to extract a
+    search window must be skipped, not end the search for the whole bin."""
+    pileup, sequences = _bin1_a_inputs()
+    rng = np.random.default_rng(1)
+    edge_seq = "".join(rng.choice(list("ACGT"), 400))
+    sequences["edge_contig"] = DNAsequence(edge_seq)
+    edge_positions = [i for i in range(15) if edge_seq[i] == "A"]
+    edge_rows = pl.DataFrame({
+        "contig": "edge_contig",
+        "position": edge_positions,
+        "mod_type": "a",
+        "strand": "+",
+        "fraction_mod": 0.95,
+        "Nvalid_cov": 20,
+    }).cast(pileup.schema)
+    pileup = pl.concat([pileup, edge_rows])
+
+    result = nm.find_motifs_bin.find_best_candidates(
+        pileup, sequences, "a", "bin1", output_dir=str(tmp_path),
+        low_meth_threshold=0.3, high_meth_threshold=0.7, padding=20, min_kl=0.05
+    )
+    assert result is not None
+    _, best_candidates = result
+    assert len(best_candidates) > 0

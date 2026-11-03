@@ -644,9 +644,6 @@ def find_best_candidates(
         contig_sequences_sample = contig_sequence.sample_n_subsequences_unique(
             padding * 2 + 1, n_samples, base=MOD_TYPE_TO_CANONICAL[mod_type]
         )
-        with open (f"{output_dir}/temp/{bin_name}/background_sequences.fasta", "w") as f:
-            for i, seq in enumerate(contig_sequences_sample.sequences):
-                f.write(f">{contig}_background_seq_{i}\n{seq.sequence}\n")
 
         if background_sequences is None:
             background_sequences = contig_sequences_sample
@@ -664,12 +661,9 @@ def find_best_candidates(
             if methylation_sequences_temp is not None:
                 methylation_sequences_string += methylation_sequences_temp.reverse_compliment().sequences
         if len(methylation_sequences_string) == 0:
-            log.info("No methylation sequences found")
-            return None
+            log.debug(f"No methylation sequences found in {contig}")
+            continue
         methylation_sequences_contig = EqualLengthDNASet(methylation_sequences_string)
-        with open (f"{output_dir}/temp/{bin_name}/methylation_sequences_{mod_type}.fasta", "w") as f:
-            for i, seq in enumerate(methylation_sequences_contig.sequences):
-                f.write(f">{contig}_methylation_seq_{i}\n{seq.sequence}\n")
         if methylation_sequences is None:
             methylation_sequences = methylation_sequences_contig
         else:
@@ -678,6 +672,13 @@ def find_best_candidates(
     if methylation_sequences is None or len(methylation_sequences.sequences) == 0:
         log.info("No methylation sequences found")
         return None
+    with open(f"{output_dir}/temp/{bin_name}/methylation_sequences_{mod_type}.fasta", "w") as f:
+        for i, seq in enumerate(methylation_sequences.sequences):
+            f.write(f">methylation_seq_{i}\n{seq.sequence}\n")
+    if background_sequences is not None:
+        with open(f"{output_dir}/temp/{bin_name}/background_sequences_{mod_type}.fasta", "w") as f:
+            for i, seq in enumerate(background_sequences.sequences):
+                f.write(f">background_seq_{i}\n{seq.sequence}\n")
     methylation_sequences = methylation_sequences.convert_to_DNAarray()
     total_seqs = methylation_sequences.shape[0]
 
@@ -687,7 +688,7 @@ def find_best_candidates(
         return None
 
     bin_pssm = background_sequences.pssm()
-    np.savetxt(f"{output_dir}/temp/{bin_name}/background_pssm.txt", bin_pssm, fmt="%.4f")
+    np.savetxt(f"{output_dir}/temp/{bin_name}/background_pssm_{mod_type}.txt", bin_pssm, fmt="%.4f")
 
     root_motif = Motif("." * padding + MOD_TYPE_TO_CANONICAL[mod_type] + "." * padding, padding)
     methylation_sequences_clone = methylation_sequences.copy()
