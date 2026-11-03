@@ -842,7 +842,7 @@ def find_best_candidates(
         return None
     # Check if any high scoring candidates were found, best were not high scoring
     missed_candidates = motif_graph.get_missed_candidates(best_candidates, score_threshold)
-    missed_candidates = [c for c in missed_candidates if not c.sub_motif_of_any(best_candidates) or not any(candidate.sub_motif_of(c)  for candidate in best_candidates)]
+    missed_candidates = [c for c in missed_candidates if not c.sub_motif_of_any(best_candidates) and not any(candidate.sub_motif_of(c) for candidate in best_candidates)]
     missed_candidates = sorted(missed_candidates, key=lambda c: (-motif_graph.nodes[c]["score"], c.string))
     log.debug(f"Found {len(missed_candidates)} missed candidates")
     for candidate in missed_candidates:
