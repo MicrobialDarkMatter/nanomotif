@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.3 (2026-11-04)
+
+### Fixed
+- `pip install nanomotif` no longer needs a C compiler on Python 3.9 and 3.10. snakemake, which only
+  MTase-linker uses, resolves to 7.32.4 there, and its dependency datrie has no wheels for these Python
+  versions. snakemake is now installed with Nanomotif only on Python 3.11 and newer (where it needs no
+  compiler), and MTase-linker is imported only when it is used: without snakemake, motif discovery works
+  and `nanomotif MTase-linker` explains how to install it.
+
 ## 1.2.2 (2026-11-04)
 
 ### Fixed

@@ -127,3 +127,20 @@ def test_motif_discovery_is_reproducible(tmp_path):
             for p in outdir.rglob("*") if p.suffix in (".txt", ".tsv") and "logs" not in p.parts
         ))
     assert outputs[0] == outputs[1] == outputs[2]
+
+
+def test_works_without_snakemake():
+    """Only MTase-linker needs snakemake: without it, the CLI still loads, and MTase-linker exits with a
+    message instead of a traceback."""
+    import sys
+    block = "import sys; sys.modules['snakemake'] = None; "
+    loads = subprocess.run([sys.executable, "-c", block + "import nanomotif.main; nanomotif.main.nm.argparser.create_parser()"],
+                           capture_output=True, text=True)
+    assert loads.returncode == 0, loads.stderr
+    linker = subprocess.run(
+        [sys.executable, "-c", block + "import sys; sys.argv = ['nanomotif', 'MTase-linker', 'run', '--assembly', 'a', "
+         "'--contig_bin', 'b', '--bin_motifs', 'c']; import nanomotif.main; nanomotif.main.main()"],
+        capture_output=True, text=True)
+    assert linker.returncode == 1
+    assert "MTase-linker needs snakemake" in linker.stderr + linker.stdout
+    assert "Traceback" not in linker.stderr
