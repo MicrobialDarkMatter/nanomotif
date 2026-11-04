@@ -1,5 +1,7 @@
 # On a published GitHub release: build the nanomotif-rs wheels (compiled once here, so users need no
 # compiler), upload them to PyPI, then upload nanomotif, which depends on them.
+# nanomotif-rs is uploaded by trusted publishing (PyPI publisher: this repository, workflow release.yml,
+# environment pypi); nanomotif with the existing PYPI_API_TOKEN secret.
 name: Release to PyPI
 
 on:
@@ -67,6 +69,10 @@ jobs:
   publish-rust:
     needs: [rust-linux, rust-macos, rust-windows]
     runs-on: ubuntu-latest
+    # trusted publishing: PyPI trusts this workflow, no token (PyPI project nanomotif-rs, environment pypi)
+    environment: pypi
+    permissions:
+      id-token: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -76,8 +82,6 @@ jobs:
       # wheels only, no source distribution: pip must never fall back to compiling
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
           packages-dir: dist
 
   publish-nanomotif:
