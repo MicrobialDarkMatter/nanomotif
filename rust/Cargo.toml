@@ -1,6 +1,6 @@
 [package]
 name = "nanomotif_rs"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2021"
 
 [lib]
@@ -16,6 +16,7 @@ arrow-ipc = { version = "53", features = ["lz4"] }
 memmap2 = "0.9"
 memchr = "2"
 rayon = "1"
+flate2 = "1"
 
 [profile.release]
 lto = true

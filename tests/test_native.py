@@ -1,5 +1,6 @@
 import pytest
 import polars as pl
+import polars.testing
 import nanomotif as nm
 
 nanomotif_rs = pytest.importorskip("nanomotif_rs")
@@ -29,3 +30,38 @@ def test_rust_partitioning_matches_python(tmp_path):
         b = pl.concat([pl.read_ipc(f, memory_map=False) for f in got[part]]).sort(key)
         assert a.drop("fraction_mod").equals(b.drop("fraction_mod"))
         assert (a["fraction_mod"] - b["fraction_mod"]).abs().max() < 1e-12
+
+
+def test_rust_partitioning_of_gzip_matches_plain(tmp_path):
+    """A bgzipped pileup is partitioned to the same rows as the plain one."""
+    contig_bin = dict(nm.datasets.geobacillus_plasmids_bin().iter_rows())
+    plain = nm.datasets.geobacillus_plasmids_pileup_path()
+    (tmp_path / "plain").mkdir()
+    (tmp_path / "gz").mkdir()
+    a = nanomotif_rs.partition_pileup(plain, contig_bin, str(tmp_path / "plain"), min_coverage=5, threshold=0.7, threads=2)
+    b = nanomotif_rs.partition_pileup(plain + ".gz", contig_bin, str(tmp_path / "gz"), min_coverage=5, threshold=0.7, threads=2)
+    assert set(a) == set(b)
+    key = ["contig", "strand", "position", "mod_type"]
+    for part in a:
+        x = pl.concat([pl.read_ipc(f, memory_map=False) for f in a[part]]).sort(key)
+        y = pl.concat([pl.read_ipc(f, memory_map=False) for f in b[part]]).sort(key)
+        assert x.equals(y)
+
+
+def test_bgzip_reader_without_rust_matches_plain():
+    """The pysam reader (used without nanomotif_rs) returns the rows of load_pileup."""
+    path = nm.datasets.geobacillus_plasmids_pileup_path()
+    expected = nm.dataload.load_pileup(path).filter(pl.col("contig") == "contig_2")
+    got = nm.dataload.load_contigs_pileup_bgzip(path + ".gz", ["contig_2"])
+    polars.testing.assert_frame_equal(got.sort("position", "mod_type", "strand"), expected.sort("position", "mod_type", "strand"))
+
+
+def test_column_bitsets_match_packbits_layout():
+    import numpy as np
+    rng = np.random.default_rng(1)
+    windows = rng.choice(np.frombuffer(b"ACGTN", np.uint8), size=(1003, 41))
+    windows[5, 3] = 0
+    codes, bits = nanomotif_rs.column_bitsets(windows)
+    for column in range(41):
+        for i, code in enumerate(codes):
+            assert np.array_equal(bits[column, i], nm.find_motifs_bin._pack_bits(windows[:, column] == code))

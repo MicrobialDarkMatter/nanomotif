@@ -6,7 +6,8 @@
 //!    fraction >= threshold and that share of its positions is above `min_mod_frequency`
 //! 3. adjacency: a position >= threshold is dropped when another position of the same contig and strand
 //!    (any mod type) within `adjacency_distance` has a higher fraction
-//! Rows of a contig must be contiguous in the file (modkit output); this is checked.
+//! Rows of a contig must be contiguous in the file (modkit output); this is checked. Plain files are
+//! read in parallel byte ranges; gzipped (bgzip) files as one decompressed stream.
 
 use arrow_array::{ArrayRef, Float64Array, Int64Array, RecordBatch, StringArray};
 use arrow_ipc::writer::{FileWriter, IpcWriteOptions};
@@ -39,17 +40,31 @@ struct Row {
 }
 
 /// Buffered rows of one (bin, mod type), flushed to numbered IPC files.
+/// Rows hold an index into the sink's contig names (rows of a contig arrive together), so a row takes
+/// ~30 bytes; the strings are built only when the file is written.
 struct Sink {
-    contig: Vec<String>,
+    names: Vec<String>,
+    contig: Vec<u32>,
     position: Vec<i64>,
-    strand: Vec<&'static str>,
+    minus: Vec<bool>,
     fraction: Vec<f64>,
     coverage: Vec<i64>,
 }
 
 impl Sink {
     fn new() -> Self {
-        Sink { contig: vec![], position: vec![], strand: vec![], fraction: vec![], coverage: vec![] }
+        Sink { names: vec![], contig: vec![], position: vec![], minus: vec![], fraction: vec![], coverage: vec![] }
+    }
+
+    fn push(&mut self, contig: &str, position: i64, minus: bool, fraction: f64, coverage: i64) {
+        if self.names.last().map(|n| n.as_str()) != Some(contig) {
+            self.names.push(contig.to_string());
+        }
+        self.contig.push((self.names.len() - 1) as u32);
+        self.position.push(position);
+        self.minus.push(minus);
+        self.fraction.push(fraction);
+        self.coverage.push(coverage);
     }
 }
 
@@ -68,14 +83,17 @@ fn schema() -> Arc<Schema> {
 fn write_ipc(path: &str, bin: &str, mod_type: &str, sink: &mut Sink) -> std::io::Result<()> {
     let n = sink.position.len();
     let columns: Vec<ArrayRef> = vec![
-        Arc::new(StringArray::from(std::mem::take(&mut sink.contig))),
+        Arc::new(StringArray::from_iter_values(sink.contig.iter().map(|&i| sink.names[i as usize].as_str()))),
         Arc::new(Int64Array::from(std::mem::take(&mut sink.position))),
         Arc::new(StringArray::from(vec![mod_type; n])),
-        Arc::new(StringArray::from(std::mem::take(&mut sink.strand))),
+        Arc::new(StringArray::from_iter_values(sink.minus.iter().map(|&m| if m { "-" } else { "+" }))),
         Arc::new(Float64Array::from(std::mem::take(&mut sink.fraction))),
         Arc::new(Int64Array::from(std::mem::take(&mut sink.coverage))),
         Arc::new(StringArray::from(vec![bin; n])),
     ];
+    sink.contig.clear();
+    sink.minus.clear();
+    sink.names.clear();
     let batch = RecordBatch::try_new(schema(), columns).map_err(std::io::Error::other)?;
     let options = IpcWriteOptions::default()
         .try_with_compression(Some(CompressionType::LZ4_FRAME))
@@ -95,6 +113,10 @@ fn field(line: &[u8], start: usize) -> (&[u8], usize) {
 
 fn parse_i64(b: &[u8]) -> Option<i64> {
     std::str::from_utf8(b).ok()?.parse().ok()
+}
+
+fn is_gzip(path: &str) -> bool {
+    path.ends_with(".gz") || path.ends_with(".bgz")
 }
 
 /// Byte ranges that each start at the first row of a contig.
@@ -138,10 +160,16 @@ struct Output {
 fn process_range(
     path: &str, range: (usize, usize), contig_bin: &HashMap<String, String>, s: &Settings, out: &Mutex<Output>,
 ) -> Result<Vec<String>, String> {
-    use std::io::{Read, Seek, SeekFrom};
-    let mut file = File::open(path).map_err(|e| e.to_string())?;
-    file.seek(SeekFrom::Start(range.0 as u64)).map_err(|e| e.to_string())?;
-    let mut remaining = range.1 - range.0;
+    use std::io::{Seek, SeekFrom};
+    let mut f = File::open(path).map_err(|e| e.to_string())?;
+    f.seek(SeekFrom::Start(range.0 as u64)).map_err(|e| e.to_string())?;
+    process_stream(f, range.1 - range.0, contig_bin, s, out)
+}
+
+/// Process up to `remaining` bytes of whole-contig pileup rows from a reader.
+fn process_stream<R: std::io::Read>(
+    mut file: R, mut remaining: usize, contig_bin: &HashMap<String, String>, s: &Settings, out: &Mutex<Output>,
+) -> Result<Vec<String>, String> {
     let mut chunk: Vec<u8> = Vec::new();
     let mut buf = vec![0u8; CHUNK];
     let mut mod_types: Vec<String> = vec![];
@@ -202,11 +230,7 @@ fn process_range(
         for (i, r) in rows.iter().enumerate() {
             if !keep[i] { continue; }
             let sink = sinks.entry((bin.clone(), r.mod_type)).or_insert_with(Sink::new);
-            sink.contig.push(contig.clone());
-            sink.position.push(r.position);
-            sink.strand.push(if r.minus { "-" } else { "+" });
-            sink.fraction.push(r.fraction);
-            sink.coverage.push(r.coverage);
+            sink.push(&contig, r.position, r.minus, r.fraction, r.coverage);
         }
         rows.clear();
     };
@@ -281,25 +305,134 @@ fn process_range(
     Ok(contigs_seen)
 }
 
+/// A reader over byte blocks received from a channel (one gzip worker's share of the stream).
+struct ChannelReader {
+    rx: std::sync::mpsc::Receiver<Vec<u8>>,
+    block: Vec<u8>,
+    pos: usize,
+}
+
+impl std::io::Read for ChannelReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        while self.pos == self.block.len() {
+            match self.rx.recv() {
+                Ok(block) => { self.block = block; self.pos = 0; }
+                Err(_) => return Ok(0), // sender done
+            }
+        }
+        let n = buf.len().min(self.block.len() - self.pos);
+        buf[..n].copy_from_slice(&self.block[self.pos..self.pos + n]);
+        self.pos += n;
+        Ok(n)
+    }
+}
+
+/// Start of the last contig's first row in a block of whole lines (rows of a contig are contiguous).
+fn last_contig_start(block: &[u8]) -> usize {
+    let name_at = |offset: usize| -> (usize, &[u8]) {
+        let start = if offset == 0 { 0 } else {
+            match memchr(b'\n', &block[offset - 1..]) { Some(i) => offset + i, None => block.len() }
+        };
+        let end = memchr(b'\t', &block[start..]).map(|i| start + i).unwrap_or(block.len());
+        (start, &block[start..end])
+    };
+    let last_line = match memchr::memrchr(b'\n', &block[..block.len().saturating_sub(1)]) { Some(i) => i + 1, None => 0 };
+    let (_, last) = name_at(last_line);
+    let (mut lo, mut hi) = (0usize, last_line);
+    if name_at(0).1 == last { return 0; }
+    // invariant: the line starting at/after lo is another contig, the one at hi is the last contig
+    while hi - lo > 1 {
+        let mid = (lo + hi) / 2;
+        let (start, name) = name_at(mid);
+        if start >= hi || name == last { hi = mid } else { lo = mid }
+    }
+    name_at(hi).0
+}
+
+/// Gzipped (bgzip) pileup: one thread decompresses and hands whole-contig stretches to `threads` workers
+/// (switching worker only at a contig boundary, after `SEGMENT` bytes), each running process_stream.
+fn partition_gzip(
+    path: &str, contig_bin: &HashMap<String, String>, s: &Settings, out: &Mutex<Output>, threads: usize,
+) -> Result<Vec<Vec<String>>, String> {
+    use std::io::Read;
+    const SEGMENT: usize = 64 << 20;
+    let mut decoder = flate2::read::MultiGzDecoder::new(std::io::BufReader::with_capacity(
+        CHUNK, File::open(path).map_err(|e| e.to_string())?));
+    std::thread::scope(|scope| {
+        let mut senders = Vec::new();
+        let mut handles = Vec::new();
+        for _ in 0..threads {
+            let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(2);
+            senders.push(tx);
+            handles.push(scope.spawn(move || {
+                process_stream(ChannelReader { rx, block: Vec::new(), pos: 0 }, usize::MAX, contig_bin, s, out)
+            }));
+        }
+        let mut worker = 0usize;
+        let mut sent = 0usize;
+        let mut carry: Vec<u8> = Vec::new();
+        let mut buf = vec![0u8; CHUNK];
+        let mut error = None;
+        loop {
+            let n = match decoder.read(&mut buf) { Ok(n) => n, Err(e) => { error = Some(e.to_string()); break } };
+            if n == 0 { break; }
+            carry.extend_from_slice(&buf[..n]);
+            let whole = match memchr::memrchr(b'\n', &carry) { Some(i) => i + 1, None => continue };
+            let mut block: Vec<u8> = carry.drain(..whole).collect();
+            if sent >= SEGMENT {
+                let cut = last_contig_start(&block);
+                if cut > 0 {
+                    let rest = block.split_off(cut);
+                    if senders[worker].send(block).is_err() { break; }
+                    block = rest;
+                    worker = (worker + 1) % threads;
+                    sent = 0;
+                }
+            }
+            sent += block.len();
+            if senders[worker].send(block).is_err() { break; }
+        }
+        if !carry.is_empty() {
+            let _ = senders[worker].send(std::mem::take(&mut carry));
+        }
+        drop(senders);
+        let results: Vec<Result<Vec<String>, String>> = handles.into_iter()
+            .map(|h| h.join().unwrap_or_else(|_| Err("worker panicked".to_string()))).collect();
+        if let Some(e) = error { return Err(e); }
+        results.into_iter().collect()
+    })
+}
+
 /// Returns {(bin, mod_type): [ipc files]}.
 pub fn partition(
     path: &str, contig_bin: &HashMap<String, String>, s: &Settings, out_dir: &str, threads: usize,
 ) -> Result<HashMap<(String, String), Vec<String>>, String> {
-    let file = File::open(path).map_err(|e| e.to_string())?;
-    let data = unsafe { memmap2::Mmap::map(&file) }.map_err(|e| e.to_string())?;
-    let ranges = split_ranges(&data, threads * 4);
-    drop(data);
-    let out = Mutex::new(Output { dir: out_dir.to_string(), part: 0, files: HashMap::new() });
+    let out_files = Mutex::new(Output { dir: out_dir.to_string(), part: 0, files: HashMap::new() });
+    if is_gzip(path) {
+        let seen = partition_gzip(path, contig_bin, s, &out_files, threads)?;
+        check_contiguous(seen)?;
+        return Ok(out_files.into_inner().unwrap().files);
+    }
+    let ranges = {
+        let file = File::open(path).map_err(|e| e.to_string())?;
+        let data = unsafe { memmap2::Mmap::map(&file) }.map_err(|e| e.to_string())?;
+        split_ranges(&data, threads * 4)
+    };
     let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().map_err(|e| e.to_string())?;
     let seen: Vec<Vec<String>> = pool.install(|| {
-        ranges.par_iter().map(|&r| process_range(path, r, contig_bin, s, &out)).collect::<Result<_, _>>()
+        ranges.par_iter().map(|&r| process_range(path, r, contig_bin, s, &out_files)).collect::<Result<_, _>>()
     })?;
-    // a contig split across ranges means its rows are not contiguous
+    check_contiguous(seen)?;
+    Ok(out_files.into_inner().unwrap().files)
+}
+
+/// A contig seen by two readers (ranges or gzip workers) means its rows are not contiguous.
+fn check_contiguous(seen: Vec<Vec<String>>) -> Result<(), String> {
     let mut all = HashSet::new();
     for c in seen.into_iter().flatten() {
         if !all.insert(c.clone()) {
             return Err(format!("pileup rows of contig {} are not contiguous", c));
         }
     }
-    Ok(out.into_inner().unwrap().files)
+    Ok(())
 }

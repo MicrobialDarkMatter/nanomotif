@@ -3,7 +3,7 @@ import numpy as np
 import polars as pl
 
 from nanomotif.seq import Assembly
-from epymetheus import query_pileup_records, PileupColumn
+import io
 import sys
 import pysam
 import pyfastx
@@ -108,34 +108,16 @@ def load_pileup(path: str, min_coverage: int = None, contigs: list = None):
 
 def load_contigs_pileup_bgzip(path: str, contigs: list[str]):
     """
-    Load pileup file from path to pileup.bed output of modkit pileup.
-    Retries opening the tabix file and reading records if initial attempts fail.
+    Rows of the given contigs from a bgzipped, tabix-indexed modkit pileup (pysam), with the columns
+    of load_pileup.
     """
-    # Step 2: query pileup from Rust
     log.debug(f"Querying pileup for {len(contigs)} contigs")
-    pileup = query_pileup_records(
-        path,
-        contigs,
-        columns = [
-            PileupColumn.Contig,
-            PileupColumn.Start,
-            PileupColumn.ModType,
-            PileupColumn.Strand,
-            PileupColumn.FractionModified,
-            PileupColumn.NValidCov
-        ]
-    )
-
-    if pileup.height == 0:
+    with pysam.TabixFile(path) as tbx:
+        indexed = set(tbx.contigs)
+        lines = [line for contig in contigs if contig in indexed for line in tbx.fetch(contig)]
+    if not lines:
         log.warning(f"No pileup data found for contigs: {contigs}")
-        return pl.DataFrame({
-            "contig": [],
-            "position": [],
-            "mod_type": [],
-            "strand": [],
-            "fraction_mod": [],
-            "Nvalid_cov": [],
-        }, schema = {
+        return pl.DataFrame(schema={
             "contig": pl.String,
             "position": pl.Int64,
             "mod_type": pl.Utf8,
@@ -143,20 +125,24 @@ def load_contigs_pileup_bgzip(path: str, contigs: list[str]):
             "fraction_mod": pl.Float64,
             "Nvalid_cov": pl.Int64,
         })
-
-    
-    log.debug(f"Renaming and removing unnecessary columns")
-    pileup = pileup.rename({
-        "contig": "contig",
-        "start": "position",
-        "mod_type": "mod_type",
-        "strand": "strand",
-        "fraction_modified": "fraction_mod",
-        "n_valid_cov": "Nvalid_cov",
-    }) \
-    .with_columns(pl.col("fraction_mod") / 100)
-
-    return pileup
+    pileup = pl.read_csv(
+        io.StringIO("\n".join(lines)),
+        separator="\t",
+        has_header=False,
+        schema=PILEUP_SCHEMA,
+        null_values=["NA", "null"],
+    )
+    return pileup \
+        .select(["column_1", "column_2", "column_4", "column_6", "column_11", "column_10"]) \
+        .with_columns(pl.col("column_11") / 100) \
+        .rename({
+            "column_1": "contig",
+            "column_2": "position",
+            "column_4": "mod_type",
+            "column_6": "strand",
+            "column_11": "fraction_mod",
+            "column_10": "Nvalid_cov",
+        })
 
 
 

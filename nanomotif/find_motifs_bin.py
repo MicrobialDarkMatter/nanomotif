@@ -431,7 +431,8 @@ class BinMotifProcessorBuilder:
     def build(self) -> BinMotifProcessor:
         pileup_path = self.config.pileup_path
 
-        if pileup_path.endswith(".gz"):
+        if pileup_path.endswith(".gz") and nanomotif_rs is None:
+            # without the compiled reader, each worker reads its bin through the tabix index
             if not os.path.exists(pileup_path + ".tbi"):
                 raise FileNotFoundError(f"Tabix index for {pileup_path} not found.")
             partitioned_assembly = self._partition_assembly()
@@ -1376,7 +1377,6 @@ class MotifSiteIndex:
         self.low_meth_threshold = low_meth_threshold
         self.high_meth_threshold = high_meth_threshold
         self.half_width = half_width
-        offsets = np.arange(-half_width, half_width + 1)
         windows = {(strand, meth): [] for strand in "+-" for meth in (True, False)}
         sites = pileup.filter(
             (pl.col("fraction_mod") >= high_meth_threshold) | (pl.col("fraction_mod") <= low_meth_threshold)
@@ -1387,6 +1387,8 @@ class MotifSiteIndex:
             sequence = np.frombuffer(contigs[contig].sequence.encode("ascii"), dtype=np.uint8)
             # 0 marks positions outside the contig; it matches no motif base, not even "."
             padded = np.concatenate([np.zeros(half_width, np.uint8), sequence, np.zeros(half_width, np.uint8)])
+            # a strided view: indexing it copies 1 byte per window base (an index matrix would take 8)
+            all_windows = np.lib.stride_tricks.sliding_window_view(padded, 2 * half_width + 1)
             positions = contig_sites.get_column("position").to_numpy()
             on_contig = (positions >= 0) & (positions < len(sequence))
             for strand in "+-":
@@ -1394,18 +1396,28 @@ class MotifSiteIndex:
                     keep = on_contig \
                         & (contig_sites.get_column("strand").to_numpy() == strand) \
                         & (contig_sites.get_column("methylated").to_numpy() == meth)
-                    windows[(strand, meth)].append(padded[positions[keep, None] + half_width + offsets])
+                    windows[(strand, meth)].append(all_windows[positions[keep]])
         width = 2 * half_width + 1
         # One bitset over the sites per (window column, base): a motif's count is then the popcount of
         # the AND over its fixed positions of the OR over each position's allowed bases.
         self.n_sites = {}
         self.bits = {}
-        for key, w in windows.items():
+        for key in list(windows):
+            w = windows.pop(key)  # freed as soon as its bitsets are built
             w = np.concatenate(w) if w else np.empty((0, width), np.uint8)
             self.n_sites[key] = len(w)
             self.bits[key] = {}
+            if nanomotif_rs is not None and len(w):
+                # one pass over the windows in Rust, same bit layout as _pack_bits
+                codes, bits = nanomotif_rs.column_bitsets(np.ascontiguousarray(w))
+                for column in range(width):
+                    for i, code in enumerate(codes):
+                        if bits[column, i].any():
+                            self.bits[key][(column, int(code))] = bits[column, i]
+                continue
+            w = np.ascontiguousarray(w.T)  # one transpose instead of a strided copy per column
             for column in range(width):
-                values = np.ascontiguousarray(w[:, column])
+                values = w[column]
                 for code in np.flatnonzero(np.bincount(values, minlength=256)[1:]) + 1:
                     self.bits[key][(column, int(code))] = _pack_bits(values == code)
 
