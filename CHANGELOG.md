@@ -32,9 +32,11 @@
 - Workers no longer receive every bin's data with every task (on ZymoOral 3.3 GB pickled per task); they
   read their bin's pileup from lz4 Arrow IPC files and their contigs from the FASTA index.
 - Search windows stored as 4-bit base masks; no array copy per search step; direct KL divergence.
-- Optional Rust extension `nanomotif_rs` (`rust/`, build with maturin: `pip install ./rust`): a
-  streaming, parallel pass that filters and partitions a plain pileup in bounded memory, and a fused
-  window filter + PSSM kernel. Used when installed; otherwise the Python code runs.
+- Rust extension `nanomotif-rs` (`rust/`): a streaming, parallel pass that filters and partitions a
+  plain pileup in bounded memory, and a fused window filter + PSSM kernel. Installed with nanomotif as
+  a prebuilt wheel on Linux (x86_64, aarch64), macOS and Windows (x86_64), so no compiler is needed;
+  on other platforms the pure-Python code runs. Wheels are built by .github/workflows/release.yml,
+  which replaces python-publish.yml and uploads nanomotif-rs before nanomotif.
 
 ZymoOral (12 bins, 4 GB plain pileup, 8 threads): 18 min 45 s and 17.3 GB peak memory with 1.1.2 ->
 24 s and 3.5 GB with nanomotif_rs installed (39 s and 12.7 GB without it). Motifs are those of the

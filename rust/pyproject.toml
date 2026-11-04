@@ -1,8 +1,21 @@
 [build-system]
-requires = ["maturin>=1.5"]
+requires = ["maturin>=1.5,<2"]
 build-backend = "maturin"
 
 [project]
-name = "nanomotif_rs"
-version = "0.1.0"
+name = "nanomotif-rs"
+version = "1.2.0"
+description = "Compiled kernels for Nanomotif (pileup partitioning, motif-site bitsets, search-window filtering)"
 requires-python = ">=3.9"
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+
+[project.urls]
+Repository = "https://github.com/MicrobialDarkMatter/nanomotif"
+
+[tool.maturin]
+module-name = "nanomotif_rs"
