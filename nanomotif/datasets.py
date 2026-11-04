@@ -26,6 +26,6 @@ def geobacillus_plasmids_bin_path():
     return data_path
 def geobacillus_plasmids_bin():
     data_path = geobacillus_plasmids_bin_path()
-    contig_bin = pl.read_csv(data_path, separator="\t", has_header=False) \
-        .rename({"column_1":"contig", "column_2":"bin"})
+    contig_bin = pl.read_csv(data_path, separator="\t", has_header=False)
+    contig_bin = contig_bin.rename(dict(zip(contig_bin.columns[:2], ["contig", "bin"])))
     return contig_bin

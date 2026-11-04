@@ -128,8 +128,10 @@ def generate_contig_bin(args):
     """
     if args.contig_bin:
         log.debug(f"Reading contig-bin mapping from {args.contig_bin}")
-        contig_bin_df = pl.read_csv(args.contig_bin, separator="\t", has_header=False, infer_schema_length=10000) \
-            .rename({"column_1":"contig", "column_2":"bin"}) \
+        contig_bin_df = pl.read_csv(args.contig_bin, separator="\t", has_header=False, infer_schema_length=10000)
+        # by position: polars < 2 names header-less columns column_1, column_2, polars 2 column_0, column_1
+        contig_bin_df = contig_bin_df \
+            .rename(dict(zip(contig_bin_df.columns[:2], ["contig", "bin"]))) \
             .cast({'contig': pl.String, 'bin': pl.String})
         return contig_bin_df
     if args.files:
