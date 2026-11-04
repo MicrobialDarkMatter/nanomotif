@@ -35,6 +35,9 @@ jobs:
     strategy:
       matrix:
         include:
+          # both on Apple-silicon runners (the Intel macos-13 image is retired); x86_64 is cross-compiled
+          - runner: macos-14
+            target: x86_64
           - runner: macos-14
             target: aarch64
     runs-on: ${{ matrix.runner }}
@@ -81,6 +84,8 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist
+          # a rerun adds missing files (e.g. one platform's wheel) and skips those already on PyPI
+          skip-existing: true
 
   publish-nanomotif:
     needs: publish-rust
@@ -98,3 +103,4 @@ jobs:
         with:
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true
