@@ -1,6 +1,6 @@
 # Installation
 
-Nanomotif by default include the **motif discovery**, **bin contamination**, and **include unbinned** contigs modules. These modules can operate independently without the additional dependencies required for the **MTase-Linker module**. For details on the MTase-Linker setup, see [MTase-linker installation](#mtase-linker-installation).
+Nanomotif by default includes the **motif discovery** module. It can operate independently without the additional dependencies required for the **MTase-Linker module**. For details on the MTase-Linker setup, see [MTase-linker installation](#mtase-linker-installation).
 
 ## Conda Environment
 

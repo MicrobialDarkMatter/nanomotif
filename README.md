@@ -11,8 +11,6 @@ Nanomotif is a Python package designed to explore methylation in prokaryotic gen
 
 ### Nanomotif offers
 - de novo methylated motif identification
-- metagenomic bin contamination detection
-- bin association of unbinned contigs (eg. plasmids)
 - association of MTases and RM-systems to motifs.
 <p align="center">
   <img src="docs/figures/nanomotif_method.png" width="400" style="background-color:white;"/>
@@ -68,27 +66,8 @@ This will create three files: `motifs.tsv`,`motif-scored.tsv`, and `bin-motifs.t
 
 See [usage](https://nanomotif.readthedocs.io/en/latest/usage.html) and [output](https://nanomotif.readthedocs.io/en/latest/output.html) for detailed usage and output information.
 
-#### Bin contamination
-After motif identification it is possible to identify contamination in bins using the `bin-motifs.tsv`, `assembly`, `pileup` and `contig_bin` file.
-
-```
-nanomotif detect_contamination --pileup PILEUP --assembly ASSEMBLY --bin_motifs BIN_MOTIFS --contig_bins CONTIG_BIN --out OUT
-```
-This will generate a bin_contamination.tsv specifying the contigs, which is flagged as contamination.
-
-If the --write_bins and the --assembly_file flags are specified new de-contaminated bins will be written to a bins folder.
-
-See [usage](https://nanomotif.readthedocs.io/en/latest/usage.html) and [output](https://nanomotif.readthedocs.io/en/latest/output.html) for detailed usage and output information.
-
-#### Include unbinned contigs
-The `include_contigs` command assigns unbinned contigs in the assembly file to bins by training three classifiers, random forest, linear discriminant analysis, and k neighbors classifier, on the methylation pattern of the bins.
-
-```
-nanomotif include_contigs --pileup PILEUP --assembly ASSEMBLY --bin_motifs BIN_MOTIFS --contig_bins CONTIG_BIN --run_detect_contamination --out OUT
-```
-> Note: this is not a binner and included contigs should be considered putative. Methylation patterns can be shared across MAGs, which is problematic for unrecovered MAGs.
-
-If decontamination should not be performed, the `include_contigs` can be run without the `--run_detect_contamination` flag or without the `--contamination_file` flag.
+#### Bin contamination and inclusion
+The `detect_contamination` and `include_contigs` commands have been removed and are no longer supported.
 
 #### MTase-linker
 This module tries to link methylation motifs to their corresponding MTase and, when present, their entire RM system. 

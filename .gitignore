@@ -191,3 +191,13 @@ pyrightconfigt.json
 # pixi environments
 .pixi
 *.egg-info
+
+# files written by the tests
+*.fxi
+nanomotif/datasets/*.duplicated.*
+nanomotif/datasets/*.tmp.tsv
+tests/cli_test_*/
+
+# Rust build output
+rust/target/
+rust/Cargo.lock

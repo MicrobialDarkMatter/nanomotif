@@ -107,3 +107,63 @@ def test_subseq_indices():
         print(f"Expected indices: {expected}")
         print(f"Function output: {result.tolist()}")
         assert result.tolist() == expected, f"Mismatch for pattern {pattern}"
+
+
+def test_ambiguity_codes_convert_to_DNAarray():
+    from nanomotif.seq import DNAsequence, EqualLengthDNASet
+    arr = EqualLengthDNASet([DNAsequence("ARYN")]).convert_to_DNAarray()
+    assert arr.tolist() == [[[1, 0, 0, 0], [1, 0, 1, 0], [0, 1, 0, 1], [1, 1, 1, 1]]]
+    for code, bases in DNAsequence.iupac_dict.items():
+        assert DNAsequence.base_to_vector[code] == [int(b in bases) for b in DNAsequence.bases]
+
+
+def test_sample_at_indices_bounds():
+    from nanomotif.seq import DNAsequence
+    seq = DNAsequence("ACGTACGTAC")  # length 10
+    # windows of 2 * 2 + 1 = 5 fit for indices 2..7
+    sampled = seq.sample_at_indices(list(range(10)), 2)
+    assert [s.sequence for s in sampled.sequences] == [seq.sequence[i - 2:i + 3] for i in range(2, 8)]
+    with pytest.raises(ValueError):
+        seq.sample_at_index(8, 2)
+
+
+def test_pssm_and_array_match_per_base_counts():
+    import random
+    from nanomotif.seq import DNAsequence, EqualLengthDNASet
+    random.seed(3)
+    seqs = EqualLengthDNASet([DNAsequence("".join(random.choice("ACGTNR") for _ in range(9))) for _ in range(50)])
+    pssm = seqs.pssm()
+    for b, base in enumerate(DNAsequence.bases):
+        for i in range(9):
+            assert pssm[b, i] == sum(s.sequence[i] == base for s in seqs.sequences) / 50
+    arr = seqs.convert_to_DNAarray()
+    assert arr.tolist() == [[DNAsequence.base_to_vector[c] for c in s.sequence] for s in seqs.sequences]
+
+
+def test_sample_n_subsequences_unique_centres_on_base():
+    import random
+    from nanomotif.seq import DNAsequence
+    random.seed(4)
+    seq = DNAsequence("".join(random.choice("ACGT") for _ in range(500)))
+    sample = seq.sample_n_subsequences_unique(41, 30, base="A")
+    assert all(s.sequence[20] == "A" for s in sample.sequences)
+    assert len({s.sequence for s in sample.sequences}) == 30
+
+
+def test_packed_dna_array_matches_one_hot():
+    import random
+    import numpy as np
+    from nanomotif.seq import DNAsequence, EqualLengthDNASet, PackedDNAarray
+    from nanomotif.motif import Motif
+    random.seed(6)
+    seqs = EqualLengthDNASet([DNAsequence("".join(random.choice("ACGTACGTNR") for _ in range(9))) for _ in range(300)])
+    one_hot, packed = seqs.convert_to_DNAarray(), PackedDNAarray.from_sequences(seqs)
+    np.testing.assert_array_equal(one_hot.pssm(), packed.pssm())
+    for motif in ["....A....", "..GA.C...", "...[AG]A.T..", "TTTTTTTTT"]:
+        for keep in (True, False):
+            a = one_hot.filter_sequence_matches(Motif(motif, 4).one_hot(), keep_matches=keep)
+            b = packed.filter_sequence_matches(Motif(motif, 4).one_hot(), keep_matches=keep)
+            assert (a is None) == (b is None)
+            if a is not None:
+                assert a.shape == b.shape
+                np.testing.assert_array_equal(a.pssm(), b.pssm())

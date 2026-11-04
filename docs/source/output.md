@@ -30,52 +30,9 @@ The motif discovery step identifies DNA methylation motifs within bins. It outpu
 
 ---
 
-## Bin Improvement
+## Bin improvement
 
-**Overview:**  
-The bin improvement module refines genome bins by identifying contigs that may be contaminants. Suspect contigs are recorded in `bin_contamination.tsv`. If requested, cleaned bins (with contaminants removed) can be created.
-
-Additionally, the `include_contigs` command assigns unbinned contigs to existing bins using classification models trained on methylation patterns, resulting in the `include_contigs.tsv` file.
-
-**Files:**  
-- **bin_contamination.tsv**: Lists contigs flagged as contamination.
-- **include_contigs.tsv**: Lists previously unbinned contigs and their new bin assignments.
-
-### bin_contamination.tsv
-
-Contigs appear in this file if all four clustering methods (agg, spectral, gmm, hdbscan) assign the contig to a cluster different from the bin’s main cluster, suggesting contamination. The each contaminant will have 4 rows, one for each clustering algorithm, along with the cluster stats.
-If the `--write_bins` flag is specified new de-contaminated bins will be written to a bins folder.
-
-| Column           | Description                                                                                                                          |
-|------------------|--------------------------------------------------------------------------------------------------------------------------------------|
-| **contig**        | The identifier of the contig flagged as contamination.                                                                              |
-| **bin**           | The name of the bin that the contig currently belongs to.                                                                            |
-| **method**        | The clustering method used (agg, spectral, gmm, hdbscan).                                                                            |
-| **cluster**       | The cluster ID assigned by the specified method. Methods produce different numeric cluster IDs.                                       |
-| **bin_cluster**   | The cluster ID associated with the bin’s original assignment.                                                                         |
-| **bin_length**    | The total length (in base pairs) of all contigs currently in the bin.                                                                 |
-| **n_contigs_bin** | The total number of contigs currently assigned to the bin.                                                                            |
-| **fraction_contigs** | The fraction of the bin’s contigs grouped under `bin_cluster` (e.g., 10/12 ≈ 0.83 if 10 out of 12 contigs are in `bin_cluster`). |
-| **fraction_length** | The fraction of the bin’s length represented by contigs in `bin_cluster`. Similar to fraction_contigs but based on sequence length. |
-
-### include_contigs.tsv
-
-Assigning unbinned contigs to bins uses classification methods (Random Forest, Linear Discriminant Analysis, and k-Nearest Neighbors) trained on methylation data.
-If all three classifiers assigns an unbinned contig to the same bin, with a join mean probability above 0.80, the contig is assigned to that bin. This is called a `high_confidence` assignment. Besides the aforementioned `high_confidence` assignment, contigs can also be medium and low confidence assigments.
-`medium_confidence` assignments are contigs where all three classifiers agree but the join probability is below 0.8. `low_confidence` is when only two classifiers agree. 
-`high_confidence` assignments are outputted in a `new_contig_bin.tsv` file. 
-
-| Column          | Description                                                                                                                         |
-|-----------------|-------------------------------------------------------------------------------------------------------------------------------------|
-| **contig**       | Identifier of the previously unbinned contig.                                                                                       |
-| **bin**          | The original bin assignment. "unbinned" indicates no prior assignment.                                                               |
-| **assigned_bin** | The bin predicted for this contig by the classifiers.                                                                                |
-| **method**       | The classification method (knn, lda, rf). knn = k-Nearest Neighbors, lda = Linear Discriminant Analysis, rf = Random Forest.          |
-| **prob**         | The probability assigned by the method for placing the contig in `assigned_bin`.                                                     |
-| **mean_prob**    | The average probability from all methods for the contig-bin pair.                                                                    |
-| **confidence**   | Qualitative confidence ("high_confidence", "medium_confidence", "low_confidence"). High confidence predictions are more reliable.     |
-
----
+The bin contamination (`detect_contamination`) and inclusion (`include_contigs`) commands have been removed and are no longer supported.
 
 ## MTase-Linker
 

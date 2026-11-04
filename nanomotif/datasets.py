@@ -1,4 +1,5 @@
 import nanomotif.dataload as dl
+import nanomotif.fasta as fasta
 import polars as pl
 import os
 
@@ -17,7 +18,7 @@ def geobacillus_plasmids_assembly_path():
     return data_path
 def geobacillus_plasmids_assembly():
     data_path = geobacillus_plasmids_assembly_path()
-    assembly = dl.load_assembly(data_path)
+    assembly = fasta.load_fasta_fastx(data_path)
     return assembly
 
 def geobacillus_plasmids_bin_path():

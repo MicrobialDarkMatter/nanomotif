@@ -1,0 +1,22 @@
+[package]
+name = "nanomotif_rs"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "nanomotif_rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py39"] }
+numpy = "0.22"
+arrow-array = "53"
+arrow-schema = "53"
+arrow-ipc = { version = "53", features = ["lz4"] }
+memmap2 = "0.9"
+memchr = "2"
+rayon = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1

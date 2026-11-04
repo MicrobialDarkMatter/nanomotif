@@ -5,6 +5,10 @@ import re
 import random
 random.seed(2403)
 import nanomotif.utils as utils
+try:
+    import nanomotif_rs as _native
+except ImportError:
+    _native = None
 from nanomotif.constants import COMPLEMENT
 
 
@@ -38,11 +42,22 @@ class DNAsequence:
         "W": "W", "K": "M", "M": "K", "B": "V", 
         "D": "H", "H": "D", "V": "B"
     }
+    # Ambiguity codes are encoded as the set of bases they stand for
     base_to_vector = {
         "A": [1, 0, 0, 0],
         "T": [0, 1, 0, 0],
         "G": [0, 0, 1, 0],
         "C": [0, 0, 0, 1],
+        "R": [1, 0, 1, 0],
+        "Y": [0, 1, 0, 1],
+        "S": [0, 0, 1, 1],
+        "W": [1, 1, 0, 0],
+        "K": [0, 1, 1, 0],
+        "M": [1, 0, 0, 1],
+        "B": [0, 1, 1, 1],
+        "D": [1, 1, 1, 0],
+        "H": [1, 1, 0, 1],
+        "V": [1, 0, 1, 1],
         "N": [1, 1, 1, 1],
         ".": [1, 1, 1, 1]
     }
@@ -163,7 +178,7 @@ class DNAsequence:
         """
         if index < padding:
             raise ValueError(f"Index {index} is too small for padding {padding}")
-        if index > len(self) - padding:
+        if index >= len(self) - padding:
             raise ValueError(f"Index {index} is too large for padding {padding}")
         return DNAsequence(self.sequence[(index - padding):(index + padding + 1)])
 
@@ -183,7 +198,7 @@ class DNAsequence:
         sequences : EqualLengthDNASet
             Sequences of length 2 * padding + 1
         """
-        indices_checked = [index for index in indices if (index > padding) and (index < (len(self) - padding))]
+        indices_checked = [index for index in indices if (index >= padding) and (index < (len(self) - padding))]
         if len(indices_checked) == 0:
             return None
         return EqualLengthDNASet([self.sample_at_index(index, padding) for index in indices_checked])
@@ -209,10 +224,8 @@ class DNAsequence:
         mid_offset = length // 2
 
         # Collect valid start positions where the middle base is 'C'
-        valid_starts = [
-            s for s in range(max_start)
-            if self.sequence[s + mid_offset] == base
-        ]
+        codes = np.frombuffer(self.sequence.encode("ascii"), dtype=np.uint8)
+        valid_starts = np.flatnonzero(codes[mid_offset:mid_offset + max_start] == ord(base)).tolist()
 
         if len(valid_starts) < n:
             raise ValueError(f"Not enough subsequences with 'C' in the middle (found {len(valid_starts)}, need {n})")
@@ -408,18 +421,9 @@ class EqualLengthDNASet:
             bases = self.sequences[0].iupac
 
         n = len(self.sequences)
-
-        pssm = []
-        for nuc in bases:
-            pssm_nuc = []
-            for i in range(self.sequence_length):
-                count = 0
-                for seq in self.sequences:
-                    if seq[i] == nuc:
-                        count += 1
-                pssm_nuc.append((count + pseudocount)/n)
-            pssm.append(pssm_nuc)
-        return np.array(pssm)
+        codes = np.frombuffer("".join(seq.sequence for seq in self.sequences).encode("ascii"), dtype=np.uint8) \
+            .reshape(n, self.sequence_length)
+        return np.array([((codes == ord(nuc)).sum(axis=0) + pseudocount) / n for nuc in bases])
 
     def kl_divergence(self, pssm):
         """
@@ -475,7 +479,60 @@ class EqualLengthDNASet:
         """
         Convert EqualLengthDNASet to DNAarray
         """
-        return DNAarray([[DNAsequence.base_to_vector[base] for base in sequence] for sequence in self.sequences])
+        lookup = np.zeros((256, 4), dtype=int)
+        for base, vector in DNAsequence.base_to_vector.items():
+            lookup[ord(base)] = vector
+        codes = np.frombuffer("".join(seq.sequence for seq in self.sequences).encode("ascii"), dtype=np.uint8) \
+            .reshape(len(self.sequences), self.sequence_length)
+        return DNAarray(lookup[codes])
+
+class PackedDNAarray:
+    """
+    Equal-length sequences as one byte per position: a 4-bit mask of the bases the position can be
+    (A=1, T=2, G=4, C=8, ambiguity codes and N the union). Same filtering and PSSM as DNAarray's one-hot
+    encoding, in 1/32 of the memory.
+    """
+    def __init__(self, masks: np.ndarray):
+        self.masks = masks
+
+    @classmethod
+    def from_sequences(cls, sequences: "EqualLengthDNASet"):
+        lookup = np.zeros(256, dtype=np.uint8)
+        for base, vector in DNAsequence.base_to_vector.items():
+            lookup[ord(base)] = sum(bit << i for i, bit in enumerate(vector))
+        codes = np.frombuffer("".join(seq.sequence for seq in sequences.sequences).encode("ascii"), dtype=np.uint8) \
+            .reshape(len(sequences.sequences), sequences.sequence_length)
+        return cls(lookup[codes])
+
+    @property
+    def shape(self):
+        return (self.masks.shape[0], self.masks.shape[1], 4)
+
+    def filter_sequence_matches(self, sequence, keep_matches=True):
+        """Like DNAarray.filter_sequence_matches; sequence is a motif's one-hot array (length x 4)."""
+        motif_mask = (np.asarray(sequence) > 0).astype(np.uint8) @ (1 << np.arange(4, dtype=np.uint8))
+        match = ~np.any(self.masks & ~motif_mask.astype(np.uint8), axis=1)
+        result = self.masks[match if keep_matches else ~match]
+        if result.shape[0] == 0:
+            warnings.warn("No sequences left after filtering")
+            return None
+        return PackedDNAarray(result)
+
+    def pssm(self):
+        """Same as DNAarray.pssm: per position, the share of sequences that allow each base."""
+        return np.stack([((self.masks >> i) & 1).sum(axis=0) for i in range(4)]) / self.masks.shape[0]
+
+    def filter_and_pssm(self, sequence, keep_matches=True):
+        """filter_sequence_matches and the PSSM of the result, in one pass with nanomotif_rs if installed."""
+        if _native is None:
+            result = self.filter_sequence_matches(sequence, keep_matches)
+            return result, None if result is None else result.pssm()
+        motif_mask = ((np.asarray(sequence) > 0).astype(np.uint8) @ (1 << np.arange(4, dtype=np.uint8))).astype(np.uint8)
+        masks, pssm = _native.filter_and_pssm(np.ascontiguousarray(self.masks), motif_mask, keep_matches)
+        if masks.shape[0] == 0:
+            return None, None
+        return PackedDNAarray(masks), pssm
+
 
 class DNAarray(np.ndarray):
     """
