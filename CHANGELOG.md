@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.2 (2026-11-04)
+
+### Fixed
+- Works with polars 2 (installed on Python 3.10+): contig-bin files are read by column position
+  (polars 2 names header-less columns from column_0), and `read_ipc` is called without `memory_map`.
+  1.2.1 failed its tests on Python 3.10-3.12 because of this. Same motifs with polars 1 and 2 (checked
+  on two gold-standard isolates); tests pass on Python 3.9 (polars 1) and 3.12 (polars 2).
+
 ## 1.2.1 (2026-11-04)
 
 First release published to PyPI with the compiled kernels; motif results are identical to 1.2.0.

@@ -213,7 +213,7 @@ class PileupStrategyPlain(TaskStrategy):
         bin_name, modtype, assembly, bin_pileup = args
         if isinstance(bin_pileup, list):
             # Arrow IPC files written by the builder, read instead of sent through the pool
-            bin_pileup = pl.concat([pl.read_ipc(path, memory_map=False) for path in bin_pileup])
+            bin_pileup = pl.concat([pl.read_ipc(path) for path in bin_pileup])
         if assembly is None:
             assembly = load_bin_assembly(self.config.assembly_path, self.bin_contig[bin_name])
         profiler = start_profiler()

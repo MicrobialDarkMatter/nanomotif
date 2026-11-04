@@ -26,8 +26,8 @@ def test_rust_partitioning_matches_python(tmp_path):
     assert set(got) == set(expected)
     key = ["contig", "strand", "position", "mod_type"]
     for part in expected:
-        a = pl.concat([pl.read_ipc(f, memory_map=False) for f in expected[part]]).sort(key)
-        b = pl.concat([pl.read_ipc(f, memory_map=False) for f in got[part]]).sort(key)
+        a = pl.concat([pl.read_ipc(f) for f in expected[part]]).sort(key)
+        b = pl.concat([pl.read_ipc(f) for f in got[part]]).sort(key)
         assert a.drop("fraction_mod").equals(b.drop("fraction_mod"))
         assert (a["fraction_mod"] - b["fraction_mod"]).abs().max() < 1e-12
 
@@ -43,8 +43,8 @@ def test_rust_partitioning_of_gzip_matches_plain(tmp_path):
     assert set(a) == set(b)
     key = ["contig", "strand", "position", "mod_type"]
     for part in a:
-        x = pl.concat([pl.read_ipc(f, memory_map=False) for f in a[part]]).sort(key)
-        y = pl.concat([pl.read_ipc(f, memory_map=False) for f in b[part]]).sort(key)
+        x = pl.concat([pl.read_ipc(f) for f in a[part]]).sort(key)
+        y = pl.concat([pl.read_ipc(f) for f in b[part]]).sort(key)
         assert x.equals(y)
 
 
