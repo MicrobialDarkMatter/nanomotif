@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.2.1 (2026-11-04)
+
+First release published to PyPI with the compiled kernels; motif results are identical to 1.2.0.
+
+### Changed
+- epimetheus-py is no longer a dependency. It ships wheels only for Python 3.9 on Linux x86_64, so on
+  Python 3.10+ installing it needed a Rust compiler (and failed in CI). Bgzipped pileups are now read by
+  nanomotif-rs (streamed, decompressed once and processed in parallel, whole contigs per thread), or
+  without it through pysam's tabix reader.
+- nanomotif-rs buffers rows compactly (contig index instead of a string per row).
+- Site index: windows cut from a strided view (no int64 index matrix) and bitsets built in one Rust pass.
+
+### Measured
+- Gold-standard monocultures (11 isolates, 66 motifs, 8 threads): same motifs as 1.2.0; total time
+  145 -> 122 s, largest peak memory 2,088 -> 1,571 MB.
+- ZymoOral (8 threads): plain pileup 23.4 s / 3.86 GB -> 21.0 s / 2.27 GB; bgzipped pileup 35.1 s /
+  2.68 GB (1.2.0, epimetheus) -> 31.2 s / 2.57 GB.
+
 ## 1.2.0 (2026-11-04)
 
 ### Removed

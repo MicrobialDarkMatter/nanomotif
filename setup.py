@@ -34,7 +34,6 @@ setup(
         "scipy>=1.10.1",
         "networkx>=3.1",
         "pyarrow>=15.0.2",
-        "epimetheus-py==0.7.5",
         "Bio>=1.6.2",
         "snakemake>=7.32.4",
         "progressbar2>=3.53.1",
@@ -44,7 +43,7 @@ setup(
         "pyinstrument>=5.1.1",
         # compiled kernels, as prebuilt wheels (no compiler needed) for these platforms; elsewhere the
         # pure-Python code runs. Keep the version equal to nanomotif's (rust/pyproject.toml).
-        "nanomotif-rs==1.2.0; (sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64'))"
+        "nanomotif-rs==1.2.1; (sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64'))"
         " or sys_platform == 'darwin'"
         " or (sys_platform == 'win32' and platform_machine == 'AMD64')",
     ],
