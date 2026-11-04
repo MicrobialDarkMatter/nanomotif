@@ -1,4 +1,4 @@
-# Output desciption
+# Output description
 
 In general, nanomotif outputs are provided as tab-separated values (TSV) files. Each TSV file contains one or more columns detailing the results, predictions, and underlying data. 
 
@@ -6,33 +6,47 @@ In general, nanomotif outputs are provided as tab-separated values (TSV) files. 
 
 ## Motif Discovery
 
-**Overview:**  
-The motif discovery step identifies DNA methylation motifs within bins. It outputs `bin-motifs.tsv` . This files contain information about the discovered motifs, their modification types, and their degree of methylation.
+**Overview:**
+Motif discovery writes the motifs found in each bin to `bin-motifs.tsv`, with how often each motif is
+methylated.
 
-**Files:**  
-- **bin-motifs.tsv**: Contains identified motifs
+**Files in the output folder:**
+- **bin-motifs.tsv**: the motifs (columns below). If no motifs are found, the file has only the header.
+- **precleanup-motifs/**: per bin and modification type, the motifs after each clean-up step (`motifs.tsv`,
+  then `-noise`, `-merge`, `-sub` and `-complement`; see [How it works](how_it_works.md#6-clean-up)).
+  Useful to see why a motif was dropped.
+- **temp/**: per bin, the sequence windows around methylated positions, the background windows, their
+  base frequencies and the search graph (`motif_graph_<mod>.gml`), for debugging.
+- **logs/**: the main log (`motif_discovery.main.log`, also printed to the terminal) and one log per worker
+  process (`find-motifs.<process id>.log`), with each task's peak memory.
+- **args.motif_discovery.json**: the arguments of the run.
 
 **Columns in bin-motifs.tsv:**
 
 | Column                        | Description                                                                                                                                                                              |
 |-------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **reference**             | The identifier of the contig or bin in which the motif was discovered. |
-| **mod_type**                  | The type of base modification associated with the motif. Uses single-letter codes (e.g., `a` for 6mA, `m` for 5mC, `21839` for 4mC).                                                   |
-| **motif**                     | The detected DNA motif sequence. Uses [IUPAC degenerate nucleotide codes](https://www.bioinformatics.org/sms/iupac.html) to represent positions where multiple nucleotides are possible. |
-| **mod_position**              | The zero-based index of the modified base within the motif. For example, if `mod_position` is 0, the modification occurs on the first nucleotide of the motif.                             |
-| **n_mod**        | The count of motif occurrences considered "methylated" (fraction of mapped bases methylated, ≥0.7 by default).                                                               |
-| **n_nomod**    | The count of motif occurrences considered "unmethylated" (fraction of mapped bases methylated, <0.2 by default).                                                              |
-| **motif_type**                | Classification of the motif as palindromic, non-palindromic, or bipartite. Palindromic motifs read the same forward and backward, while bipartite motifs have a gap separating two distinct parts. |
-| **motif_complement**          | The reverse complement of the motif. Only reported if the reverse complement is identified.                                                                                                 |
-| **mod_position_complement**   | The zero-based position of the modified base in the motif complement.                                                                                                                    |
-| **n_mod_complement**          | The number of methylated occurrences of the complement motif.                                                                                                         |
-| **n_nomod_complement**        | The number of unmethylated occurrences of the complement motif.                                                                                                       |
+| **reference**                 | The bin (or contig, or genome) in which the motif was found. |
+| **motif**                     | The motif. Uses [IUPAC degenerate nucleotide codes](https://www.bioinformatics.org/sms/iupac.html) for positions where several bases are possible, and `N` for any base. |
+| **mod_position**              | The zero-based position of the modified base in the motif. For example, `GATC` with `mod_position` 1 is methylated at the A. |
+| **mod_type**                  | The modification type, as modkit's code: `a` for 6mA, `m` for 5mC, `21839` for 4mC. |
+| **n_mod**                     | Motif occurrences (both strands) that are methylated: at least `--methylation_threshold_high` (0.7) of their reads called modified. |
+| **n_nomod**                   | Motif occurrences that are unmethylated: at most `--methylation_threshold_low` (0.3) of their reads called modified. Occurrences in between, or with fewer reads than `--threshold_valid_coverage`, are not counted. |
+| **motif_type**                | `palindrome` (the motif is its own reverse complement), `non-palindrome`, `bipartite` (two parts separated by three or more `N`) or `ambiguous` (two or more stretches of `N`). |
+| **motif_complement**          | The reverse complement motif, when it was found too: the other strand of the same recognition site, methylated at its own position. Empty otherwise. |
+| **mod_position_complement**   | The zero-based position of the modified base in the complement motif. |
+| **n_mod_complement**          | Methylated occurrences of the complement motif. |
+| **n_nomod_complement**        | Unmethylated occurrences of the complement motif. |
+
+The methylated fraction of a motif is `n_mod / (n_mod + n_nomod)`.
 
 ---
 
 ## Bin improvement
 
-The bin contamination (`detect_contamination`) and inclusion (`include_contigs`) commands have been removed and are no longer supported.
+The bin contamination (`detect_contamination`) and inclusion (`include_contigs`) commands were removed in
+version 1.2.0, with their output files (`bin_contamination.tsv`, `include_contigs.tsv`,
+`new_contig_bin.tsv`). For bin refinement from methylation, see
+[EpiRefine](https://github.com/SorenHeidelbach/epirefine).
 
 ## MTase-Linker
 
@@ -74,5 +88,3 @@ MTase-linker uses external tools for gene prediction and annotation:
 - **DefenseFinder output:** `.../defensefinder/{assembly_name}_processed_defense_finder_systems.tsv` lists RM-system gene annotations to verify if MTases form part of a complete RM-system.
 - **MTase amino acid sequences:** `.../defensefinder/{assembly_name}_processed_defense_finder_mtase.faa` contains predicted MTase amino acid sequences.
 - **All predicted protein sequences:** `.../prodigal/{assembly_name}_processed.faa` contains amino acid sequences for all predicted proteins, including MTases.
-
----

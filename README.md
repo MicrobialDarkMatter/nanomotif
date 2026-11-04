@@ -1,7 +1,9 @@
 # Nanomotif
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/nanomotif/badges/version.svg)](https://anaconda.org/bioconda/nanomotif)      [![PyPI version](https://badge.fury.io/py/nanomotif.svg)](https://badge.fury.io/py/nanomotif)
 
-Nanomotif is a Python package designed to explore methylation in prokaryotic genomes using Nanopore sequencing. Nanomotif is a fast, scalable, and sensitive tool for identification and utilization of methylation motifs in monocultures and metagenomic samples.
+Nanomotif finds DNA methylation motifs in prokaryotic genomes and metagenomes from Nanopore sequencing
+data. It finds the motifs of every bin (or genome) de novo from a modkit pileup, and its MTase-linker
+module links them to the methyltransferase genes that produce them.
   - [Overview](#nanomotif-offers)
   - [Documentation](#documentation)
   - [Installation](#installation)
@@ -10,87 +12,88 @@ Nanomotif is a Python package designed to explore methylation in prokaryotic gen
 
 
 ### Nanomotif offers
-- de novo methylated motif identification
-- association of MTases and RM-systems to motifs.
+- de novo methylation motif discovery per bin, for 6mA, 5mC and 4mC
+- association of MTases and RM systems with the motifs (MTase-linker)
+- speed on large metagenomes: about 20 s for a 12-bin mock community with a 4 GB pileup, 21 minutes for a
+  490-bin metagenome with a 330 GB pileup
 <p align="center">
   <img src="docs/figures/nanomotif_method.png" width="400" style="background-color:white;"/>
 </p>
 
 
-
 ## Documentation
-Please see the [documentation](https://nanomotif.readthedocs.io) for detailed installation and usage instructions, descriptions of required files, and analysis examples.
+See the [documentation](https://nanomotif.readthedocs.io) for installation and usage, the required
+files, the output, [how it works](https://nanomotif.readthedocs.io/en/latest/how_it_works.html) and
+examples.
 
 
-## Skip the Documentation: Your Quickstart Guide to Nanomotif
+## Quick start
 
 ### Installation
 
-Nanomotif can easily be installed using Conda for managing your Python environments. You can create a new environment and install Nanomotif as follows:
 ```shell
-conda create -n nanomotif  python=3.12
-conda activate nanomotif
-conda install -c conda-forge -c bioconda nanomotif
+python3 -m venv nanomotif
+source nanomotif/bin/activate
+pip install nanomotif
 ```
 
-#### Check installation
-Once installed, the installation can be checked by running:
+On Linux, macOS and Windows (x86_64), this includes Nanomotif's compiled kernels (`nanomotif-rs`) as a
+prebuilt wheel; no compiler is needed. Nanomotif is also on Bioconda:
+`conda install -c conda-forge -c bioconda nanomotif`.
+
+Check the installation with a small test run:
 ```shell
 nanomotif check_installation
 ```
-This runs a test run on a small dataset, ensuring everything works.
 
-For further details, check out the [installation guidelines]().
+### Required files
 
+- the assembly (FASTA)
+- a [modkit](https://github.com/nanoporetech/modkit/blob/master/book/src/advanced_usage.md#pileup)
+  methylation pileup (plain or bgzipped)
+- the bin of each contig: a tab-separated `contig<TAB>bin` file, or the bin FASTA files
 
-### Usage
-#### Required files
+See [required files](https://nanomotif.readthedocs.io/en/latest/required_files.html) for how to make them.
 
-To identify methylated motifs, the following files are required: 
-- Assembly (fasta file)
-- [modkit](https://github.com/nanoporetech/modkit/blob/master/book/src/advanced_usage.md#pileup) methylation pileup
-- tab-separated file describing `contig-bin` relationship.
+### Motif discovery
 
-For further details, check out the [required files](https://nanomotif.readthedocs.io/en/latest/required_files.html) documentation.
+For monocultures and metagenomes alike:
 
-
-#### Motif discovery
-
-Whether you are interested in finding methylated motifs in monoculture samples or metagenomic samples, we recomment just running `motif_discovery`
-
-```
-nanomotif motif_discovery ASSEMBLY.fasta PILEUP.bed CONTIG_BIN.tsv -t THREADS --out OUT
+```shell
+nanomotif motif_discovery ASSEMBLY.fasta PILEUP.bed -c CONTIG_BIN.tsv -t THREADS --out OUT
 ```
 
-This will create three files: `motifs.tsv`,`motif-scored.tsv`, and `bin-motifs.tsv`. Highly methylated motifs are found in `bin-motifs.tsv`.
+The motifs of each bin are written to `OUT/bin-motifs.tsv`. See
+[usage](https://nanomotif.readthedocs.io/en/latest/usage.html) and
+[output](https://nanomotif.readthedocs.io/en/latest/output.html).
 
-See [usage](https://nanomotif.readthedocs.io/en/latest/usage.html) and [output](https://nanomotif.readthedocs.io/en/latest/output.html) for detailed usage and output information.
+### MTase-linker
 
-#### Bin contamination and inclusion
-The `detect_contamination` and `include_contigs` commands have been removed and are no longer supported.
+This module links methylation motifs to their MTase and, when present, their entire RM system. It needs
+additional dependencies, installed once with (requires conda):
 
-#### MTase-linker
-This module tries to link methylation motifs to their corresponding MTase and, when present, their entire RM system. 
-
-The MTase-Linker module has additional dependencies that are not automatically installed with Nanomotif. Therefore, before using this module, you must manually install these dependencies using the `MTase-linker install` command.
-The `MTase-linker` module requires that conda is available on your system.
-
-```
+```shell
 nanomotif MTase-linker install
 ```
 
-This will create a folder named `ML_dependencies` in your current working directory, containing the required dependencies for the MTase-linker module. You can use the `--dependency_dir` flag to change the installation location of the `ML_dependencies` folder.
+This creates a folder `ML_dependencies` in the current directory (`--dependency_dir` to change it). Then:
 
-The installation requires conda to generate a few environments, and it takes a bit time as it runs the workflow on a small dataset to check the installation. 
-
-When the additional dependencies are installed you can run the workflow using `MTase-linker run`
-
-```
-nanomotif MTase-linker run -t 10 --assembly ASSEMBLY.fasta --contig_bin contig_bin.tsv --bin_motifs nanomotif/bin_motifs.tsv -d ML_dependencies -o mtase_linker
+```shell
+nanomotif MTase-linker run -t 10 --assembly ASSEMBLY.fasta --contig_bin contig_bin.tsv \
+    --bin_motifs OUT/bin-motifs.tsv -d ML_dependencies -o mtase_linker
 ```
 
-Running the nanomotif MTase-linker run command will generate two primary output files: mtase_assignment_table.tsv and nanomotif_assignment_table.tsv. The first file lists all predicted MTase genes in the genome along with their predicted methylation characteristics and whether the module was able to unambiguously assign any detected motifs to the MTase (`linked` = (True/False)).
-The second file includes data from the bin-motifs.tsv of the nanomotif output with two additional columns `linked` and `candidate_genes`. The `linked` variable is a boolean indicator if the motif could be unambiguously linked to a MTase in the bin/genome (TRUE/FALSE). If True the gene_id of the MTase is provided in `candidate_gene`. If False, the `candidate_gene` variable lists feasible candidate facilitators of the modification based on motif type and modification type predictions.
+It writes `mtase_assignment_table.tsv`, the predicted MTase genes and whether a motif could be linked to
+each, and `nanomotif_assignment_table.tsv`, `bin-motifs.tsv` with the linked genes and candidates.
+
+### Bin contamination and inclusion
+
+The `detect_contamination` and `include_contigs` commands were removed in version 1.2.0. For bin
+refinement from methylation, see [EpiRefine](https://github.com/SorenHeidelbach/epirefine).
+
+### What's new
+
+See the [changelog](CHANGELOG.md).
 
 ## Citation
 
@@ -101,7 +104,7 @@ Søren Heidelbach, Sebastian Mølvang Dall, Jeppe Støtt Bøjer, Jacob Nissen, L
 
 ## License
 
-Nanomotif is released under the [MIT License](https://github.com/your-username/nanomotif/blob/main/LICENSE). Feel free to use, modify, and distribute the package in accordance with the terms of the license.
+Nanomotif is released under the [MIT License](LICENSE). Feel free to use, modify, and distribute the package in accordance with the terms of the license.
 
 ## Acknowledgments
 

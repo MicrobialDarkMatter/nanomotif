@@ -16,6 +16,9 @@ extensions = [
     'myst_parser'
 ]
 
+# anchors for headings, so pages can link to sections (#section-name), as on GitHub
+myst_heading_anchors = 3
+
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
     'sphinx': ('https://www.sphinx-doc.org/en/master/', None),

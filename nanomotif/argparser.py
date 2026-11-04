@@ -45,7 +45,7 @@ def create_parser():
 
         group.add_argument(
             "-c", "--contig_bin", type=str, 
-            help="TSV file specifying which bin contigs belong."
+            help="Two-column TSV file (contig, bin) without header: the bin of each contig."
         )
 
         group.add_argument(
@@ -71,23 +71,23 @@ def create_parser():
         """
         parser.add_argument(
             "--methylation_threshold_low", type=float, default=0.30, 
-            help="A position is considered non-methylated if fraction of methylation is below this threshold. Default: %(default)s"
+            help="A position is considered unmethylated if its fraction of modified reads is at most this. Default: %(default)s"
         )
 
         parser.add_argument(
             "--methylation_threshold_high", type=float, default=0.70, 
-            help="A position is considered methylated if fraction of methylated reads is above this threshold. Default: %(default)s"
+            help="A position is considered methylated if its fraction of modified reads is at least this. Default: %(default)s"
         )
 
     def add_motif_search_arguments(parser):
         parser.add_argument(
             "--search_frame_size", type=int, default=40, 
-            help="length of the sequnces sampled around confident methylation sites. Default: %(default)s"
+            help="Length of the sequences sampled around confidently methylated positions. Default: %(default)s"
         )
         
         parser.add_argument(
             "--minimum_kl_divergence", type=float, default=0.05, 
-            help="Minimum KL-divergence for a position to considered for expansion in  motif search. Higher value means less exhaustive, but faster search. Default: %(default)s"
+            help="Minimum KL divergence for a position to be considered for expansion in the motif search. A higher value means a less exhaustive, but faster search. Default: %(default)s"
         )
         
         parser.add_argument(
@@ -106,17 +106,17 @@ def create_parser():
 
 
     parser_find_motifs_bin.add_argument("assembly", type=str, 
-        help="path to the assembly file.")
+        help="Path to the assembly (FASTA).")
     
     parser_find_motifs_bin.add_argument("pileup", type=str, 
-        help="path to the modkit pileup file.") 
+        help="Path to the modkit pileup (plain or bgzipped).") 
     
     add_contig_bin_arguments(parser_find_motifs_bin)
 
     parser_find_motifs_bin_options = parser_find_motifs_bin.add_argument_group("Options")
     parser_find_motifs_bin_options.add_argument(
         "--out", type=str, 
-        help="path to the output folder", default="nanomotif"
+        help="Path to the output folder. Default: %(default)s", default="nanomotif"
     )
     add_methylation_threshold_arguments(parser_find_motifs_bin_options)
 
@@ -125,12 +125,12 @@ def create_parser():
 
     parser_find_motifs_bin_options.add_argument(
         "--threshold_valid_coverage", type=int, default=5, 
-        help="Minimum valid base coverage (Nvalid_cov) for a position to be considered. Default: %(default)s"
+        help="Minimum number of valid reads (Nvalid_cov) for a position to be used. Default: %(default)s"
     )
 
     parser_find_motifs_bin_options.add_argument(
         "--min_motifs_bin", type=int, default=50, 
-        help="Minimum number of motif observations in a bin. Default: %(default)s"
+        help="Minimum number of scored motif occurrences (n_mod + n_nomod) in a bin for a motif to be reported. Default: %(default)s"
     )
 
     add_general_arguments(parser_find_motifs_bin)

@@ -1,27 +1,60 @@
-# Example
+# Examples
 
-## Finding motifs in monocultures
+## Finding motifs in a monoculture
 
-When working with monoculture assemblies, you can directly use the contig FASTA file for motif discovery. Assuming your monoculture assembly is in `assembly.fasta`, you can run:
+For a monoculture, give the assembly itself as the only "bin" file, so all contigs are treated as one
+genome:
 
 ```shell
 nanomotif motif_discovery \
     assembly.fasta \
-    pileup.tsv \
+    pileup.bed \
     -f assembly.fasta \
-    --out output_directory
+    -t 8 \
+    --out nanomotif_out
 ```
 
-Then Nanomotif will identify motifs in the full assembly, considering all contigs in the file as one bin. In the output file, the bin ID will be the same as the assembly file name.
+The bin is named after the file without its extension (here `assembly`), and `nanomotif_out/bin-motifs.tsv`
+lists the genome's motifs.
 
+## Finding motifs in a metagenome
 
-## Finding motifs in metagenomes with binning
+With bins from a binner, give the bin of each contig as a TSV file (see
+[Required files](required_files.md#contig-bin-relationship)):
 
-When working with metagenomic assemblies, you may want to identify motifs within specific bins. This requires a contig-bin relationship file to map contigs to their respective bins.
+```shell
+nanomotif motif_discovery \
+    assembly.fasta \
+    pileup.bed \
+    -c contig_bin.tsv \
+    -t 16 \
+    --out nanomotif_out
+```
 
-## Finding motifs in contigs
+Or point to the folder of bin FASTA files:
 
-If you are interested in identifying motifs seperately for each contig, you can create a contig-bin relationship file where each contig is assigned to its own unique bin. For example, if your assembly contains contigs `contig_1`, `contig_2`, and `contig_3`, your contig-bin file would look like this:
+```shell
+nanomotif motif_discovery assembly.fasta pileup.bed -d bins/ --extension .fa -t 16 --out nanomotif_out
+```
+
+Bins are processed in parallel; with many bins, more threads give the largest speed-up.
+
+## Using a bgzipped pileup
+
+A bgzipped pileup is read the same way and saves disk space:
+
+```shell
+bgzip -@ 8 pileup.bed
+nanomotif motif_discovery assembly.fasta pileup.bed.gz -c contig_bin.tsv -t 16 --out nanomotif_out
+```
+
+If `nanomotif-rs` is not installed (see [Installation](installation.md)), index the file first with
+`tabix -p bed pileup.bed.gz`.
+
+## Finding motifs in each contig
+
+To find motifs separately for each contig, give every contig its own bin. For an assembly with contigs
+`contig_1`, `contig_2` and `contig_3`:
 
 ```shell
 contig_1   contig_1
@@ -29,12 +62,31 @@ contig_2   contig_2
 contig_3   contig_3
 ```
 
-Then provide this contig to contig relationship file to Nanomotif:
+A file like this can be made from the assembly with:
 
 ```shell
-nanomotif motif_discovery \
-    assembly.fasta \
-    pileup.tsv \
-    -c contig_bin.tsv \
-    --out output_directory
+grep ">" assembly.fasta | sed 's/>//; s/ .*//' | awk '{print $1 "\t" $1}' > contig_contig.tsv
+```
+
+Then:
+
+```shell
+nanomotif motif_discovery assembly.fasta pileup.bed -c contig_contig.tsv -t 8 --out nanomotif_out
+```
+
+Short contigs often have too few methylated positions for motif discovery; their motifs are then
+missing rather than wrong.
+
+## Linking motifs to MTase genes
+
+After motif discovery, MTase-linker links the motifs to methyltransferase genes (install its
+dependencies first, see [Installation](installation.md#mtase-linker-installation)):
+
+```shell
+nanomotif MTase-linker run -t 8 \
+    --assembly assembly.fasta \
+    --contig_bin contig_bin.tsv \
+    --bin_motifs nanomotif_out/bin-motifs.tsv \
+    -d ML_dependencies \
+    -o mtase_linker_out
 ```
