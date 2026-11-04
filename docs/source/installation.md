@@ -53,6 +53,11 @@ This runs motif discovery on a small test dataset that is shipped with Nanomotif
 The MTase-linker module has additional dependencies that are not installed with Nanomotif. Before using
 it, install them with the `MTase-linker install` command. It needs conda on your system.
 
+MTase-linker also needs snakemake. It is installed with Nanomotif on Python 3.11 and newer. On Python 3.9
+and 3.10 it is not (there, one of its dependencies has to be compiled); install it yourself, for example
+with `conda install -c conda-forge -c bioconda snakemake`, or use Python 3.11 or newer. Motif discovery
+does not need snakemake.
+
 ```shell
 nanomotif MTase-linker install
 ```

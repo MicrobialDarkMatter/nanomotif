@@ -35,7 +35,9 @@ setup(
         "networkx>=3.1",
         "pyarrow>=15.0.2",
         "Bio>=1.6.2",
-        "snakemake>=7.32.4",
+        # only MTase-linker needs snakemake; on Python < 3.11 its dependency datrie has no wheels (needs a
+        # compiler), so it is installed with Nanomotif only from 3.11 on
+        "snakemake>=7.32.4; python_version >= '3.11'",
         "progressbar2>=3.53.1",
         "pyfastx>=0.2.10",
         "pysam>=0.22.0",
@@ -43,7 +45,7 @@ setup(
         "pyinstrument>=5.1.1",
         # compiled kernels, as prebuilt wheels (no compiler needed) for these platforms; elsewhere the
         # pure-Python code runs. Keep the version equal to nanomotif's (rust/pyproject.toml).
-        "nanomotif-rs==1.2.2; (sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64'))"
+        "nanomotif-rs==1.2.3; (sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64'))"
         " or sys_platform == 'darwin'"
         " or (sys_platform == 'win32' and platform_machine == 'AMD64')",
     ],

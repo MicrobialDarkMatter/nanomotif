@@ -108,10 +108,23 @@ def find_motifs_bin(args, pl, min_mods_pr_contig = 50, min_mod_frequency = 10000
 ####################################################################################################
 # MTaser-linker
 
-from nanomotif.mtase_linker.dependencies import snakemake_create_environments, get_models, defensefinder_update, check_installation_MTase_linker
-from nanomotif.mtase_linker.command import run_MTase_linker
+SNAKEMAKE_MISSING = (
+    "MTase-linker needs snakemake, which is not installed. Install it with `pip install snakemake` "
+    "(on Python 3.9 and 3.10 this compiles a C extension) or `conda install -c conda-forge -c bioconda "
+    "snakemake`, or use Python 3.11 or newer, where it is installed with Nanomotif."
+)
+
 
 def mtase_linker(args):
+    # imported here, so the rest of Nanomotif works without snakemake (only MTase-linker needs it)
+    try:
+        from nanomotif.mtase_linker.dependencies import snakemake_create_environments, get_models, defensefinder_update, check_installation_MTase_linker
+        from nanomotif.mtase_linker.command import run_MTase_linker
+    except ModuleNotFoundError as e:
+        if e.name != "snakemake":
+            raise
+        log.error(SNAKEMAKE_MISSING)
+        sys.exit(1)
     if args.mtase_linker_command == "install":
         snakemake_create_environments(args)
         get_models(args)
