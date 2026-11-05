@@ -96,6 +96,12 @@ def join_motif_complements(motif_df: nm.motif.MotifSearchResult):
             suffix = "_complement"
         ).filter(
             (pl.col("motif_iupac") >= pl.col("motif_iupac_complement")) | pl.col("mod_position_complement").is_null()
+        ).filter(
+            # a palindrome is its own complement: pair it only with its own methylated position (TTAA
+            # methylated at either A is two motifs, not two complements of each other)
+            pl.col("mod_position_complement").is_null()
+            | (pl.col("motif_iupac") != pl.col("motif_iupac_complement"))
+            | (pl.col("mod_position_iupac") == pl.col("mod_position_iupac_complement"))
         ).with_columns([
             pl.when(pl.col("mod_position_complement").is_not_null()) \
                 .then(pl.col("motif_iupac_complement")) \

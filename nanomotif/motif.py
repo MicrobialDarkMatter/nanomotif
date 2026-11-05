@@ -922,7 +922,8 @@ class MotifSearchResult(pl.DataFrame):
             ])
             df_formatted = df_formatted.hstack(df_complement)
 
-        df_formatted = df_formatted.sort(["reference", "mod_type", "motif"])
+        # motifs that differ only in the search's internal form (e.g. flanking positions) are written once
+        df_formatted = df_formatted.unique().sort(["reference", "mod_type", "motif", "mod_position"])
         df_formatted.write_csv(file_path, separator="\t")
 
 
