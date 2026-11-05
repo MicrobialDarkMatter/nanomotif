@@ -60,8 +60,8 @@ The defaults suit most datasets. The ones you may want to change:
   occurrences (`n_mod` + `n_nomod`) in the bin.
 - **`--pileup_cache FILE`** (off by default): keep the filtered pileup in `FILE` and reuse it in later
   runs. Useful when you run motif discovery several times on the same data, for example with different
-  search settings. The first run writes the file (one compressed file; 0.8 GB for a 4 GB pileup in our
-  tests); later runs with the same pileup, contig bins, `--threshold_valid_coverage` and
+  search settings. The first run writes the file (one compressed file, about a tenth of the pileup's
+  size, at little extra time); later runs with the same pileup, contig bins, `--threshold_valid_coverage` and
   `--methylation_threshold_high` read it instead of the pileup. If any of these differ, or the pileup
   file has changed, the cache is rebuilt and the log says why. Other options (for example
   `--min_motif_score` or `--search_frame_size`) can change between runs that share a cache.
