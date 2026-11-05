@@ -1,6 +1,6 @@
 [package]
 name = "nanomotif_rs"
-version = "1.2.4"
+version = "1.3.0"
 edition = "2021"
 
 [lib]

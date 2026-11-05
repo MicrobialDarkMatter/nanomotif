@@ -129,6 +129,13 @@ def create_parser():
     )
 
     parser_find_motifs_bin_options.add_argument(
+        "--pileup_cache", type=str, default=None, metavar="FILE",
+        help="Keep the filtered pileup in this file (one compressed Arrow file) and reuse it in later runs "
+             "with the same pileup, contig bins, --threshold_valid_coverage and --methylation_threshold_high, "
+             "skipping the pileup pass. Off by default (the filtered pileup is temporary)."
+    )
+
+    parser_find_motifs_bin_options.add_argument(
         "--min_motifs_bin", type=int, default=50, 
         help="Minimum number of scored motif occurrences (n_mod + n_nomod) in a bin for a motif to be reported. Default: %(default)s"
     )

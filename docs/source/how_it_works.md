@@ -29,6 +29,8 @@ contigs that belong to a bin and filters them:
 
 The pileup is read once, in a parallel streaming pass, and split into one file per bin and modification
 type, which the worker processes read. Plain and bgzipped (`.bed.gz`) pileups are read the same way.
+These files are temporary. With `--pileup_cache FILE` they are kept, combined into one file, and a later
+run with the same pileup, bins and filter thresholds skips this step.
 
 ## 2. Methylated and unmethylated positions
 

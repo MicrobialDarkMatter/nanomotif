@@ -58,6 +58,13 @@ The defaults suit most datasets. The ones you may want to change:
   positions needed more than 5 reads; use 6 to reproduce that.)
 - **`--min_motifs_bin`** (default 50): a motif is only reported if it has at least this many scored
   occurrences (`n_mod` + `n_nomod`) in the bin.
+- **`--pileup_cache FILE`** (off by default): keep the filtered pileup in `FILE` and reuse it in later
+  runs. Useful when you run motif discovery several times on the same data, for example with different
+  search settings. The first run writes the file (one compressed file, about a tenth of the pileup's
+  size, at little extra time); later runs with the same pileup, contig bins, `--threshold_valid_coverage` and
+  `--methylation_threshold_high` read it instead of the pileup. If any of these differ, or the pileup
+  file has changed, the cache is rebuilt and the log says why. Other options (for example
+  `--min_motif_score` or `--search_frame_size`) can change between runs that share a cache.
 - **`-t` / `--threads`**: bins are processed in parallel, so more threads help most with many bins. Memory
   use grows with the number of threads and the size of the largest bins.
 - **`--seed`**: runs with the same seed and inputs give the same result.
@@ -71,7 +78,8 @@ usage: nanomotif motif_discovery (-c CONTIG_BIN | -f FILES [FILES ...] | -d DIRE
                                  [--minimum_kl_divergence MINIMUM_KL_DIVERGENCE]
                                  [--min_motif_score MIN_MOTIF_SCORE]
                                  [--threshold_valid_coverage THRESHOLD_VALID_COVERAGE]
-                                 [--min_motifs_bin MIN_MOTIFS_BIN] [-t THREADS] [-v] [--seed SEED] [-h]
+                                 [--pileup_cache FILE] [--min_motifs_bin MIN_MOTIFS_BIN] [-t THREADS]
+                                 [-v] [--seed SEED] [-h]
                                  assembly pileup
 
 positional arguments:
@@ -106,6 +114,10 @@ Options:
                         Minimum score for a motif to be kept after identification. Default: 1.5
   --threshold_valid_coverage THRESHOLD_VALID_COVERAGE
                         Minimum number of valid reads (Nvalid_cov) for a position to be used. Default: 5
+  --pileup_cache FILE   Keep the filtered pileup in this file (one compressed Arrow file) and reuse it in
+                        later runs with the same pileup, contig bins, --threshold_valid_coverage and
+                        --methylation_threshold_high, skipping the pileup pass. Off by default (the
+                        filtered pileup is temporary).
   --min_motifs_bin MIN_MOTIFS_BIN
                         Minimum number of scored motif occurrences (n_mod + n_nomod) in a bin for a motif to
                         be reported. Default: 50

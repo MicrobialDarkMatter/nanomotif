@@ -67,6 +67,19 @@ fn partition_pileup(
         .map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
+/// partition_pileup into one file (the pileup cache): returns {(bin, mod_type): [batch numbers]}; the
+/// file's footer metadata holds `manifest` and the batch index.
+#[pyfunction]
+#[pyo3(signature = (path, contig_bin, out_file, manifest, min_coverage, threshold, min_mods=50, min_mod_frequency=0.0001, adjacency_distance=8, threads=1, flush_rows=500_000))]
+fn partition_pileup_to_file(
+    py: Python<'_>, path: &str, contig_bin: HashMap<String, String>, out_file: &str, manifest: &str, min_coverage: i64,
+    threshold: f64, min_mods: usize, min_mod_frequency: f64, adjacency_distance: i64, threads: usize, flush_rows: usize,
+) -> PyResult<HashMap<(String, String), Vec<u32>>> {
+    let settings = pileup::Settings { min_coverage, threshold, min_mods, min_mod_frequency, adjacency_distance, flush_rows, max_buffered: 4 * flush_rows };
+    py.allow_threads(|| pileup::partition_to_file(path, &contig_bin, &settings, out_file, manifest, threads.max(1)))
+        .map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
 /// Bitsets of a window matrix (n sites x L columns, one base code per byte): for every column and
 /// every base code present (code 0 = outside the contig, skipped), one bit per site, in numpy's
 /// packbits layout viewed as little-endian u64 words (site i: word i / 64, bit 8 * ((i % 64) / 8)
@@ -113,6 +126,7 @@ fn column_bitsets<'py>(
 fn nanomotif_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(filter_and_pssm, m)?)?;
     m.add_function(wrap_pyfunction!(partition_pileup, m)?)?;
+    m.add_function(wrap_pyfunction!(partition_pileup_to_file, m)?)?;
     m.add_function(wrap_pyfunction!(column_bitsets, m)?)?;
     Ok(())
 }

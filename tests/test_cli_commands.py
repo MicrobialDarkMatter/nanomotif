@@ -144,3 +144,14 @@ def test_works_without_snakemake():
     assert linker.returncode == 1
     assert "MTase-linker needs snakemake" in linker.stderr + linker.stdout
     assert "Traceback" not in linker.stderr
+
+
+def test_pileup_cache_gives_the_same_motifs(tmp_path):
+    expected = _run_motif_discovery(tmp_path / "plain")
+    cache = tmp_path / "pileup_cache.arrow"
+    first = _run_motif_discovery(tmp_path / "first", extra=["--pileup_cache", str(cache)])
+    mtime = os.stat(cache).st_mtime_ns
+    second = _run_motif_discovery(tmp_path / "second", extra=["--pileup_cache", str(cache)])
+    assert os.stat(cache).st_mtime_ns == mtime, "the cache should be reused, not rewritten"
+    assert first.equals(expected)
+    assert second.equals(expected)
