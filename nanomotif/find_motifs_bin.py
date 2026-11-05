@@ -159,6 +159,11 @@ class TaskStrategy:
             state[name] = None
         state["config"] = copy.copy(self.config)
         state["config"].assembly = None
+        # No polars objects either: the pool pickles tasks in one thread while another unpickles results
+        # (polars DataFrames). Polars (de)serialisation in two threads at once can deadlock (GIL held while
+        # waiting for polars' thread pool): ZymoFecal hung for 30 min at 522 of 1470 tasks. Workers use
+        # the bin_contig dict, not this DataFrame.
+        state["config"].bin_contig = None
         return state
 
     def n_tasks(self):
