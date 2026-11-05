@@ -223,7 +223,7 @@ class PileupStrategyPlain(TaskStrategy):
             # Arrow IPC files written by the builder, read instead of sent through the pool
             bin_pileup = pl.concat([pl.read_ipc(path) for path in bin_pileup])
         elif isinstance(bin_pileup, tuple):
-            # (cache file, first batch, end batch) in the pileup cache
+            # (cache file, [batch numbers]) in the pileup cache
             bin_pileup = nm.pileup_cache.read_partition(*bin_pileup)
         if assembly is None:
             assembly = load_bin_assembly(self.config.assembly_path, self.bin_contig[bin_name])
@@ -474,7 +474,13 @@ class BinMotifProcessorBuilder:
             if partitioned_pileup is None:
                 partition_dir = os.path.join(self.config.output_dir, "temp", "pileup_partitions")
                 os.makedirs(partition_dir, exist_ok=True)
-                if nanomotif_rs is not None:
+                if nanomotif_rs is not None and cache:
+                    log.info(f"Partitioning the pileup into {cache} (streaming, nanomotif_rs)")
+                    partitioned_pileup = nm.pileup_cache.write_with_rust(
+                        nanomotif_rs, cache, manifest, pileup_path, contig_bin,
+                        self.config.min_valid_coverage, self.config.methylation_threshold_high, self.config.threads,
+                    )
+                elif nanomotif_rs is not None:
                     log.info("Partitioning the pileup (streaming, nanomotif_rs)")
                     partitioned_pileup = nanomotif_rs.partition_pileup(
                         pileup_path,
@@ -484,8 +490,6 @@ class BinMotifProcessorBuilder:
                         threshold=self.config.methylation_threshold_high,
                         threads=self.config.threads,
                     )
-                    if cache:
-                        partitioned_pileup = nm.pileup_cache.write_from_files(cache, manifest, partitioned_pileup)
                 else:
                     partitioned_pileup = self._partition_plain_python(pileup_path, partition_dir, cache, manifest if cache else None)
             if not partitioned_pileup:

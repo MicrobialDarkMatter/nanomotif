@@ -80,7 +80,7 @@ fn schema() -> Arc<Schema> {
     ]))
 }
 
-fn write_ipc(path: &str, bin: &str, mod_type: &str, sink: &mut Sink) -> std::io::Result<()> {
+fn make_batch(bin: &str, mod_type: &str, sink: &mut Sink) -> std::io::Result<RecordBatch> {
     let n = sink.position.len();
     let columns: Vec<ArrayRef> = vec![
         Arc::new(StringArray::from_iter_values(sink.contig.iter().map(|&i| sink.names[i as usize].as_str()))),
@@ -94,12 +94,19 @@ fn write_ipc(path: &str, bin: &str, mod_type: &str, sink: &mut Sink) -> std::io:
     sink.contig.clear();
     sink.minus.clear();
     sink.names.clear();
-    let batch = RecordBatch::try_new(schema(), columns).map_err(std::io::Error::other)?;
+    RecordBatch::try_new(schema(), columns).map_err(std::io::Error::other)
+}
+
+fn new_writer<W: std::io::Write>(writer: W) -> std::io::Result<FileWriter<W>> {
     let options = IpcWriteOptions::default()
         .try_with_compression(Some(CompressionType::LZ4_FRAME))
         .map_err(std::io::Error::other)?;
-    let mut writer = FileWriter::try_new_with_options(File::create(path)?, &schema(), options).map_err(std::io::Error::other)?;
-    writer.write(&batch).map_err(std::io::Error::other)?;
+    FileWriter::try_new_with_options(writer, &schema(), options).map_err(std::io::Error::other)
+}
+
+fn write_ipc(path: &str, batch: &RecordBatch) -> std::io::Result<()> {
+    let mut writer = new_writer(File::create(path)?)?;
+    writer.write(batch).map_err(std::io::Error::other)?;
     writer.finish().map_err(std::io::Error::other)?;
     Ok(())
 }
@@ -154,6 +161,11 @@ struct Output {
     dir: String,
     part: usize,
     files: HashMap<(String, String), Vec<String>>,
+    /// one file for all partitions (the pileup cache): batches are appended as threads flush them, so a
+    /// partition's batches are interleaved with others'; `batches` lists them per (bin, mod type)
+    single: Option<FileWriter<std::io::BufWriter<File>>>,
+    batches: HashMap<(String, String), Vec<u32>>,
+    n_batches: u32,
 }
 
 /// One thread: stream a byte range contig by contig.
@@ -186,14 +198,22 @@ fn process_stream<R: std::io::Read>(
             if sink.position.is_empty() || (!force && sink.position.len() < s.flush_rows) {
                 continue;
             }
-            let path = {
-                let mut o = out.lock().unwrap();
+            let key = (bin.clone(), mod_types[*m as usize].clone());
+            // the batch is built (strings) outside the lock; only writing it is serialised
+            let batch = make_batch(bin, &mod_types[*m as usize], sink).map_err(|e| e.to_string())?;
+            let mut guard = out.lock().unwrap();
+            let o = &mut *guard;
+            if let Some(writer) = o.single.as_mut() {
+                writer.write(&batch).map_err(|e| e.to_string())?;
+                o.batches.entry(key).or_default().push(o.n_batches);
+                o.n_batches += 1;
+            } else {
                 o.part += 1;
-                let p = format!("{}/{}.arrow", o.dir, o.part);
-                o.files.entry((bin.clone(), mod_types[*m as usize].clone())).or_default().push(p.clone());
-                p
-            };
-            write_ipc(&path, bin, &mod_types[*m as usize], sink).map_err(|e| e.to_string())?;
+                let path = format!("{}/{}.arrow", o.dir, o.part);
+                o.files.entry(key).or_default().push(path.clone());
+                drop(guard);
+                write_ipc(&path, &batch).map_err(|e| e.to_string())?;
+            }
         }
         Ok(())
     };
@@ -407,11 +427,68 @@ fn partition_gzip(
 pub fn partition(
     path: &str, contig_bin: &HashMap<String, String>, s: &Settings, out_dir: &str, threads: usize,
 ) -> Result<HashMap<(String, String), Vec<String>>, String> {
-    let out_files = Mutex::new(Output { dir: out_dir.to_string(), part: 0, files: HashMap::new() });
+    let out = Output { dir: out_dir.to_string(), part: 0, files: HashMap::new(), single: None, batches: HashMap::new(), n_batches: 0 };
+    Ok(run(path, contig_bin, s, out, threads)?.files)
+}
+
+fn json_string(x: &str) -> String {
+    let mut o = String::with_capacity(x.len() + 2);
+    o.push('"');
+    for c in x.chars() {
+        match c {
+            '"' => o.push_str("\\\""),
+            '\\' => o.push_str("\\\\"),
+            c if (c as u32) < 0x20 => o.push_str(&format!("\\u{:04x}", c as u32)),
+            c => o.push(c),
+        }
+    }
+    o.push('"');
+    o
+}
+
+/// All partitions in one lz4 Arrow IPC file at `out_file`. The last batch is a one-row trailer
+/// (contig "nanomotif_cache", mod_type the manifest given, strand the index as JSON
+/// [[bin, mod_type, [batch, ...]], ...]); pyarrow < 20 cannot read footer metadata, so it is a batch.
+/// Returns {(bin, mod_type): [batch numbers]}.
+pub fn partition_to_file(
+    path: &str, contig_bin: &HashMap<String, String>, s: &Settings, out_file: &str, manifest: &str, threads: usize,
+) -> Result<HashMap<(String, String), Vec<u32>>, String> {
+    let file = File::create(out_file).map_err(|e| e.to_string())?;
+    let writer = new_writer(std::io::BufWriter::with_capacity(CHUNK, file)).map_err(|e| e.to_string())?;
+    let out = Output { dir: String::new(), part: 0, files: HashMap::new(), single: Some(writer), batches: HashMap::new(), n_batches: 0 };
+    let out = run(path, contig_bin, s, out, threads)?;
+    let mut writer = out.single.unwrap();
+    let mut keys: Vec<&(String, String)> = out.batches.keys().collect();
+    keys.sort();
+    let index: Vec<String> = keys.iter().map(|k| {
+        let batches: Vec<String> = out.batches[*k].iter().map(|b| b.to_string()).collect();
+        format!("[{},{},[{}]]", json_string(&k.0), json_string(&k.1), batches.join(","))
+    }).collect();
+    let index = format!("[{}]", index.join(","));
+    let trailer = RecordBatch::try_new(schema(), vec![
+        Arc::new(StringArray::from(vec!["nanomotif_cache"])) as ArrayRef,
+        Arc::new(Int64Array::from(vec![0i64])),
+        Arc::new(StringArray::from(vec![manifest])),
+        Arc::new(StringArray::from(vec![index.as_str()])),
+        Arc::new(Float64Array::from(vec![0.0])),
+        Arc::new(Int64Array::from(vec![0i64])),
+        Arc::new(StringArray::from(vec![""])),
+    ]).map_err(|e| e.to_string())?;
+    writer.write(&trailer).map_err(|e| e.to_string())?;
+    writer.finish().map_err(|e| e.to_string())?;
+    use std::io::Write;
+    writer.into_inner().map_err(|e| e.to_string())?.flush().map_err(|e| e.to_string())?;
+    Ok(out.batches)
+}
+
+fn run(
+    path: &str, contig_bin: &HashMap<String, String>, s: &Settings, out: Output, threads: usize,
+) -> Result<Output, String> {
+    let out_files = Mutex::new(out);
     if is_gzip(path) {
         let seen = partition_gzip(path, contig_bin, s, &out_files, threads)?;
         check_contiguous(seen)?;
-        return Ok(out_files.into_inner().unwrap().files);
+        return Ok(out_files.into_inner().unwrap());
     }
     let ranges = {
         let file = File::open(path).map_err(|e| e.to_string())?;
@@ -423,7 +500,7 @@ pub fn partition(
         ranges.par_iter().map(|&r| process_range(path, r, contig_bin, s, &out_files)).collect::<Result<_, _>>()
     })?;
     check_contiguous(seen)?;
-    Ok(out_files.into_inner().unwrap().files)
+    Ok(out_files.into_inner().unwrap())
 }
 
 /// A contig seen by two readers (ranges or gzip workers) means its rows are not contiguous.

@@ -2,9 +2,11 @@
 
 The pileup pass (coverage, minimum-modification and adjacency filters, split by bin and mod type) is the
 same for every run with the same pileup, contig bins and thresholds. With a cache file, its result is kept
-in one lz4 Arrow IPC file: one or more record batches per (bin, mod type). The file's schema metadata holds
-the manifest (what the pass was made from) and the index (which batches belong to which bin and mod type),
-so a later run reads only its own batches, memory-mapped, and no other file is needed.
+in one lz4 Arrow IPC file: one or more record batches per (bin, mod type), in any order. The last batch is
+a one-row trailer holding the manifest (what the pass was made from) and the index (which batches belong
+to which bin and mod type), so a later run reads only its own batches, memory-mapped, and no other file
+is needed. (Not footer metadata: pyarrow < 20 can neither write nor read it.) nanomotif-rs writes the file during the pileup pass; without it, the in-memory partitions are
+written with pyarrow.
 """
 import hashlib
 import json
@@ -26,9 +28,9 @@ SCHEMA = pa.schema([
     ("Nvalid_cov", pa.int64()),
     ("bin", pa.utf8()),
 ])
-MANIFEST_KEY = b"nanomotif_manifest"
-INDEX_KEY = b"nanomotif_index"
-# rows per record batch when splitting in-memory partitions (the Rust partitioner writes 500k-row batches)
+# trailer batch: contig TRAILER_TAG, mod_type the manifest (JSON), strand the index (JSON)
+TRAILER_TAG = "nanomotif_cache"
+# rows per record batch when writing in-memory partitions (the Rust partitioner writes up to 500k rows)
 BATCH_ROWS = 500_000
 
 
@@ -50,15 +52,18 @@ def make_manifest(pileup_path: str, contig_bin: dict, min_coverage: int, thresho
 
 
 def load(cache_path: str, manifest: dict):
-    """The cache's partitions as {(bin, mod_type): (cache_path, start, stop)}, or None if it can't be used."""
+    """The cache's partitions as {(bin, mod_type): (cache_path, [batch numbers])}, or None if it can't be used."""
     if not os.path.exists(cache_path):
-        log.info(f"Pileup cache {cache_path} does not exist yet; it is written after the pileup pass")
+        log.info(f"Pileup cache {cache_path} does not exist yet; it is written during the pileup pass")
         return None
     try:
         with pa.memory_map(cache_path) as source:
-            metadata = pa.ipc.open_file(source).schema.metadata or {}
-        cached_manifest = json.loads(metadata[MANIFEST_KEY])
-        index = json.loads(metadata[INDEX_KEY])
+            reader = pa.ipc.open_file(source)
+            trailer = reader.get_batch(reader.num_record_batches - 1).to_pydict()
+        if trailer["contig"] != [TRAILER_TAG]:
+            raise ValueError("no nanomotif trailer")
+        cached_manifest = json.loads(trailer["mod_type"][0])
+        index = json.loads(trailer["strand"][0])
     except (OSError, KeyError, ValueError, pa.ArrowException) as error:
         log.warning(f"Pileup cache {cache_path} is not readable ({error}); rebuilding it")
         return None
@@ -67,105 +72,66 @@ def load(cache_path: str, manifest: dict):
         log.info(f"Pileup cache {cache_path} was made with a different {', '.join(differences)}; rebuilding it")
         return None
     log.info(f"Reusing the pileup partitions in {cache_path} (skipping the pileup pass)")
-    return {(bin_name, mod_type): (cache_path, start, stop) for bin_name, mod_type, start, stop in index}
+    return _partitions(cache_path, index)
 
 
-def _batches_of_file(path):
-    # plain reads, not a memory map: mapped pages of all partition files would add to the resident memory
-    with pa.OSFile(path) as source:
-        reader = pa.ipc.open_file(source)
-        for i in range(reader.num_record_batches):
-            yield reader.get_batch(i)
+def _partitions(cache_path, index):
+    return {(bin_name, mod_type): (cache_path, batches) for bin_name, mod_type, batches in index}
 
 
-def _n_batches_of_file(path):
-    with pa.OSFile(path) as source:
-        return pa.ipc.open_file(source).num_record_batches
+def _finish(tmp_path, cache_path):
+    # only a completely written cache replaces an older one
+    os.replace(tmp_path, cache_path)
+    log.info(f"Wrote the pileup partitions to {cache_path} ({os.path.getsize(cache_path) / 1e9:.2f} GB)")
 
 
-def _to_cache_schema(batch):
-    table = pa.Table.from_batches([batch]).select(SCHEMA.names).cast(SCHEMA)
-    return table.combine_chunks().to_batches()[0] if table.num_rows else None
+def _tmp_path(cache_path):
+    os.makedirs(os.path.dirname(os.path.abspath(cache_path)), exist_ok=True)
+    return cache_path + ".tmp"
 
 
-def write_from_files(cache_path: str, manifest: dict, partitions: dict) -> dict:
-    """Copy partition files ({(bin, mod_type): [IPC files]}) into the cache, batch by batch, deleting each
-    file once copied (so the disk holds the data about once). Returns the cache's partitions."""
-    keys = sorted(partitions)
-    counts = {key: sum(_n_batches_of_file(path) for path in partitions[key]) for key in keys}
-
-    def batches(key):
-        for path in partitions[key]:
-            yield from _batches_of_file(path)
-            os.remove(path)
-
-    return _write(cache_path, manifest, keys, counts, batches)
+def write_with_rust(nanomotif_rs, cache_path: str, manifest: dict, pileup_path: str, contig_bin: dict,
+                    min_coverage: int, threshold: float, threads: int) -> dict:
+    """The pileup pass of nanomotif-rs, writing its partitions straight into the cache (no copy)."""
+    tmp_path = _tmp_path(cache_path)
+    batches = nanomotif_rs.partition_pileup_to_file(
+        pileup_path, contig_bin, tmp_path, json.dumps(manifest),
+        min_coverage=min_coverage, threshold=threshold, threads=threads,
+    )
+    _finish(tmp_path, cache_path)
+    return {key: (cache_path, value) for key, value in batches.items()}
 
 
 def write_from_frames(cache_path: str, manifest: dict, partitions: dict) -> dict:
     """Write in-memory partitions ({(bin, mod_type): polars DataFrame}) into the cache."""
     keys = sorted(partitions)
-    counts = {key: -(-len(partitions[key]) // BATCH_ROWS) for key in keys}
-
-    def batches(key):
-        frame = partitions[key]
-        for offset in range(0, len(frame), BATCH_ROWS):
-            # oldest compat level: plain/large strings, which every supported pyarrow can cast
-            table = frame.slice(offset, BATCH_ROWS).to_arrow(compat_level=pl.CompatLevel.oldest())
-            yield table.combine_chunks().to_batches()[0]
-
-    return _write(cache_path, manifest, keys, counts, batches)
-
-
-def _copy_pool():
-    # mimalloc (pyarrow's default on Linux) keeps the memory of freed batches: copying ZymoOral's
-    # partitions raised the process from 1.1 to 3.3 GB resident, with at most 0.2 GB allocated. jemalloc
-    # returns it (no rise above the pileup pass's peak); the system allocator is the fallback.
-    try:
-        return pa.jemalloc_memory_pool()
-    except NotImplementedError:
-        return pa.system_memory_pool()
-
-
-def _write(cache_path, manifest, keys, counts, batches):
-    previous_pool = pa.default_memory_pool()
-    pa.set_memory_pool(_copy_pool())
-    try:
-        return _write_batches(cache_path, manifest, keys, counts, batches)
-    finally:
-        pa.set_memory_pool(previous_pool)
-
-
-def _write_batches(cache_path, manifest, keys, counts, batches):
     index = []
-    start = 0
+    n_batches = 0
     for key in keys:
-        index.append([key[0], key[1], start, start + counts[key]])
-        start += counts[key]
-    schema = SCHEMA.with_metadata({MANIFEST_KEY: json.dumps(manifest), INDEX_KEY: json.dumps(index)})
-    tmp_path = cache_path + ".tmp"
-    os.makedirs(os.path.dirname(os.path.abspath(cache_path)), exist_ok=True)
+        count = -(-len(partitions[key]) // BATCH_ROWS)
+        index.append([key[0], key[1], list(range(n_batches, n_batches + count))])
+        n_batches += count
+    trailer = pa.RecordBatch.from_pydict({
+        "contig": [TRAILER_TAG], "position": [0], "mod_type": [json.dumps(manifest)], "strand": [json.dumps(index)],
+        "fraction_mod": [0.0], "Nvalid_cov": [0], "bin": [""],
+    }, schema=SCHEMA)
+    tmp_path = _tmp_path(cache_path)
     options = pa.ipc.IpcWriteOptions(compression="lz4")
-    with pa.OSFile(tmp_path, "wb") as sink, pa.ipc.new_file(sink, schema, options=options) as writer:
+    with pa.OSFile(tmp_path, "wb") as sink, pa.ipc.new_file(sink, SCHEMA, options=options) as writer:
         for key in keys:
-            written = 0
-            for batch in batches(key):
-                batch = _to_cache_schema(batch)
-                if batch is None:
-                    # an empty batch still counts in the index; keep the count right
-                    batch = pa.RecordBatch.from_pylist([], schema=SCHEMA)
-                writer.write_batch(batch)
-                written += 1
-            assert written == counts[key], f"expected {counts[key]} batches for {key}, wrote {written}"
-    # only a completely written cache replaces an older one
-    os.replace(tmp_path, cache_path)
-    log.info(f"Wrote the pileup partitions to {cache_path} ({os.path.getsize(cache_path) / 1e9:.2f} GB)")
-    return {(bin_name, mod_type): (cache_path, s, e) for bin_name, mod_type, s, e in index}
+            frame = partitions[key]
+            for offset in range(0, len(frame), BATCH_ROWS):
+                # oldest compat level: plain/large strings, which every supported pyarrow can cast
+                table = frame.slice(offset, BATCH_ROWS).to_arrow(compat_level=pl.CompatLevel.oldest())
+                writer.write_batch(table.select(SCHEMA.names).cast(SCHEMA).combine_chunks().to_batches()[0])
+        writer.write_batch(trailer)
+    _finish(tmp_path, cache_path)
+    return _partitions(cache_path, index)
 
 
-def read_partition(cache_path: str, start: int, stop: int) -> pl.DataFrame:
+def read_partition(cache_path: str, batches: list) -> pl.DataFrame:
     """One (bin, mod type) partition from the cache: only its batches are read."""
     with pa.memory_map(cache_path) as source:
         reader = pa.ipc.open_file(source)
-        table = pa.Table.from_batches([reader.get_batch(i) for i in range(start, stop)], schema=SCHEMA)
+        table = pa.Table.from_batches([reader.get_batch(i) for i in batches], schema=reader.schema)
     return pl.from_arrow(table)

@@ -65,3 +65,32 @@ def test_column_bitsets_match_packbits_layout():
     for column in range(41):
         for i, code in enumerate(codes):
             assert np.array_equal(bits[column, i], nm.find_motifs_bin._pack_bits(windows[:, column] == code))
+
+
+def test_rust_single_file_partitioning_matches_files(tmp_path):
+    """partition_pileup_to_file (the pileup cache) holds the rows of partition_pileup, indexed per partition."""
+    import json
+    import pyarrow as pa
+    # a bin name that needs JSON escaping
+    contig_bin = {c: 'bin "1"\\x' for c in dict(nm.datasets.geobacillus_plasmids_bin().iter_rows())}
+    path = nm.datasets.geobacillus_plasmids_pileup_path()
+    (tmp_path / "files").mkdir()
+    files = nanomotif_rs.partition_pileup(path, contig_bin, str(tmp_path / "files"), min_coverage=5, threshold=0.7, threads=3)
+    cache = str(tmp_path / "cache.arrow")
+    batches = nanomotif_rs.partition_pileup_to_file(
+        path, contig_bin, cache, '{"x": 1}', min_coverage=5, threshold=0.7, threads=3
+    )
+    assert set(batches) == set(files)
+    with pa.memory_map(cache) as source:
+        reader = pa.ipc.open_file(source)
+        trailer = reader.get_batch(reader.num_record_batches - 1).to_pydict()
+    assert trailer["contig"] == ["nanomotif_cache"]
+    assert json.loads(trailer["mod_type"][0]) == {"x": 1}
+    index = {(b, m): ids for b, m, ids in json.loads(trailer["strand"][0])}
+    assert index == batches
+    assert reader.num_record_batches - 1 not in {i for ids in batches.values() for i in ids}
+    key = ["contig", "strand", "position", "mod_type"]
+    for part in files:
+        a = pl.concat([pl.read_ipc(f) for f in files[part]]).sort(key)
+        b = nm.pileup_cache.read_partition(cache, batches[part]).sort(key)
+        assert a.equals(b)
