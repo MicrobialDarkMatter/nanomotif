@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.4 (2026-11-05)
+
+### Fixed
+- `bin-motifs.tsv` could list the same motif several times. Motifs that differ only in the search's
+  internal form are now written once, and a palindromic motif is paired only with itself as its
+  complement: TTAA methylated at either A is two motifs, and was written as four crossed lines. On
+  ZymoFecal (490 bins) 1.2.3 wrote 1,232 lines for 1,122 motifs.
+- Motif discovery could hang with idle workers: the pool pickled the contig-bin table (a polars
+  DataFrame) with every task while another thread unpickled results, and polars can deadlock when both
+  happen at once. Tasks no longer carry polars objects. Seen on ZymoFecal (stuck at 522 of 1470 tasks).
+
 ## 1.2.3 (2026-11-04)
 
 ### Fixed

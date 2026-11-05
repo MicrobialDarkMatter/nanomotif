@@ -194,3 +194,26 @@ def test_kl_divergence_columns_matches_scipy():
     p = rng.random((4, 41)); q = rng.random((4, 41))
     p[1, 3] = 0; q[2, 5] = 0
     np.testing.assert_allclose(nm.find_motifs_bin.kl_divergence_columns(p, q), entropy(p, q), rtol=1e-12)
+
+
+def test_tasks_sent_to_workers_contain_no_polars_objects(tmp_path):
+    """The pool pickles worker_function (and the strategy) in one thread while another thread unpickles
+    results; polars (de)serialisation in both at once can deadlock, so tasks must hold no polars objects."""
+    import io
+    import pickle
+    config = nm.find_motifs_bin.ProcessorConfig(
+        assembly=nm.datasets.geobacillus_plasmids_assembly(),
+        pileup_path=nm.datasets.geobacillus_plasmids_pileup_path(),
+        bin_contig=nm.datasets.geobacillus_plasmids_bin(), threads=1, search_frame_size=40,
+        methylation_threshold_low=0.3, methylation_threshold_high=0.7,
+        minimum_kl_divergence=0.05, score_threshold=1.5, log_dir=None, seed=1, output_dir=str(tmp_path),
+    )
+    strategy = nm.find_motifs_bin.BinMotifProcessorBuilder(config).build().task_strategy
+
+    class NoPolars(pickle.Pickler):
+        def persistent_id(self, obj):
+            assert not isinstance(obj, (pl.DataFrame, pl.Series, pl.LazyFrame)), "polars object in a task"
+            return None
+
+    NoPolars(io.BytesIO()).dump(strategy.worker_function)
+    strategy.cleanup()

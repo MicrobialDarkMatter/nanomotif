@@ -87,9 +87,12 @@ def test_join_motif_complements_two_palindromes():
 
     assert "motif_complement" in result.columns
     assert any(c.endswith("_complement") for c in result.columns)
-    assert len(result) == 4
-    assert result["motif"].to_list() == ["GCGC", "GCGC", "GCGC", "GCGC"]
-    assert result["motif_complement"].to_list() == ["GCGC", "GCGC", "GCGC", "GCGC"]
+    # GCGC methylated at position 1 and at position 3 are two motifs; a palindrome is its own
+    # complement, so each is paired with itself (not also with the other: that gave 4 crossed rows)
+    assert len(result) == 2
+    assert result["motif"].to_list() == ["GCGC", "GCGC"]
+    assert result["motif_complement"].to_list() == ["GCGC", "GCGC"]
+    assert result["mod_position_iupac"].to_list() == result["mod_position_iupac_complement"].to_list()
 
 
 def test_join_motif_complements_mruber():
@@ -161,3 +164,22 @@ def test_remove_noisy_motifs():
     assert len(result) == 3
     assert isinstance(result, MotifSearchResult)
     assert set(result["motif"].to_list()) == {"AAGGTT", "AACCTT", "GATCC"}
+
+def test_bin_motifs_has_no_duplicates_or_crossed_palindrome_complements(tmp_path):
+    """A palindrome methylated at two positions (TTAA at either A) is two motifs, each its own
+    complement; motifs listed twice in the search result are written once."""
+    from nanomotif.model import BetaBernoulliModel
+    pad = "." * 5
+    motifs = nm.motif.MotifSearchResult(pl.DataFrame({
+        "motif": [pad + "TTAA" + pad, pad + "TTAA" + pad, pad + "GATC" + pad, pad + "GATC" + pad],
+        "mod_position": [7, 8, 6, 6],
+        "reference": ["bin1"] * 4,
+        "mod_type": ["a"] * 4,
+        "model": [BetaBernoulliModel(), BetaBernoulliModel(), BetaBernoulliModel(), BetaBernoulliModel()],
+        "score": [2.0, 2.0, 2.0, 2.0],
+    }))
+    out = tmp_path / "bin-motifs.tsv"
+    nm.motif.MotifSearchResult(nm.postprocess.join_motif_complements(motifs)).write_motif_formatted(str(out))
+    written = pl.read_csv(out, separator="\t")
+    rows = sorted(written.select("motif", "mod_position", "motif_complement", "mod_position_complement").rows())
+    assert rows == [("GATC", 1, "GATC", 1), ("TTAA", 2, "TTAA", 2), ("TTAA", 3, "TTAA", 3)]
