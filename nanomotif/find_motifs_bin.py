@@ -87,6 +87,8 @@ class ProcessorConfig:
     min_valid_coverage: int = 5
     # FASTA the assembly was read from; workers then fetch their bin's contigs from its index
     assembly_path: Optional[str] = None
+    # file that keeps the filtered pileup partitions for later runs (--pileup_cache); None: temporary
+    pileup_cache: Optional[str] = None
 
     def __post_init__(self):
         if self.assembly is None:
@@ -192,6 +194,7 @@ class PileupStrategyPlain(TaskStrategy):
         return len(self.partitioned_assembly) * len(nm.constants.MOD_CODE_TO_PRETTY)
 
     def cleanup(self):
+        # a pileup cache (tuple values) is kept; temporary partition files (lists) are removed
         for paths in self.partitioned_pileup.values():
             for path in paths if isinstance(paths, list) else []:
                 if os.path.exists(path):
@@ -219,6 +222,9 @@ class PileupStrategyPlain(TaskStrategy):
         if isinstance(bin_pileup, list):
             # Arrow IPC files written by the builder, read instead of sent through the pool
             bin_pileup = pl.concat([pl.read_ipc(path) for path in bin_pileup])
+        elif isinstance(bin_pileup, tuple):
+            # (cache file, first batch, end batch) in the pileup cache
+            bin_pileup = nm.pileup_cache.read_partition(*bin_pileup)
         if assembly is None:
             assembly = load_bin_assembly(self.config.assembly_path, self.bin_contig[bin_name])
         profiler = start_profiler()
@@ -437,6 +443,8 @@ class BinMotifProcessorBuilder:
         pileup_path = self.config.pileup_path
 
         if pileup_path.endswith(".gz") and nanomotif_rs is None:
+            if self.config.pileup_cache:
+                log.warning("--pileup_cache needs nanomotif-rs for bgzipped pileups; not using it")
             # without the compiled reader, each worker reads its bin through the tabix index
             if not os.path.exists(pileup_path + ".tbi"):
                 raise FileNotFoundError(f"Tabix index for {pileup_path} not found.")
@@ -453,21 +461,33 @@ class BinMotifProcessorBuilder:
                 config=self.config,
             )
         else:
-            # One lz4 Arrow IPC file (or several) per bin and mod type, read by the workers
-            partition_dir = os.path.join(self.config.output_dir, "temp", "pileup_partitions")
-            os.makedirs(partition_dir, exist_ok=True)
-            if nanomotif_rs is not None:
-                log.info("Partitioning the pileup (streaming, nanomotif_rs)")
-                partitioned_pileup = nanomotif_rs.partition_pileup(
-                    pileup_path,
-                    dict(self.config.bin_contig.select("contig", "bin").iter_rows()),
-                    partition_dir,
-                    min_coverage=self.config.min_valid_coverage,
-                    threshold=self.config.methylation_threshold_high,
-                    threads=self.config.threads,
+            # One lz4 Arrow IPC file (or several) per bin and mod type, read by the workers; with
+            # --pileup_cache, all of them in one file that later runs reuse
+            contig_bin = dict(self.config.bin_contig.select("contig", "bin").iter_rows())
+            cache = self.config.pileup_cache
+            partitioned_pileup = None
+            if cache:
+                manifest = nm.pileup_cache.make_manifest(
+                    pileup_path, contig_bin, self.config.min_valid_coverage, self.config.methylation_threshold_high
                 )
-            else:
-                partitioned_pileup = self._partition_plain_python(pileup_path, partition_dir)
+                partitioned_pileup = nm.pileup_cache.load(cache, manifest)
+            if partitioned_pileup is None:
+                partition_dir = os.path.join(self.config.output_dir, "temp", "pileup_partitions")
+                os.makedirs(partition_dir, exist_ok=True)
+                if nanomotif_rs is not None:
+                    log.info("Partitioning the pileup (streaming, nanomotif_rs)")
+                    partitioned_pileup = nanomotif_rs.partition_pileup(
+                        pileup_path,
+                        contig_bin,
+                        partition_dir,
+                        min_coverage=self.config.min_valid_coverage,
+                        threshold=self.config.methylation_threshold_high,
+                        threads=self.config.threads,
+                    )
+                    if cache:
+                        partitioned_pileup = nm.pileup_cache.write_from_files(cache, manifest, partitioned_pileup)
+                else:
+                    partitioned_pileup = self._partition_plain_python(pileup_path, partition_dir, cache, manifest if cache else None)
             if not partitioned_pileup:
                 log.info(f"No pileup data after filtering, skipping")
                 return None
@@ -481,7 +501,7 @@ class BinMotifProcessorBuilder:
 
         return BinMotifProcessor(task_strategy=strategy, config=self.config)
 
-    def _partition_plain_python(self, pileup_path, partition_dir):
+    def _partition_plain_python(self, pileup_path, partition_dir, cache=None, manifest=None):
         """Pure-Python version of nanomotif_rs.partition_pileup: load the whole pileup, filter, split."""
         log.warning("Pileup is not bgzipped and nanomotif_rs is not installed, loading full pileup into memory.")
         pileup = nm.dataload.load_pileup(
@@ -492,6 +512,9 @@ class BinMotifProcessorBuilder:
         pileup = nm.dataload.filter_pileup_minimummod_frequency(pileup, methylation_threshold=self.config.methylation_threshold_high)
         pileup = nm.dataload.filter_pileup_adjacency_filter(pileup, methylation_threshold=self.config.methylation_threshold_high)
         pileup = pileup.join(self.config.bin_contig, left_on="contig", right_on="contig", how="inner")
+        if cache:
+            parts = pileup.partition_by(["bin", "mod_type"], as_dict=True)
+            return nm.pileup_cache.write_from_frames(cache, manifest, parts)
         partitioned_pileup = {}
         for i, ((bin_name, mod_type), part) in enumerate(pileup.partition_by(["bin", "mod_type"], as_dict=True).items()):
             path = os.path.join(partition_dir, f"{i}.arrow")

@@ -81,7 +81,8 @@ def find_motifs_bin(args, pl, min_mods_pr_contig = 50, min_mod_frequency = 10000
         seed = args.seed,
         output_dir = args.out,
         min_valid_coverage = args.threshold_valid_coverage,
-        assembly_path = args.assembly
+        assembly_path = args.assembly,
+        pileup_cache = args.pileup_cache,
     )
     motif_discovery_parralel = nm.find_motifs_bin.BinMotifProcessorBuilder(config).build()
     if motif_discovery_parralel is None:
