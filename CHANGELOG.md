@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.0 (2026-11-05)
+
+### Added
+- `--pileup_cache FILE` for `motif_discovery`, off by default: the filtered pileup (the result of the
+  pileup pass) is kept in one compressed Arrow file and reused by later runs with the same pileup,
+  contig bins, `--threshold_valid_coverage` and `--methylation_threshold_high`. The file holds its own
+  index and a record of what it was made from; when anything differs it is rebuilt. Motifs are the same
+  with and without the cache. ZymoOral (4 GB pileup, 8 threads): 33 s / 2.08 GB without the cache,
+  28 s / 2.54 GB for the run that writes it (0.82 GB file), 19 s / 1.05 GB for runs that reuse it.
+
 ## 1.2.4 (2026-11-05)
 
 ### Fixed

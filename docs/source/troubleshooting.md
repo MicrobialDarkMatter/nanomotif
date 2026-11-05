@@ -42,6 +42,12 @@ Version 1.2.0 fixed several bugs that changed results, most visibly in low-cover
 least 5 reads by default, where earlier versions required more than 5. Use
 `--threshold_valid_coverage 6` to compare with older results.
 
+## "Pileup cache ... was made with a different ..."
+
+`--pileup_cache` reuses its file only for the same pileup (path, size and modification time), contig bins,
+`--threshold_valid_coverage`, `--methylation_threshold_high` and Nanomotif version. The message names
+what differed; the cache is then rebuilt, which takes as long as a run without it.
+
 ## Running out of memory
 
 Memory use grows with the number of threads (bins processed at the same time) and the size of the largest
